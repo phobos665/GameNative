@@ -73,6 +73,7 @@ import androidx.core.net.toUri
 import app.gamenative.Constants
 import app.gamenative.R
 import app.gamenative.data.LibraryItem
+import app.gamenative.data.GameSource
 import app.gamenative.data.SteamApp
 import app.gamenative.data.Achievement
 import app.gamenative.data.AchievementList
@@ -195,6 +196,13 @@ fun AppScreen(
 
     // Load achievements when screen opens
     LaunchedEffect(gameId) {
+        // Only load achievements for Steam games
+        if (libraryItem.gameSource != GameSource.STEAM) {
+            Timber.d("Skipping achievement loading for non-Steam game $gameId")
+            isLoadingAchievements = false
+            return@LaunchedEffect
+        }
+
         // Skip achievement loading for demo apps (they typically don't have achievements)
         if (appInfo.type == app.gamenative.enums.AppType.demo || appInfo.demoOfAppId != SteamService.INVALID_APP_ID) {
             Timber.d("Skipping achievement loading for demo app $gameId")
