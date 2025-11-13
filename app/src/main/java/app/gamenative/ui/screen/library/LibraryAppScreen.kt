@@ -74,6 +74,8 @@ import app.gamenative.Constants
 import app.gamenative.R
 import app.gamenative.data.LibraryItem
 import app.gamenative.data.SteamApp
+import app.gamenative.data.Achievement
+import app.gamenative.data.AchievementList
 import app.gamenative.service.SteamService
 import app.gamenative.ui.component.LoadingScreen
 import app.gamenative.ui.component.dialog.ContainerConfigDialog
@@ -182,8 +184,28 @@ fun AppScreen(
     val gameId = libraryItem.gameId
     val appId = libraryItem.appId
 
+
     val appInfo by remember(appId) {
         mutableStateOf(SteamService.getAppInfoOf(gameId)!!)
+    }
+
+    // Achievement state
+    var achievements by remember { mutableStateOf<AchievementList?>(null) }
+    var isLoadingAchievements by remember { mutableStateOf(false) }
+
+    // Load achievements when screen opens
+    LaunchedEffect(gameId) {
+        isLoadingAchievements = true
+        scope.launch {
+            try {
+                achievements = SteamService.getAchievementsForApp(gameId)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load achievements for app $gameId")
+                achievements = null
+            } finally {
+                isLoadingAchievements = false
+            }
+        }
     }
 
     var downloadInfo by remember(appId) {
@@ -491,11 +513,11 @@ fun AppScreen(
         }
 
         DialogType.UPDATE_VERIFY_CONFIRM -> {
-            onDismissRequest = { 
+            onDismissRequest = {
                 msgDialogState = MessageDialogState(false)
                 pendingUpdateVerifyOperation = null
             }
-            onDismissClick = { 
+            onDismissClick = {
                 msgDialogState = MessageDialogState(false)
                 pendingUpdateVerifyOperation = null
             }
@@ -503,7 +525,7 @@ fun AppScreen(
                 msgDialogState = MessageDialogState(false)
                 val operation = pendingUpdateVerifyOperation
                 pendingUpdateVerifyOperation = null
-                
+
                 if (operation != null) {
                     CoroutineScope(Dispatchers.IO).launch {
                         val container = ContainerUtils.getOrCreateContainer(context, appId)

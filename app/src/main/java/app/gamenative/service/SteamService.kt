@@ -13,6 +13,8 @@ import app.gamenative.BuildConfig
 import app.gamenative.PluviaApp
 import app.gamenative.PrefManager
 import app.gamenative.ThreadSafeManifestProvider
+import app.gamenative.data.Achievement
+import app.gamenative.data.AchievementList
 import app.gamenative.data.DepotInfo
 import app.gamenative.data.DownloadInfo
 import app.gamenative.data.Emoticon
@@ -160,8 +162,11 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.TimeUnit
 
+
+
 @AndroidEntryPoint
 class SteamService : Service(), IChallengeUrlChanged {
+
 
     @Inject
     lateinit var db: PluviaDatabase
@@ -740,6 +745,133 @@ class SteamService : Service(), IChallengeUrlChanged {
 
             return File(appDirPath).deleteRecursively()
         }
+
+
+    suspend fun getAchievementsForApp(appId: Int): AchievementList = withContext(Dispatchers.IO) {
+        val callback = getAchievementBlocks(appId)
+
+        val locked = mutableListOf<Achievement>()
+        val unlocked = mutableListOf<Achievement>()
+
+        try {
+            Timber.d("Loading achievements for app $appId")
+            Timber.d("Achievement callback result: ${callback.result}")
+
+            if (callback.result == EResult.OK) {
+                callback.achievementBlocks.forEach { achievement ->
+                    val achievementId = achievement.achievementId
+                    val isUnlocked = achievement.unlockTime.isNotEmpty() && achievement.unlockTime[0] != 0
+
+                    val iconHash = getAchievementIcon(callback.schemaKeyValues, achievementId, isUnlocked)
+                    val iconUrl = iconHash?.let { getAchievementIconUrl(appId.toLong(), it) }
+                    val achievementName = getAchievementName(callback.schemaKeyValues, achievementId)
+
+                    if (isUnlocked) {
+                        val timestamp = achievement.unlockTime[0].toLong()
+                        Timber.i("Achievement $achievementName (ID: $achievementId) unlocked at ${java.util.Date(timestamp * 1000L)}")
+                        unlocked.add(Achievement(
+                            name = achievementName,
+                            iconUrl = iconUrl ?: "",
+                            timestampUnlocked = timestamp,
+                            id = achievementId
+                        ))
+                    } else {
+                        Timber.i("Achievement $achievementName (ID: $achievementId) locked")
+                        locked.add(Achievement(
+                            name = achievementName,
+                            iconUrl = iconUrl ?: "",
+                            timestampUnlocked = null,
+                            id = achievementId
+                        ))
+                    }
+                }
+                Timber.d("Loaded ${unlocked.size} unlocked and ${locked.size} locked achievements")
+            } else {
+                Timber.w("Failed to load achievements, result: ${callback.result}")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to load achievements for app $appId")
+        }
+
+        return@withContext AchievementList(
+            locked = locked,
+            unlocked = unlocked
+        )
+    }
+
+    /**
+     * Helper method to extract achievement name from the schema KeyValue.
+     * The schema contains metadata about achievements including names, descriptions, etc.
+     */
+    private fun getAchievementName(schema: Any?, achievementId: Int): String {
+        try {
+            // The schema structure is: stats -> achievements -> [id] -> name
+            val schemaKv = schema as? `in`.dragonbra.javasteam.types.KeyValue ?: return "Achievement #$achievementId"
+            val achievements = schemaKv.get("stats")?.get("achievements")
+
+            if (achievements != null) {
+                // Look through all achievement definitions
+                for (achievement in achievements.children) {
+                    val idKey = achievement.get("id")
+                    if (idKey != null && idKey.asInteger() == achievementId) {
+                        val nameKey = achievement.get("name")
+                        if (nameKey != null) {
+                            return nameKey.value ?: "Achievement #$achievementId"
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to parse achievement name for ID $achievementId")
+        }
+
+        return "Achievement #$achievementId"
+    }
+
+    /**
+     * Helper method to extract achievement icon hash from the schema.
+     * The icon can be used to construct a URL to the achievement image.
+     *
+     * @param schema The schema KeyValue containing achievement metadata
+     * @param achievementId The ID of the achievement
+     * @param unlocked Whether to get the unlocked (color) or locked (gray) icon
+     * @return The icon hash string, or null if not found
+     */
+    private fun getAchievementIcon(schema: Any?, achievementId: Int, unlocked: Boolean): String? {
+        try {
+            val schemaKv = schema as? `in`.dragonbra.javasteam.types.KeyValue ?: return null
+            val achievements = schemaKv.get("stats")?.get("achievements")
+
+            if (achievements != null) {
+                for (achievement in achievements.children) {
+                    val idKey = achievement.get("id")
+                    if (idKey != null && idKey.asInteger() == achievementId) {
+                        // Get the appropriate icon based on unlock status
+                        val iconKey = if (unlocked) achievement.get("icon") else achievement.get("icon_gray")
+                        if (iconKey != null) {
+                            return iconKey.value
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to parse achievement icon for ID $achievementId")
+        }
+
+        return null
+    }
+
+    /**
+     * Constructs the full URL to an achievement icon on Steam's CDN.
+     *
+     * @param appId The app ID the achievement belongs to
+     * @param iconHash The icon hash from the schema
+     * @return Full URL to the achievement icon image
+     */
+    private fun getAchievementIconUrl(appId: Long, iconHash: String): String {
+        // Steam's CDN URL format for achievement icons
+        return "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/$appId/$iconHash.jpg"
+    }
 
         fun downloadApp(appId: Int): DownloadInfo? {
             // Enforce Wi-Fi-only downloads
@@ -1560,6 +1692,12 @@ class SteamService : Service(), IChallengeUrlChanged {
             instance?.friendCheckerJob?.cancel()
         }
 
+        suspend fun getAchievementBlocks(appId: Int) = withContext(Dispatchers.IO) {
+            val steamUserStats = instance?.steamClient?.getHandler(SteamUserStats::class.java)
+            val steamUserId = userSteamId ?: throw IllegalStateException("User not logged in")
+            steamUserStats!!.getUserStats(appId, steamUserId).await()
+        }
+
         suspend fun getEmoticonList() = withContext(Dispatchers.IO) {
             instance?.steamClient!!.getHandler<PluviaHandler>()!!.getEmoticonList()
         }
@@ -1823,7 +1961,6 @@ class SteamService : Service(), IChallengeUrlChanged {
                 removeHandler(SteamMasterServer::class.java)
                 removeHandler(SteamWorkshop::class.java)
                 removeHandler(SteamScreenshots::class.java)
-                removeHandler(SteamUserStats::class.java)
             }
 
             // create the callback manager which will route callbacks to function calls
