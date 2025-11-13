@@ -195,10 +195,36 @@ fun AppScreen(
 
     // Load achievements when screen opens
     LaunchedEffect(gameId) {
+        // Skip achievement loading for demo apps (they typically don't have achievements)
+        if (appInfo.type == app.gamenative.enums.AppType.demo || appInfo.demoOfAppId != SteamService.INVALID_APP_ID) {
+            Timber.d("Skipping achievement loading for demo app $gameId")
+            isLoadingAchievements = false
+            return@LaunchedEffect
+        }
+
+        // Known apps with malformed achievement data that cause JavaSteam EOFException
+        val problematicApps = setOf<Int>() // Add more as discovered if needed
+
+        if (gameId in problematicApps) {
+            Timber.d("Skipping achievement loading for app $gameId (known to have malformed data)")
+            isLoadingAchievements = false
+            return@LaunchedEffect
+        }
+
         isLoadingAchievements = true
         scope.launch {
             try {
                 achievements = SteamService.getAchievementsForApp(gameId)
+            } catch (e: java.util.concurrent.CancellationException) {
+                Timber.d("Achievement loading cancelled (likely due to Steam disconnect)")
+                achievements = null
+            } catch (e: IllegalStateException) {
+                if (e.message?.contains("malformed") == true) {
+                    Timber.w("Skipping achievement for app $gameId: ${e.message}")
+                } else {
+                    Timber.e(e, "Failed to load achievements for app $gameId")
+                }
+                achievements = null
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load achievements for app $gameId")
                 achievements = null

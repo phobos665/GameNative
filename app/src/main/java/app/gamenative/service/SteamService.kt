@@ -759,30 +759,34 @@ class SteamService : Service(), IChallengeUrlChanged {
 
             if (callback.result == EResult.OK) {
                 callback.achievementBlocks.forEach { achievement ->
-                    val achievementId = achievement.achievementId
-                    val isUnlocked = achievement.unlockTime.isNotEmpty() && achievement.unlockTime[0] != 0
+                    try {
+                        val achievementId = achievement.achievementId
+                        val isUnlocked = achievement.unlockTime.isNotEmpty() && achievement.unlockTime[0] != 0
 
-                    val iconHash = getAchievementIcon(callback.schemaKeyValues, achievementId, isUnlocked)
-                    val iconUrl = iconHash?.let { getAchievementIconUrl(appId.toLong(), it) }
-                    val achievementName = getAchievementName(callback.schemaKeyValues, achievementId)
+                        val iconHash = getAchievementIcon(callback.schemaKeyValues, achievementId, isUnlocked)
+                        val iconUrl = iconHash?.let { getAchievementIconUrl(appId.toLong(), it) }
+                        val achievementName = getAchievementName(callback.schemaKeyValues, achievementId)
 
-                    if (isUnlocked) {
-                        val timestamp = achievement.unlockTime[0].toLong()
-                        Timber.i("Achievement $achievementName (ID: $achievementId) unlocked at ${java.util.Date(timestamp * 1000L)}")
-                        unlocked.add(Achievement(
-                            name = achievementName,
-                            iconUrl = iconUrl ?: "",
-                            timestampUnlocked = timestamp,
-                            id = achievementId
-                        ))
-                    } else {
-                        Timber.i("Achievement $achievementName (ID: $achievementId) locked")
-                        locked.add(Achievement(
-                            name = achievementName,
-                            iconUrl = iconUrl ?: "",
-                            timestampUnlocked = null,
-                            id = achievementId
-                        ))
+                        if (isUnlocked && achievement.unlockTime.isNotEmpty()) {
+                            val timestamp = achievement.unlockTime[0].toLong()
+                            Timber.i("Achievement $achievementName (ID: $achievementId) unlocked at ${java.util.Date(timestamp * 1000L)}")
+                            unlocked.add(Achievement(
+                                name = achievementName,
+                                iconUrl = iconUrl ?: "",
+                                timestampUnlocked = timestamp,
+                                id = achievementId
+                            ))
+                        } else {
+                            Timber.i("Achievement $achievementName (ID: $achievementId) locked")
+                            locked.add(Achievement(
+                                name = achievementName,
+                                iconUrl = iconUrl ?: "",
+                                timestampUnlocked = null,
+                                id = achievementId
+                            ))
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to process achievement ${achievement.achievementId}")
                     }
                 }
                 Timber.d("Loaded ${unlocked.size} unlocked and ${locked.size} locked achievements")
@@ -1693,9 +1697,17 @@ class SteamService : Service(), IChallengeUrlChanged {
         }
 
         suspend fun getAchievementBlocks(appId: Int) = withContext(Dispatchers.IO) {
-            val steamUserStats = instance?.steamClient?.getHandler(SteamUserStats::class.java)
-            val steamUserId = userSteamId ?: throw IllegalStateException("User not logged in")
-            steamUserStats!!.getUserStats(appId, steamUserId).await()
+            try {
+                val steamUserStats = instance?.steamClient?.getHandler(SteamUserStats::class.java)
+                val steamUserId = userSteamId ?: throw IllegalStateException("User not logged in")
+                steamUserStats!!.getUserStats(appId, steamUserId).await()
+            } catch (e: java.io.EOFException) {
+                Timber.w("Achievement data for app $appId appears to be malformed (EOFException)")
+                throw IllegalStateException("Achievement data for app $appId is malformed", e)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to get achievement blocks for app $appId")
+                throw e
+            }
         }
 
         suspend fun getEmoticonList() = withContext(Dispatchers.IO) {
@@ -2366,45 +2378,49 @@ class SteamService : Service(), IChallengeUrlChanged {
         // Timber.d("Persona state received: ${callback.name}")
 
         scope.launch {
-            db.withTransaction {
-                val id = callback.friendID.convertToUInt64()
-                val friend = friendDao.findFriend(id)
+            try {
+                db.withTransaction {
+                    val id = callback.friendID.convertToUInt64()
+                    val friend = friendDao.findFriend(id)
 
-                if (friend == null) {
-                    Timber.w("onPersonaStateReceived: failed to find friend to update: $id")
-                    return@withTransaction
-                }
+                    if (friend == null) {
+                        Timber.w("onPersonaStateReceived: failed to find friend to update: $id")
+                        return@withTransaction
+                    }
 
-                friendDao.update(
-                    friend.copy(
-                        statusFlags = callback.statusFlags,
-                        state = callback.state,
-                        stateFlags = callback.stateFlags,
-                        gameAppID = callback.gameAppID,
-                        gameID = callback.gameID,
-                        gameName = appDao.findApp(callback.gameAppID)?.name ?: callback.gameName,
-                        gameServerIP = NetHelpers.getIPAddress(callback.gameServerIP),
-                        gameServerPort = callback.gameServerPort,
-                        queryPort = callback.queryPort,
-                        sourceSteamID = callback.sourceSteamID,
-                        gameDataBlob = callback.gameDataBlob.decodeToString(),
-                        name = callback.name,
-                        avatarHash = callback.avatarHash.toHexString(),
-                        lastLogOff = callback.lastLogOff,
-                        lastLogOn = callback.lastLogOn,
-                        clanRank = callback.clanRank,
-                        clanTag = callback.clanTag,
-                        onlineSessionInstances = callback.onlineSessionInstances,
-                    ),
-                )
+                    friendDao.update(
+                        friend.copy(
+                            statusFlags = callback.statusFlags,
+                            state = callback.state,
+                            stateFlags = callback.stateFlags,
+                            gameAppID = callback.gameAppID,
+                            gameID = callback.gameID,
+                            gameName = appDao.findApp(callback.gameAppID)?.name ?: callback.gameName,
+                            gameServerIP = NetHelpers.getIPAddress(callback.gameServerIP),
+                            gameServerPort = callback.gameServerPort,
+                            queryPort = callback.queryPort,
+                            sourceSteamID = callback.sourceSteamID,
+                            gameDataBlob = callback.gameDataBlob.decodeToString(),
+                            name = callback.name,
+                            avatarHash = callback.avatarHash.toHexString(),
+                            lastLogOff = callback.lastLogOff,
+                            lastLogOn = callback.lastLogOn,
+                            clanRank = callback.clanRank,
+                            clanTag = callback.clanTag,
+                            onlineSessionInstances = callback.onlineSessionInstances,
+                        ),
+                    )
 
-                // Send off an event if we change states.
-                if (callback.friendID == steamClient!!.steamID) {
-                    friendDao.findFriend(id)?.let { account ->
-                        val event = SteamEvent.PersonaStateReceived(account)
-                        PluviaApp.events.emit(event)
+                    // Send off an event if we change states.
+                    if (callback.friendID == steamClient!!.steamID) {
+                        friendDao.findFriend(id)?.let { account ->
+                            val event = SteamEvent.PersonaStateReceived(account)
+                            PluviaApp.events.emit(event)
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to update persona state for friend: ${callback.friendID.convertToUInt64()}")
             }
         }
     }
