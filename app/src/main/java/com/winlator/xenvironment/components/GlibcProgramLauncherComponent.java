@@ -36,6 +36,7 @@ import app.gamenative.events.AndroidEvent;
 import app.gamenative.service.SteamService;
 
 public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent {
+
     private String guestExecutable;
     private static int pid = -1;
     private String[] bindingPaths;
@@ -53,8 +54,13 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
     private File workingDir;
     private Container container;
 
-    public Container getContainer() { return this.container; }
-    public void setContainer(Container container) { this.container = container; }
+    public Container getContainer() {
+        return this.container;
+    }
+
+    public void setContainer(Container container) {
+        this.container = container;
+    }
 
     public GlibcProgramLauncherComponent(ContentsManager contentsManager, ContentProfile wineProfile) {
         this.contentsManager = contentsManager;
@@ -62,7 +68,11 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
     }
 
     private Runnable preUnpack;
-    public void setPreUnpack(Runnable r) { this.preUnpack = r; }
+
+    public void setPreUnpack(Runnable r) {
+        this.preUnpack = r;
+    }
+
     @Override
     public void start() {
         Log.d("GlibcProgramLauncherComponent", "Starting...");
@@ -70,7 +80,9 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
             stop();
             extractBox64Files();
             copyDefaultBox64RCFile();
-            if (preUnpack != null) preUnpack.run();
+            if (preUnpack != null) {
+                preUnpack.run();
+            }
             PluviaApp.events.emitJava(new AndroidEvent.SetBootingSplashText("Launching game..."));
             pid = execGuestProgram();
             Log.d("GlibcProgramLauncherComponent", "Process " + pid + " started");
@@ -136,13 +148,21 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         this.envVars = envVars;
     }
 
-    public String getBox86Version() { return box86Version; }
+    public String getBox86Version() {
+        return box86Version;
+    }
 
-    public void setBox86Version(String box86Version) { this.box86Version = box86Version; }
+    public void setBox86Version(String box86Version) {
+        this.box86Version = box86Version;
+    }
 
-    public String getBox64Version() { return box64Version; }
+    public String getBox64Version() {
+        return box64Version;
+    }
 
-    public void setBox64Version(String box64Version) { this.box64Version = box64Version; }
+    public void setBox64Version(String box64Version) {
+        this.box64Version = box64Version;
+    }
 
     public String getBox86Preset() {
         return box86Preset;
@@ -185,21 +205,23 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
 
         String winePath = wineProfile == null ? imageFs.getWinePath() + "/bin"
                 : ContentsManager.getSourceFile(context, wineProfile, wineProfile.wineBinPath).getAbsolutePath();
-        envVars.put("PATH", winePath + ":" +
-                imageFs.getRootDir().getPath() + "/usr/bin:" +
-                imageFs.getRootDir().getPath() + "/usr/local/bin");
+        envVars.put("PATH", winePath + ":"
+                + imageFs.getRootDir().getPath() + "/usr/bin:"
+                + imageFs.getRootDir().getPath() + "/usr/local/bin");
 
         envVars.put("LD_LIBRARY_PATH", imageFs.getRootDir().getPath() + "/usr/lib");
         envVars.put("BOX64_LD_LIBRARY_PATH", imageFs.getRootDir().getPath() + "/usr/lib/x86_64-linux-gnu");
         envVars.put("ANDROID_SYSVSHM_SERVER", imageFs.getRootDir().getPath() + UnixSocketConfig.SYSVSHM_SERVER_PATH);
         envVars.put("FONTCONFIG_PATH", imageFs.getRootDir().getPath() + "/usr/etc/fonts");
 
-        if ((new File(imageFs.getGlibc64Dir(), "libandroid-sysvshm.so")).exists() ||
-                (new File(imageFs.getGlibc32Dir(), "libandroid-sysvshm.so")).exists
-                        ())
+        if ((new File(imageFs.getGlibc64Dir(), "libandroid-sysvshm.so")).exists()
+                || (new File(imageFs.getGlibc32Dir(), "libandroid-sysvshm.so")).exists()) {
             envVars.put("LD_PRELOAD", "libredirect.so libandroid-sysvshm.so");
+        }
         envVars.put("WINEESYNC_WINLATOR", "1");
-        if (this.envVars != null) envVars.putAll(this.envVars);
+        if (this.envVars != null) {
+            envVars.putAll(this.envVars);
+        }
 
         String box64Path = rootDir.getPath() + "/usr/local/bin/box64";
 
@@ -216,7 +238,9 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
                 pid = -1;
             }
             SteamService.setGameRunning(false);
-            if (terminationCallback != null) terminationCallback.call(status);
+            if (terminationCallback != null) {
+                terminationCallback.call(status);
+            }
         });
     }
 
@@ -232,10 +256,15 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
             ContentProfile profile = contentsManager.getProfileByEntryName("box64-" + box64Version);
             if (profile != null) {
                 contentsManager.applyContent(profile);
-            }
-            else {
+            } else {
                 Log.d("Extraction", "exctracting box64 with box64Version " + box64Version);
                 TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context.getAssets(), "box86_64/box64-" + box64Version + ".tzst", rootDir);
+            }
+            // Ensure Box64 binary has execute permissions (some archives may not have correct permissions)
+            File box64Binary = new File(rootDir, "/usr/local/bin/box64");
+            if (box64Binary.exists()) {
+                FileUtils.chmod(box64Binary, 0755);
+                Log.d("GlibcProgramLauncherComponent", "Set execute permissions on box64 binary");
             }
             PrefManager.putString("current_box64_version", box64Version);
         }
@@ -246,7 +275,9 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         ImageFs imageFs = ImageFs.find(context);
         envVars.put("BOX64_NOBANNER", ProcessHelper.PRINT_DEBUG && enableLogs ? "0" : "1");
         envVars.put("BOX64_DYNAREC", "1");
-        if (wow64Mode) envVars.put("BOX64_MMAP32", "1");
+        if (wow64Mode) {
+            envVars.put("BOX64_MMAP32", "1");
+        }
 
         if (enableLogs) {
             envVars.put("BOX64_LOG", "1");
@@ -261,13 +292,17 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
 
     public void suspendProcess() {
         synchronized (lock) {
-            if (pid != -1) ProcessHelper.suspendProcess(pid);
+            if (pid != -1) {
+                ProcessHelper.suspendProcess(pid);
+            }
         }
     }
 
     public void resumeProcess() {
         synchronized (lock) {
-            if (pid != -1) ProcessHelper.resumeProcess(pid);
+            if (pid != -1) {
+                ProcessHelper.resumeProcess(pid);
+            }
         }
     }
 
@@ -286,21 +321,23 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
 
         String winePath = wineProfile == null ? imageFs.getWinePath() + "/bin"
                 : ContentsManager.getSourceFile(context, wineProfile, wineProfile.wineBinPath).getAbsolutePath();
-        envVars.put("PATH", winePath + ":" +
-                imageFs.getRootDir().getPath() + "/usr/bin:" +
-                imageFs.getRootDir().getPath() + "/usr/local/bin");
+        envVars.put("PATH", winePath + ":"
+                + imageFs.getRootDir().getPath() + "/usr/bin:"
+                + imageFs.getRootDir().getPath() + "/usr/local/bin");
 
         envVars.put("LD_LIBRARY_PATH", imageFs.getRootDir().getPath() + "/usr/lib");
         envVars.put("BOX64_LD_LIBRARY_PATH", imageFs.getRootDir().getPath() + "/usr/lib/x86_64-linux-gnu");
         envVars.put("ANDROID_SYSVSHM_SERVER", imageFs.getRootDir().getPath() + UnixSocketConfig.SYSVSHM_SERVER_PATH);
         envVars.put("FONTCONFIG_PATH", imageFs.getRootDir().getPath() + "/usr/etc/fonts");
 
-        if ((new File(imageFs.getGlibc64Dir(), "libandroid-sysvshm.so")).exists() ||
-                (new File(imageFs.getGlibc32Dir(), "libandroid-sysvshm.so")).exists
-                        ())
+        if ((new File(imageFs.getGlibc64Dir(), "libandroid-sysvshm.so")).exists()
+                || (new File(imageFs.getGlibc32Dir(), "libandroid-sysvshm.so")).exists()) {
             envVars.put("LD_PRELOAD", "libredirect.so libandroid-sysvshm.so");
+        }
         envVars.put("WINEESYNC_WINLATOR", "1");
-        if (this.envVars != null) envVars.putAll(this.envVars);
+        if (this.envVars != null) {
+            envVars.putAll(this.envVars);
+        }
 
         String box64Path = rootDir.getPath() + "/usr/local/bin/box64";
 
