@@ -87,6 +87,7 @@
         <item>2.6.1-gplasync</item>
     </string-array>
     <string-array name="vkd3d_version_entries">
+        <item>3.0a</item>
         <item>2.6</item>
         <item>2.12</item>
         <item>2.13</item>
