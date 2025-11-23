@@ -220,11 +220,20 @@ public class ContentsManager {
         if (profile.type == ContentProfile.ContentType.CONTENT_TYPE_WINE || profile.type == ContentProfile.ContentType.CONTENT_TYPE_PROTON) {
             File bin = new File(file, profile.wineBinPath);
             File lib = new File(file, profile.wineLibPath);
-            File cp = new File(file, profile.winePrefixPack);
 
-            if (!bin.exists() || !bin.isDirectory() || !lib.exists() || !lib.isDirectory() || !cp.exists() || !cp.isFile()) {
+            // Validate bin and lib directories exist
+            if (!bin.exists() || !bin.isDirectory() || !lib.exists() || !lib.isDirectory()) {
                 callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
                 return;
+            }
+
+            // Validate prefixPack only if specified in profile (optional for glibc packages)
+            if (profile.winePrefixPack != null && !profile.winePrefixPack.isEmpty()) {
+                File cp = new File(file, profile.winePrefixPack);
+                if (!cp.exists() || !cp.isFile()) {
+                    callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
+                    return;
+                }
             }
         }
 
@@ -318,6 +327,14 @@ public class ContentsManager {
             profile.verCode = verCode;
             profile.desc = desc;
             profile.fileList = fileList;
+
+            // Parse variant field (optional, defaults to "unknown")
+            if (profileJSONObject.has(ContentProfile.MARK_VARIANT)) {
+                profile.variant = profileJSONObject.getString(ContentProfile.MARK_VARIANT);
+            } else {
+                profile.variant = "unknown";
+            }
+
             return profile;
         } catch (Exception e) {
             return null;

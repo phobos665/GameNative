@@ -321,24 +321,9 @@ fun WineProtonManagerDialog(open: Boolean, onDismiss: () -> Unit) {
             val tmpDir = ContentsManager.getTmpDir(ctx)
             val binaryVariant = detectBinaryVariant(tmpDir)
 
-            if (binaryVariant == "glibc") {
-                // Reject glibc builds - not supported in GameNative
-                statusMessage = ctx.getString(R.string.wine_proton_glibc_incompatible)
-                isStatusSuccess = false
-
-                // Clean up the extracted files from tmp directory
-                try {
-                    withContext(Dispatchers.IO) {
-                        ContentsManager.cleanTmpDir(ctx)
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("WineProtonManagerDialog").e(e, "Error cleaning tmp dir")
-                }
-
-                Toast.makeText(ctx, statusMessage, Toast.LENGTH_LONG).show()
-                isBusy = false
-                SteamService.isImporting = false
-                return@launch
+            // Store detected variant in profile
+            if (binaryVariant != "unknown") {
+                profile.variant = binaryVariant
             }
 
             pendingProfile = profile
@@ -505,20 +490,9 @@ fun WineProtonManagerDialog(open: Boolean, onDismiss: () -> Unit) {
                 val tmpDir = ContentsManager.getTmpDir(ctx)
                 val binaryVariant = detectBinaryVariant(tmpDir)
 
-                //! We currently are not supporting GLIBC but we will in future.
-                if (binaryVariant == "glibc") {
-                    val errorMsg = ctx.getString(R.string.wine_proton_glibc_incompatible)
-                    withContext(Dispatchers.Main) {
-                        statusMessage = errorMsg
-                        isStatusSuccess = false
-                        Toast.makeText(ctx, errorMsg, Toast.LENGTH_LONG).show()
-                    }
-                    try {
-                        ContentsManager.cleanTmpDir(ctx)
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to clean tmp dir")
-                    }
-                    return@launch
+                // Store detected variant in profile
+                if (binaryVariant != "unknown") {
+                    profile.variant = binaryVariant
                 }
 
                 // Check for untrusted files
