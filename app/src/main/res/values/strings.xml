@@ -369,6 +369,8 @@
     <string name="wine_proton_delete_content_desc">Delete</string>
     <string name="wine_proton_untrusted_files_message">This package includes files outside the trusted set. Review and confirm to proceed with installation.</string>
     <string name="wine_proton_untrusted_files_label">Untrusted files:</string>
+    <string name="wine_proton_untrusted_files_cancel_warning">⚠️ Cancelling will discard the extracted package. You will need to re-import to try again.</string>
+    <string name="wine_proton_import_in_progress_warning">Import in progress. Closing this dialog will cancel the import.</string>
     <string name="wine_proton_remove_title">Remove Wine/Proton Version</string>
     <string name="wine_proton_remove_message">Are you sure you want to remove %1$s %2$s (%3$d)? Containers using this version will no longer work.</string>
     <string name="wine_proton_removed_toast">Removed %s</string>

@@ -80,8 +80,24 @@ public class ContentsManager {
 
     private ArrayList<ContentProfile> remoteProfiles;
 
+    // Guard flag to prevent tmp directory cleanup during active import
+    private volatile boolean isImportInProgress = false;
+
     public ContentsManager(Context context) {
         this.context = context;
+    }
+
+    /**
+     * Cancels any in-progress import operation. This should be called when the
+     * user dismisses the import dialog or when cleaning up. This allows the
+     * next import to properly clean the tmp directory.
+     */
+    public void cancelImport() {
+        if (isImportInProgress) {
+            android.util.Log.d("ContentsManager", "⚠️ Cancelling in-progress import");
+            isImportInProgress = false;
+            cleanTmpDir(context);
+        }
     }
 
     public interface OnInstallFinishedCallback {
@@ -164,7 +180,15 @@ public class ContentsManager {
     }
 
     public void extraContentFile(Uri uri, OnInstallFinishedCallback callback) {
-        cleanTmpDir(context);
+        // Only clean tmp dir if no import is in progress
+        if (!isImportInProgress) {
+            cleanTmpDir(context);
+        } else {
+            Log.w("ContentsManager", "⚠️ Import already in progress, skipping tmp cleanup");
+        }
+
+        // Mark import as in progress
+        isImportInProgress = true;
 
         File file = getTmpDir(context);
 
@@ -179,6 +203,7 @@ public class ContentsManager {
             ret = TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context, uri, file);
         }
         if (!ret) {
+            isImportInProgress = false;
             callback.onFailed(InstallFailedReason.ERROR_BADTAR, null);
             return;
         }
@@ -189,6 +214,7 @@ public class ContentsManager {
         File proFile = new File(file, PROFILE_NAME);
         if (!proFile.exists()) {
             Log.e("ContentsManager", "profile.json not found");
+            isImportInProgress = false;
             callback.onFailed(InstallFailedReason.ERROR_NOPROFILE, null);
             return;
         }
@@ -196,6 +222,7 @@ public class ContentsManager {
         ContentProfile profile = readProfile(proFile);
         if (profile == null) {
             Log.e("ContentsManager", "Failed to parse profile.json");
+            isImportInProgress = false;
             callback.onFailed(InstallFailedReason.ERROR_BADPROFILE, null);
             return;
         }
@@ -206,12 +233,14 @@ public class ContentsManager {
         for (ContentProfile.ContentFile contentFile : profile.fileList) {
             File tmpFile = new File(file, contentFile.source);
             if (!tmpFile.exists() || !tmpFile.isFile() || !isSubPath(file.getAbsolutePath(), tmpFile.getAbsolutePath())) {
+                isImportInProgress = false;
                 callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
                 return;
             }
 
             String realPath = getPathFromTemplate(contentFile.target);
             if (!isSubPath(imagefsPath, realPath) || isSubPath(ContentsManager.getContentDir(context).getAbsolutePath(), realPath) || realPath.contains("dosdevices")) {
+                isImportInProgress = false;
                 callback.onFailed(InstallFailedReason.ERROR_UNTRUSTPROFILE, null);
                 return;
             }
@@ -223,6 +252,7 @@ public class ContentsManager {
 
             // Validate bin and lib directories exist
             if (!bin.exists() || !bin.isDirectory() || !lib.exists() || !lib.isDirectory()) {
+                isImportInProgress = false;
                 callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
                 return;
             }
@@ -231,6 +261,7 @@ public class ContentsManager {
             if (profile.winePrefixPack != null && !profile.winePrefixPack.isEmpty()) {
                 File cp = new File(file, profile.winePrefixPack);
                 if (!cp.exists() || !cp.isFile()) {
+                    isImportInProgress = false;
                     callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
                     return;
                 }
@@ -250,16 +281,19 @@ public class ContentsManager {
 
         File installPath = getInstallDir(context, profile);
         if (installPath.exists()) {
+            isImportInProgress = false;
             callback.onFailed(InstallFailedReason.ERROR_EXIST, null);
             return;
         }
 
         if (!installPath.mkdirs()) {
+            isImportInProgress = false;
             callback.onFailed(InstallFailedReason.ERROR_UNKNOWN, null);
             return;
         }
 
         if (!getTmpDir(context).renameTo(installPath)) {
+            isImportInProgress = false;
             callback.onFailed(InstallFailedReason.ERROR_UNKNOWN, null);
             return;
         }
@@ -273,6 +307,12 @@ public class ContentsManager {
                 setExecutablePermissionsRecursive(binDir);
             }
         }
+
+        // Clear import flag after successful install
+        isImportInProgress = false;
+
+        // Clean up tmp directory after successful move
+        cleanTmpDir(context);
 
         callback.onSucceed(profile);
     }

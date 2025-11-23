@@ -185,6 +185,10 @@ fun WineProtonManagerDialog(open: Boolean, onDismiss: () -> Unit) {
     // Cleanup on dialog dismiss
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose {
+            // Cancel any in-progress import and clean up tmp directory
+            // This prevents tmp directory from being wiped during next import
+            mgr.cancelImport()
+
             // Always reset importing flag when dialog closes
             // If there's an actual import in progress, it will complete in the background
             SteamService.isImporting = false
@@ -575,6 +579,34 @@ fun WineProtonManagerDialog(open: Boolean, onDismiss: () -> Unit) {
                     .heightIn(max = 500.dp)
                     .verticalScroll(rememberScrollState())
             ) {
+                // Warning banner when import is in progress
+                if (pendingProfile != null) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "⚠️",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = stringResource(R.string.wine_proton_import_in_progress_warning),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+
                 // Info card
                 Card(
                     colors = CardDefaults.cardColors(
@@ -895,6 +927,15 @@ fun WineProtonManagerDialog(open: Boolean, onDismiss: () -> Unit) {
                     untrustedFiles.forEach { cf ->
                         Text(text = "• ${cf.target}", style = MaterialTheme.typography.bodySmall)
                     }
+
+                    // Warning about cancellation
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                    Text(
+                        text = stringResource(R.string.wine_proton_untrusted_files_cancel_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             },
             confirmButton = {
@@ -919,6 +960,8 @@ fun WineProtonManagerDialog(open: Boolean, onDismiss: () -> Unit) {
                     pendingProfile = null
                     statusMessage = null
                     isStatusSuccess = false
+                    // Cancel import since user declined to proceed
+                    mgr.cancelImport()
                 }) { Text(stringResource(R.string.cancel)) }
             }
         )
