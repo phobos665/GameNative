@@ -206,8 +206,14 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         envVars.put("TMPDIR", imageFs.getRootDir().getPath() + "/tmp");
         envVars.put("DISPLAY", ":0");
 
-        String winePath = wineProfile == null ? imageFs.getWinePath() + "/bin"
-                : ContentsManager.getSourceFile(context, wineProfile, wineProfile.wineBinPath).getAbsolutePath();
+        // Get ContentProfile from WineInfo if available
+        ContentProfile activeWineProfile = wineProfile;
+        if (activeWineProfile == null && getWineInfo() != null) {
+            activeWineProfile = contentsManager.getProfileByEntryName(getWineInfo().identifier());
+        }
+
+        String winePath = activeWineProfile == null ? imageFs.getWinePath() + "/bin"
+                : ContentsManager.getSourceFile(context, activeWineProfile, activeWineProfile.wineBinPath).getAbsolutePath();
         envVars.put("PATH", winePath + ":"
                 + imageFs.getRootDir().getPath() + "/usr/bin:"
                 + imageFs.getRootDir().getPath() + "/usr/local/bin");
@@ -217,6 +223,12 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         envVars.put("ANDROID_SYSVSHM_SERVER", imageFs.getRootDir().getPath() + UnixSocketConfig.SYSVSHM_SERVER_PATH);
         envVars.put("FONTCONFIG_PATH", imageFs.getRootDir().getPath() + "/usr/etc/fonts");
         envVars.put("WINEPREFIX", imageFs.wineprefix);
+
+        // Set WINEDLLPATH for glibc Wine/Proton to find system DLLs
+        if (activeWineProfile != null) {
+            String wineLibPath = ContentsManager.getSourceFile(context, activeWineProfile, "").getAbsolutePath() + "/lib/wine";
+            envVars.put("WINEDLLPATH", wineLibPath);
+        }
 
         if ((new File(imageFs.getGlibc64Dir(), "libandroid-sysvshm.so")).exists()
                 || (new File(imageFs.getGlibc32Dir(), "libandroid-sysvshm.so")).exists()) {
@@ -238,14 +250,14 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
             Log.d("GlibcProgramLauncherComponent", "variant match: " + Container.GLIBC.equals(container.getContainerVariant()));
         }
 
-        if (container != null && wineProfile != null && Container.GLIBC.equals(container.getContainerVariant())) {
+        if (container != null && activeWineProfile != null && Container.GLIBC.equals(container.getContainerVariant())) {
             {
                 try {
                     // Extract Steam App ID from container ID
                     Integer steamAppId = ContainerUtils.INSTANCE.extractGameIdFromContainerId(container.id);
                     Log.d("GlibcProgramLauncherComponent", "Steam App ID extracted: " + steamAppId);
 
-                    String protonPath = ContentsManager.getSourceFile(context, wineProfile, "").getAbsolutePath();
+                    String protonPath = ContentsManager.getSourceFile(context, activeWineProfile, "").getAbsolutePath();
                     Log.d("GlibcProgramLauncherComponent", "Proton path: " + protonPath);
 
                     boolean hasProtonfixes = ProtonFixesRunner.hasProtonfixes(protonPath);
@@ -317,9 +329,15 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
 
         // Install Python3 if protonfixes are available and Python3 is not installed
         Log.d("GlibcProgramLauncherComponent", "===== PYTHON3 INSTALL DEBUG START =====");
-        Log.d("GlibcProgramLauncherComponent", "wineProfile != null: " + (wineProfile != null));
-        if (wineProfile != null) {
-            String protonPath = ContentsManager.getSourceFile(context, wineProfile, "").getAbsolutePath();
+
+        ContentProfile pythonWineProfile = wineProfile;
+        if (pythonWineProfile == null && getWineInfo() != null) {
+            pythonWineProfile = contentsManager.getProfileByEntryName(getWineInfo().identifier());
+        }
+
+        Log.d("GlibcProgramLauncherComponent", "pythonWineProfile != null: " + (pythonWineProfile != null));
+        if (pythonWineProfile != null) {
+            String protonPath = ContentsManager.getSourceFile(context, pythonWineProfile, "").getAbsolutePath();
             Log.d("GlibcProgramLauncherComponent", "Proton path for Python3 install: " + protonPath);
             Log.d("GlibcProgramLauncherComponent", "Calling installPython3IfNeeded...");
             ProtonFixesRunner.installPython3IfNeeded(context, container, protonPath);
