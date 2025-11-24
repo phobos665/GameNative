@@ -5,6 +5,7 @@ import androidx.annotation.NonNull;
 import java.util.List;
 
 public class ContentProfile {
+
     public static final String MARK_TYPE = "type";
     public static final String MARK_VERSION_NAME = "versionName";
     public static final String MARK_VERSION_CODE = "versionCode";
@@ -46,14 +47,17 @@ public class ContentProfile {
         }
 
         public static ContentType getTypeByName(String name) {
-            for (ContentType type : ContentType.values())
-                if (type.typeName.toLowerCase().equals(name.toLowerCase()))
+            for (ContentType type : ContentType.values()) {
+                if (type.typeName.toLowerCase().equals(name.toLowerCase())) {
                     return type;
+                }
+            }
             return null;
         }
     }
 
     public static class ContentFile {
+
         public String source;
         public String target;
     }
@@ -67,4 +71,5 @@ public class ContentProfile {
     public String wineBinPath;
     public String winePrefixPack;
     public String remoteUrl;
+    public String variant; // "bionic" or "glibc"
 }

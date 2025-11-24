@@ -216,11 +216,24 @@ fun ContainerConfigDialog(
                 fexcoreVersions = (fexcoreVersionsBase + profilesToDisplay(mgr.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_FEXCORE))).distinct()
 
                 // Load custom Wine/Proton versions from imported content
-                // All custom Wine/Proton are bionic-only
-                val customWine = profilesToDisplay(mgr.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_WINE))
-                val customProton = profilesToDisplay(mgr.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_PROTON))
-                bionicWineEntries = (bionicWineEntriesBase + customProton + customWine).distinct()
-                // Keep glibc list as base only (no custom versions)
+                // Separate by variant (glibc vs bionic)
+                val allWineProfiles = (mgr.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_WINE) ?: emptyList()) +
+                                      (mgr.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_PROTON) ?: emptyList())
+
+                val glibcCustom = mutableListOf<String>()
+                val bionicCustom = mutableListOf<String>()
+
+                for (profile in allWineProfiles.filter { it.remoteUrl == null }) {
+                    val displayName = profilesToDisplay(listOf(profile)).firstOrNull() ?: continue
+                    when (profile.variant?.lowercase()) {
+                        "glibc" -> glibcCustom.add(displayName)
+                        "bionic" -> bionicCustom.add(displayName)
+                        else -> bionicCustom.add(displayName) // Default to bionic for backwards compatibility
+                    }
+                }
+
+                bionicWineEntries = (bionicWineEntriesBase + bionicCustom).distinct()
+                glibcWineEntries = (glibcWineEntriesBase + glibcCustom).distinct()
             } catch (_: Exception) {}
             versionsLoaded = true
         }
@@ -814,7 +827,7 @@ fun ContainerConfigDialog(
                                             }
                                         },
                                     )
-                                    // Wine version only if bionic variant
+                                    // Wine/Proton version dropdown - show appropriate list based on variant
                                     if (config.containerVariant.equals(Container.BIONIC, ignoreCase = true)) {
                                         val wineIndex = bionicWineEntries.indexOfFirst { it == config.wineVersion }.coerceAtLeast(0)
                                         SettingsListDropdown(
@@ -824,6 +837,17 @@ fun ContainerConfigDialog(
                                             items = bionicWineEntries,
                                             onItemSelected = { idx ->
                                                 config = config.copy(wineVersion = bionicWineEntries[idx])
+                                            },
+                                        )
+                                    } else if (config.containerVariant.equals(Container.GLIBC, ignoreCase = true)) {
+                                        val wineIndex = glibcWineEntries.indexOfFirst { it == config.wineVersion }.coerceAtLeast(0)
+                                        SettingsListDropdown(
+                                            colors = settingsTileColors(),
+                                            title = { Text(text = stringResource(R.string.wine_version)) },
+                                            value = wineIndex,
+                                            items = glibcWineEntries,
+                                            onItemSelected = { idx ->
+                                                config = config.copy(wineVersion = glibcWineEntries[idx])
                                             },
                                         )
                                     }

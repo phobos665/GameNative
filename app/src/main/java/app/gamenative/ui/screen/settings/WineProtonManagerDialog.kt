@@ -342,25 +342,17 @@ fun WineProtonManagerDialog(open: Boolean, onDismiss: () -> Unit) {
             val tmpDir = ContentsManager.getTmpDir(ctx)
             val binaryVariant = detectBinaryVariant(tmpDir)
 
-            if (binaryVariant == "glibc") {
-                // Reject glibc builds - not supported in GameNative
-                statusMessage = ctx.getString(R.string.wine_proton_glibc_incompatible)
-                isStatusSuccess = false
+            // Store the detected variant in the profile for future reference
+            // This allows the launcher to choose the appropriate component (GlibcProgramLauncher or BionicProgramLauncher)
+            profile.variant = binaryVariant
 
-                // Clean up the extracted files from tmp directory
-                try {
-                    withContext(Dispatchers.IO) {
-                        ContentsManager.cleanTmpDir(ctx)
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("WineProtonManagerDialog").e(e, "Error cleaning tmp dir")
-                }
-
-                Toast.makeText(ctx, statusMessage, Toast.LENGTH_LONG).show()
-                isBusy = false
-                SteamService.isImporting = false
-                return@launch
+            // Log variant detection for debugging
+            val variantMessage = when (binaryVariant) {
+                "glibc" -> ctx.getString(R.string.wine_proton_glibc_detected)
+                "bionic" -> ctx.getString(R.string.wine_proton_bionic_detected)
+                else -> "Wine/Proton variant: $binaryVariant"
             }
+            Timber.tag("WineProtonManagerDialog").d("Detected variant: $binaryVariant")
 
             pendingProfile = profile
             // Compute untrusted files and show confirmation if any
@@ -540,21 +532,16 @@ fun WineProtonManagerDialog(open: Boolean, onDismiss: () -> Unit) {
                 val tmpDir = ContentsManager.getTmpDir(ctx)
                 val binaryVariant = detectBinaryVariant(tmpDir)
 
-                //! We currently are not supporting GLIBC but we will in future.
-                if (binaryVariant == "glibc") {
-                    val errorMsg = ctx.getString(R.string.wine_proton_glibc_incompatible)
-                    withContext(Dispatchers.Main) {
-                        statusMessage = errorMsg
-                        isStatusSuccess = false
-                        Toast.makeText(ctx, errorMsg, Toast.LENGTH_LONG).show()
-                    }
-                    try {
-                        ContentsManager.cleanTmpDir(ctx)
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to clean tmp dir")
-                    }
-                    return@launch
+                // Store detected variant in profile
+                profile.variant = binaryVariant
+
+                // Log detected variant for informational purposes
+                val variantMessage = when (binaryVariant) {
+                    "glibc" -> ctx.getString(R.string.wine_proton_glibc_detected)
+                    "bionic" -> ctx.getString(R.string.wine_proton_bionic_detected)
+                    else -> "Unknown Wine/Proton variant: $binaryVariant"
                 }
+                Timber.i("Detected Wine/Proton variant: $binaryVariant - $variantMessage")
 
                 // Check for untrusted files
                 val files = withContext(Dispatchers.IO) { mgr.getUnTrustedContentFiles(profile) }

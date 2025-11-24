@@ -206,9 +206,10 @@ public abstract class ImageFsInstaller {
                 String fileName = file.getName();
                 String lowerName = fileName.toLowerCase();
 
-                // Preserve Wine/Proton installations (they work with both bionic and glibc)
+                // Preserve Wine/Proton installations (both bionic and glibc variants)
                 // Directory format: {type}-{version}-{code} where type is "wine" or "proton"
                 // Examples: wine-10.0-1, proton-ge-10-25-1, wine-staging-9.0-2
+                // The variant (bionic/glibc) is stored in profile.json, not in the path
                 if (lowerName.startsWith("wine-") || lowerName.startsWith("proton-")) {
                     continue;
                 }

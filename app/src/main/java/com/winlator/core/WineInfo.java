@@ -180,17 +180,31 @@ public class WineInfo implements Parcelable {
         String arch = matcher.group(4);
         String path = null;
 
-        // Check if it's a built-in bionic Wine version
+        // Check if it's a built-in Wine version (bionic or glibc)
         if (wineProfile == null) {
-            Log.d("WineInfo", "   No profile found, checking built-in bionic versions");
+            Log.d("WineInfo", "   No profile found, checking built-in versions");
             ImageFs imageFs = ImageFs.find(context);
-            String[] wineVersions = context.getResources().getStringArray(R.array.bionic_wine_entries);
-            for (String wineVersion : wineVersions) {
+
+            // Check bionic Wine versions
+            String[] bionicWineVersions = context.getResources().getStringArray(R.array.bionic_wine_entries);
+            for (String wineVersion : bionicWineVersions) {
                 if (wineVersion.contains(identifier)) {
                     path = imageFs.getRootDir().getPath() + "/opt/" + identifier;
                     break;
                 }
             }
+
+            // Check glibc Wine versions (also in /opt, not /opt/glibc)
+            if (path == null) {
+                String[] glibcWineVersions = context.getResources().getStringArray(R.array.glibc_wine_entries);
+                for (String wineVersion : glibcWineVersions) {
+                    if (wineVersion.contains(identifier)) {
+                        path = imageFs.getRootDir().getPath() + "/opt/" + identifier;
+                        break;
+                    }
+                }
+            }
+
             Log.d("WineInfo", "   Returning WineInfo: type=" + type + ", version=" + version + ", arch=" + arch + ", path=" + path);
             return new WineInfo(type, version, arch, path);
         }
