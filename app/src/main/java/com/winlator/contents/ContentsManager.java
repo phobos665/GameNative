@@ -349,6 +349,14 @@ public class ContentsManager {
             profile.verCode = verCode;
             profile.desc = desc;
             profile.fileList = fileList;
+
+            // Read variant field if present (glibc or bionic), default to bionic for backwards compatibility
+            if (profileJSONObject.has("variant")) {
+                profile.variant = profileJSONObject.getString("variant");
+            } else {
+                profile.variant = "bionic";
+            }
+
             return profile;
         } catch (Exception e) {
             return null;

@@ -36,6 +36,7 @@ import java.util.List;
 import app.gamenative.PluviaApp;
 import app.gamenative.events.AndroidEvent;
 import app.gamenative.service.SteamService;
+import app.gamenative.utils.ContainerUtils;
 
 public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent {
 
@@ -230,7 +231,7 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
             {
                 try {
                     // Extract Steam App ID from container ID
-                    Integer steamAppId = app.gamenative.utils.ContainerUtils.INSTANCE.extractGameIdFromContainerId(container.getId());
+                    Integer steamAppId = ContainerUtils.INSTANCE.extractGameIdFromContainerId(container.id);
                     String protonPath = ContentsManager.getSourceFile(context, wineProfile, "").getAbsolutePath();
                     boolean applied = false;
                     if (ProtonFixesRunner.hasProtonfixes(protonPath)) {
