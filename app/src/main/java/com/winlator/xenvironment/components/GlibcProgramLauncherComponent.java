@@ -216,6 +216,7 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         envVars.put("BOX64_LD_LIBRARY_PATH", imageFs.getRootDir().getPath() + "/usr/lib/x86_64-linux-gnu");
         envVars.put("ANDROID_SYSVSHM_SERVER", imageFs.getRootDir().getPath() + UnixSocketConfig.SYSVSHM_SERVER_PATH);
         envVars.put("FONTCONFIG_PATH", imageFs.getRootDir().getPath() + "/usr/etc/fonts");
+        envVars.put("WINEPREFIX", imageFs.wineprefix);
 
         if ((new File(imageFs.getGlibc64Dir(), "libandroid-sysvshm.so")).exists()
                 || (new File(imageFs.getGlibc32Dir(), "libandroid-sysvshm.so")).exists()) {
@@ -227,14 +228,32 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         }
 
         // Apply protonfixes BEFORE launching Wine (for glibc Proton builds only)
+        // Debug logging for protonfix execution
+        Log.d("GlibcProgramLauncherComponent", "===== PROTONFIX DEBUG START =====");
+        Log.d("GlibcProgramLauncherComponent", "container != null: " + (container != null));
+        Log.d("GlibcProgramLauncherComponent", "wineProfile != null: " + (wineProfile != null));
+        if (container != null) {
+            Log.d("GlibcProgramLauncherComponent", "container.getContainerVariant(): " + container.getContainerVariant());
+            Log.d("GlibcProgramLauncherComponent", "Container.GLIBC: " + Container.GLIBC);
+            Log.d("GlibcProgramLauncherComponent", "variant match: " + Container.GLIBC.equals(container.getContainerVariant()));
+        }
+
         if (container != null && wineProfile != null && Container.GLIBC.equals(container.getContainerVariant())) {
             {
                 try {
                     // Extract Steam App ID from container ID
                     Integer steamAppId = ContainerUtils.INSTANCE.extractGameIdFromContainerId(container.id);
+                    Log.d("GlibcProgramLauncherComponent", "Steam App ID extracted: " + steamAppId);
+
                     String protonPath = ContentsManager.getSourceFile(context, wineProfile, "").getAbsolutePath();
+                    Log.d("GlibcProgramLauncherComponent", "Proton path: " + protonPath);
+
+                    boolean hasProtonfixes = ProtonFixesRunner.hasProtonfixes(protonPath);
+                    Log.d("GlibcProgramLauncherComponent", "Has protonfixes: " + hasProtonfixes);
+
                     boolean applied = false;
-                    if (ProtonFixesRunner.hasProtonfixes(protonPath)) {
+                    if (hasProtonfixes) {
+                        Log.d("GlibcProgramLauncherComponent", "Attempting to apply protonfixes...");
                         // Apply protonfixes if available
                         applied = ProtonFixesRunner.applyProtonfixes(
                                 context,
@@ -250,10 +269,11 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
                         Log.d("GlibcProgramLauncherComponent", "No protonfixes applied for Steam App ID: " + steamAppId);
                     }
                 } catch (Exception e) {
-                    Log.w("GlibcProgramLauncherComponent", "Failed to apply protonfixes: " + e.getMessage());
+                    Log.w("GlibcProgramLauncherComponent", "Failed to apply protonfixes: " + e.getMessage(), e);
                 }
             }
         }
+        Log.d("GlibcProgramLauncherComponent", "===== PROTONFIX DEBUG END =====");
 
         String box64Path = rootDir.getPath() + "/usr/local/bin/box64";
 
@@ -296,10 +316,15 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         }
 
         // Install Python3 if protonfixes are available and Python3 is not installed
+        Log.d("GlibcProgramLauncherComponent", "===== PYTHON3 INSTALL DEBUG START =====");
+        Log.d("GlibcProgramLauncherComponent", "wineProfile != null: " + (wineProfile != null));
         if (wineProfile != null) {
             String protonPath = ContentsManager.getSourceFile(context, wineProfile, "").getAbsolutePath();
+            Log.d("GlibcProgramLauncherComponent", "Proton path for Python3 install: " + protonPath);
+            Log.d("GlibcProgramLauncherComponent", "Calling installPython3IfNeeded...");
             ProtonFixesRunner.installPython3IfNeeded(context, container, protonPath);
         }
+        Log.d("GlibcProgramLauncherComponent", "===== PYTHON3 INSTALL DEBUG END =====");
     }
 
     private void addBox64EnvVars(EnvVars envVars, boolean enableLogs) {
