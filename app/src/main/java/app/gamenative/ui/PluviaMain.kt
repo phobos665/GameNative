@@ -404,7 +404,14 @@ fun PluviaMain(
                 isConnecting = true
                 context.startForegroundService(Intent(context, SteamService::class.java))
             }
-            if (SteamService.isLoggedIn && !SteamService.isGameRunning && state.currentScreen == PluviaScreen.LoginUser) {
+
+            val currentRoute = navController.currentBackStackEntry?.destination?.route
+
+            if (SteamService.isLoggedIn &&
+                !SteamService.isGameRunning &&
+                state.currentScreen == PluviaScreen.LoginUser &&
+                currentRoute == PluviaScreen.LoginUser.route) {
+                Timber.d("[PluviaMain]: Auto-navigating from LoginUser to Home")
                 navController.navigate(PluviaScreen.Home.route)
             }
         }
