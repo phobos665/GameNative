@@ -253,14 +253,40 @@ class EpicService : Service() {
                 return "\"explorer.exe\""
             }
 
-            // Convert Windows path to Wine format
-            val winePath = exePath.replace(game.installPath, "Z:${game.installPath}")
-                .replace("/", "\\")
+            // Find the drive letter that's mapped to this game's install path
+            var epicDriveLetter: String? = null
+            for (drive in com.winlator.container.Container.drivesIterator(container.drives)) {
+                if (drive[1] == game.installPath) {
+                    epicDriveLetter = drive[0]
+                    Timber.tag("Epic").d("Found Epic game mapped to ${drive[0]}: drive")
+                    break
+                }
+            }
 
-            Timber.tag("Epic").i("Launching Epic game with exe: $winePath")
+            if (epicDriveLetter == null) {
+                Timber.tag("Epic").e("Epic game directory not mapped to any drive: ${game.installPath}")
+                return "\"explorer.exe\""
+            }
+
+            // Convert to relative path from install directory
+            val gameInstallDir = java.io.File(game.installPath)
+            val execFile = java.io.File(exePath)
+            val relativePath = execFile.relativeTo(gameInstallDir).path.replace('/', '\\')
+            val windowsPath = "$epicDriveLetter:\\$relativePath"
+
+            // Set working directory
+            val execWorkingDir = execFile.parentFile
+            if (execWorkingDir != null) {
+                guestProgramLauncherComponent.workingDir = execWorkingDir
+                envVars.put("WINEPATH", "$epicDriveLetter:\\")
+            } else {
+                guestProgramLauncherComponent.workingDir = gameInstallDir
+            }
+
+            Timber.tag("Epic").i("Launching Epic game with exe: $windowsPath")
 
             // Build Wine command with proper escaping
-            return "\"$winePath\""
+            return "\"$windowsPath\""
         }
 
 
