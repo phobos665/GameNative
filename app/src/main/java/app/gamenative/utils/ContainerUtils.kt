@@ -886,7 +886,7 @@ object ContainerUtils {
             }
         } else if (gameSource == GameSource.EPIC) {
             // Ensure Epic games have the specific game directory mapped
-            val epicAppName = appId.removePrefix("EPIC_")
+            val epicAppName = extractGameIdFromContainerId(appId).toString()
             val game = runBlocking { 
                 app.gamenative.service.epic.EpicService.getEpicGameOf(epicAppName)
             }
@@ -1004,8 +1004,8 @@ object ContainerUtils {
         // For Epic, return a hash code of the ID after stripping EPIC_ prefix
         val source = extractGameSourceFromContainerId(containerId)
         if (source == GameSource.EPIC) {
-            // Strip EPIC_ prefix and return hashCode
-            val epicId = containerId.removePrefix("EPIC_")
+            // Use gameId for hashCode calculation
+            val epicId = extractGameIdFromContainerId(containerId).toString()
             return epicId.hashCode()
         }
 

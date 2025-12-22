@@ -323,7 +323,7 @@ internal fun AppItem(
                         var isInstalled by remember(appInfo.appId, appInfo.gameSource) {
                             when (appInfo.gameSource) {
                                 GameSource.STEAM -> mutableStateOf(SteamService.isAppInstalled(appInfo.gameId))
-                                GameSource.EPIC -> mutableStateOf(EpicService.isGameInstalled(appInfo.appId.removePrefix("EPIC_")))
+                                GameSource.EPIC -> mutableStateOf(EpicService.isGameInstalled(appInfo.gameIdString))
                                 GameSource.GOG -> mutableStateOf(GOGService.isGameInstalled(appInfo.gameId.toString()))
                                 GameSource.CUSTOM_GAME -> mutableStateOf(true) // Custom Games are always considered installed
                                 else -> mutableStateOf(false)
@@ -335,7 +335,7 @@ internal fun AppItem(
                                 // Refresh just completed, check installation status
                                 isInstalled = when (appInfo.gameSource) {
                                     GameSource.STEAM -> SteamService.isAppInstalled(appInfo.gameId)
-                                    GameSource.EPIC -> EpicService.isGameInstalled(appInfo.appId.removePrefix("EPIC_"))
+                                    GameSource.EPIC -> EpicService.isGameInstalled(appInfo.gameIdString)
                                     GameSource.GOG -> GOGService.isGameInstalled(appInfo.gameId.toString())
                                     GameSource.CUSTOM_GAME -> true
                                     else -> false
@@ -524,7 +524,7 @@ internal fun GameInfoBlock(
                     // GOG and Epic games - check installation status from their respective services
                     val isInstalled = when (appInfo.gameSource) {
                         GameSource.GOG -> GOGService.isGameInstalled(appInfo.appId)
-                        GameSource.EPIC -> EpicService.isGameInstalled(appInfo.appId.removePrefix("EPIC_"))
+                        GameSource.EPIC -> EpicService.isGameInstalled(appInfo.gameIdString)
                         else -> false
                     }
                     val text = if (isInstalled) {

@@ -185,8 +185,7 @@ class EpicService : Service() {
 
 
         suspend fun getInstalledExe(context: Context, libraryItem: LibraryItem): String {
-            // Strip EPIC_ prefix to get the raw Epic app name
-            val epicAppName = libraryItem.appId.removePrefix("EPIC_")
+            val epicAppName = libraryItem.gameIdString
             val game = getInstance()?.epicManager?.getGameByAppName(epicAppName)
             if (game == null || !game.isInstalled || game.installPath.isEmpty()) {
                 Timber.tag("Epic").e("Game not installed: ${libraryItem.appId}")
@@ -231,8 +230,7 @@ class EpicService : Service() {
             envVars: com.winlator.core.envvars.EnvVars,
             guestProgramLauncherComponent: com.winlator.xenvironment.components.GuestProgramLauncherComponent
         ): String {
-            // Strip EPIC_ prefix to get the raw Epic app name
-            val epicAppName = libraryItem.appId.removePrefix("EPIC_")
+            val epicAppName = libraryItem.gameIdString
 
             val game = runBlocking {
                 getInstance()?.epicManager?.getGameByAppName(epicAppName)
