@@ -323,8 +323,8 @@ internal fun AppItem(
                         var isInstalled by remember(appInfo.appId, appInfo.gameSource) {
                             when (appInfo.gameSource) {
                                 GameSource.STEAM -> mutableStateOf(SteamService.isAppInstalled(appInfo.gameId))
-                                GameSource.GOG -> mutableStateOf(GOGService.isGameInstalled(appInfo.appId))
                                 GameSource.EPIC -> mutableStateOf(EpicService.isGameInstalled(appInfo.appId.removePrefix("EPIC_")))
+                                GameSource.GOG -> mutableStateOf(GOGService.isGameInstalled(appInfo.gameId.toString()))
                                 GameSource.CUSTOM_GAME -> mutableStateOf(true) // Custom Games are always considered installed
                                 else -> mutableStateOf(false)
                             }
@@ -335,8 +335,8 @@ internal fun AppItem(
                                 // Refresh just completed, check installation status
                                 isInstalled = when (appInfo.gameSource) {
                                     GameSource.STEAM -> SteamService.isAppInstalled(appInfo.gameId)
-                                    GameSource.GOG -> GOGService.isGameInstalled(appInfo.appId)
                                     GameSource.EPIC -> EpicService.isGameInstalled(appInfo.appId.removePrefix("EPIC_"))
+                                    GameSource.GOG -> GOGService.isGameInstalled(appInfo.gameId.toString())
                                     GameSource.CUSTOM_GAME -> true
                                     else -> false
                                 }

@@ -18,6 +18,109 @@ def display_version():
     print(f"{gogdl_version}")
 
 
+def get_game_ids(arguments, api_handler):
+    """List user's GOG games with full details"""
+    logger = logging.getLogger("GOGDL-GAME-IDS")
+    try:
+        # Check if we have valid credentials first
+        credentials = api_handler.auth_manager.get_credentials()
+        if not credentials:
+            logger.error("No valid credentials found. Please authenticate first.")
+            print(json.dumps([]))  # Return empty array instead of error object
+            return
+
+        logger.info("Fetching user's game library...")
+        logger.debug(f"Using access token: {credentials.get('access_token', '')[:20]}...")
+
+        # Use the same endpoint as does_user_own - it just returns owned game IDs
+        response = api_handler.session.get(f'{constants.GOG_EMBED}/user/data/games')
+
+        if not response.ok:
+            logger.error(f"Failed to fetch user data - HTTP {response.status_code}")
+            print(json.dumps([]))  # Return empty array instead of error object
+            return
+
+        user_data = response.json()
+        owned_games = user_data.get('owned', [])
+        if arguments.pretty:
+            print(json.dumps(owned_games, indent=2))
+        else:
+            print(json.dumps(owned_games))
+    except Exception as e:
+        logger.error(f"List command failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        # Return empty array on error so Kotlin can parse it
+        print(json.dumps([]))
+
+def get_game_details(arguments, api_handler):
+    """Fetch full details for a single game by ID"""
+    logger = logging.getLogger("GOGDL-GAME-DETAILS")
+    try:
+        game_id = arguments.game_id
+        if(not game_id):
+            logger.error("No game ID provided!")
+            print(json.dumps({}))
+            return
+         # Check if we have valid credentials first
+        logger.info(f"Fetching details for game ID: {game_id}")
+
+        # Get full game info with expanded data
+        game_info = api_handler.get_item_data(game_id, expanded=['downloads', 'description', 'screenshots'])
+
+        if game_info:
+            logger.info(f"Game {game_id} API response keys: {list(game_info.keys())}")
+            # Extract image URLs and ensure they have protocol
+            logo2x = game_info.get('images', {}).get('logo2x', '')
+            logo = game_info.get('images', {}).get('logo', '')
+            icon = game_info.get('images', {}).get('icon', '')
+
+            # Add https: protocol if missing
+            if logo2x and logo2x.startswith('//'):
+                logo2x = 'https:' + logo2x
+            if logo and logo.startswith('//'):
+                logo = 'https:' + logo
+            if icon and icon.startswith('//'):
+                icon = 'https:' + icon
+
+            # Extract download size from first installer
+            download_size = 0
+            downloads = game_info.get('downloads', {})
+            installers = downloads.get('installers', [])
+            if installers and len(installers) > 0:
+                download_size = installers[0].get('total_size', 0)
+
+            # Extract relevant fields
+            game_entry = {
+                "id": game_id,
+                "title": game_info.get('title', 'Unknown'),
+                "slug": game_info.get('slug', ''),
+                "imageUrl": logo2x or logo,
+                "iconUrl": icon,
+                "developer": game_info.get('developers', [{}])[0].get('name', '') if game_info.get('developers') else '',
+                "publisher": game_info.get('publisher', {}).get('name', '') if isinstance(game_info.get('publisher'), dict) else game_info.get('publisher', ''),
+                "genres": [g.get('name', '') if isinstance(g, dict) else str(g) for g in game_info.get('genres', [])],
+                "languages": list(game_info.get('languages', {}).keys()),
+                "description": game_info.get('description', {}).get('lead', '') if isinstance(game_info.get('description'), dict) else '',
+                "releaseDate": game_info.get('release_date', ''),
+                "downloadSize": download_size
+            }
+            # Output as JSON
+            if arguments.pretty:
+                print(json.dumps(game_entry, indent=2))
+            else:
+                print(json.dumps(game_entry))
+        else:
+            logger.warning(f"Failed to get details for game {game_id} - API returned None")
+            print(json.dumps({}))
+
+    except Exception as e:
+        logger.error(f"Get game details command failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        # Return empty object on error so Kotlin can parse it
+        print(json.dumps({}))
+
 def handle_list(arguments, api_handler):
     """List user's GOG games with full details"""
     logger = logging.getLogger("GOGDL-LIST")
@@ -290,6 +393,12 @@ def main():
     if arguments.command == "list":
         switcher["list"] = lambda: handle_list(arguments, api_handler)
 
+    # Handle game-ids command
+    if arguments.command == "game-ids":
+        switcher["game-ids"] = lambda: get_game_ids(arguments, api_handler)
+    # Handle game-details command
+    if arguments.command == "game-details":
+        switcher["game-details"] = lambda: get_game_details(arguments, api_handler)
     # Handle download/info commands
     if arguments.command in ["download", "repair", "update", "info"]:
         download_manager = manager.AndroidManager(arguments, unknown_args, api_handler)

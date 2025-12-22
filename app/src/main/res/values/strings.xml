@@ -938,26 +938,25 @@
     <string name="wine_proton_containers_will_break">These containers will no longer work if you proceed:</string>
 
     <!-- GOG Settings -->
-    <string name="gog_integration_title">GOG Integration</string>
+    <string name="gog_integration_title">GOG Integration (Alpha)</string>
     <string name="gog_settings_login_title">GOG Login</string>
     <string name="gog_settings_login_subtitle">Sign in to your GOG account</string>
-    <string name="gog_settings_sync_title">Sync GOG Library</string>
     <string name="gog_settings_sync_subtitle_syncing">Syncing…</string>
     <string name="gog_settings_sync_subtitle_error">Error: %1$s</string>
     <string name="gog_settings_sync_subtitle_success">✓ Synced %1$d games</string>
     <string name="gog_settings_sync_subtitle_default">Fetch your GOG games library</string>
     <string name="gog_login_success_title">Login Successful</string>
-    <string name="gog_login_success_message">You are now signed in to GOG.</string>
+    <string name="gog_login_success_message">You are now signed in to GOG.\nWe will now sync your library in the background.</string>
 
     <!-- GOG Login Dialog -->
     <string name="gog_login_title">Sign in to GOG</string>
     <string name="gog_login_instruction">Sign in with your GOG account:</string>
-    <string name="gog_login_auto_auth_info">Tap \'Open GOG Login\' and sign in. Once logged in, please take the code from the success URL and paste it below</string>
-    <string name="gog_login_auth_example">Example: https://embed.gog.com/on_login_success?origin=client&amp;code=COPY_THIS_CODE</string>
+    <string name="gog_login_auto_auth_info">Tap \'Open GOG Login\' and sign in. Once logged in, please take the code from the success URL OR copy the entire URL and paste it below</string>
+    <string name="gog_login_auth_example">Example: https://embed.gog.com/on_login_success?origin=client&amp;code=AUTH_CODE_HERE</string>
     <string name="gog_login_open_button">Open GOG Login</string>
-    <string name="gog_login_manual_entry">Paste your code below</string>
-    <string name="gog_login_auth_code_label">Authorization Code</string>
-    <string name="gog_login_auth_code_placeholder">Paste code here if needed…</string>
+    <string name="gog_login_manual_entry">Paste your code or success URL below</string>
+    <string name="gog_login_auth_code_label">Authorization Code or login success URL</string>
+    <string name="gog_login_auth_code_placeholder">Paste code or url here</string>
     <string name="gog_login_button">Login</string>
     <string name="gog_login_cancel">Cancel</string>
     <string name="gog_login_browser_error">Could not open browser</string>

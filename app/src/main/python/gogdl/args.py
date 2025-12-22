@@ -86,4 +86,13 @@ def init_parser():
     list_parser = subparsers.add_parser('list', help='List user\'s GOG games')
     list_parser.add_argument('--pretty', action='store_true', help='Pretty print JSON output')
 
+    # Game IDs command
+    game_ids_parser = subparsers.add_parser('game-ids', help='List user\'s GOG game IDs only')
+    game_ids_parser.add_argument('--pretty', action='store_true', help='Pretty print JSON output')
+
+    # Game details command
+    game_details_parser = subparsers.add_parser('game-details', help='Get full details for a single game')
+    game_details_parser.add_argument('game_id', type=str, help='Game ID to fetch details for')
+    game_details_parser.add_argument('--pretty', action='store_true', help='Pretty print JSON output')
+
     return parser.parse_known_args()

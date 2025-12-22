@@ -20,6 +20,17 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 
+private fun extractCodeFromInput(input: String): String {
+    val trimmed = input.trim()
+    // Check if it's a URL with code parameter
+    if (trimmed.startsWith("http")) {
+        val codeMatch = Regex("[?&]code=([^&]+)").find(trimmed)
+        return codeMatch?.groupValues?.get(1) ?: ""
+    }
+    // Otherwise assume it's already the code
+    return trimmed
+}
+
 /**
  * GOG Login Dialog
  *
@@ -134,7 +145,10 @@ fun GOGLoginDialog(
                 TextButton(
                     onClick = {
                         if (authCode.isNotBlank()) {
-                            onAuthCodeClick(authCode)
+                            val extractedCode = extractCodeFromInput(authCode)
+                            if (extractedCode.isNotEmpty()) {
+                                onAuthCodeClick(extractedCode)
+                            }
                         }
                     },
                     enabled = !isLoading && authCode.isNotBlank()

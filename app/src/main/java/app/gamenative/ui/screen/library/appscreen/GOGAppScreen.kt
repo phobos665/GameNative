@@ -111,8 +111,8 @@ class GOGAppScreen : BaseAppScreen() {
         libraryItem: LibraryItem
     ): GameDisplayInfo {
         Timber.tag(TAG).d("getGameDisplayInfo: appId=${libraryItem.appId}, name=${libraryItem.name}")
-        // For GOG games, appId is already the numeric game ID (no prefix)
-        val gameId = libraryItem.appId
+        // Extract numeric gameId for GOGService calls
+        val gameId = libraryItem.gameId.toString()
 
         // Add a refresh trigger to re-fetch game data when install status changes
         var refreshTrigger by remember { mutableStateOf(0) }
@@ -210,8 +210,8 @@ class GOGAppScreen : BaseAppScreen() {
     override fun isInstalled(context: Context, libraryItem: LibraryItem): Boolean {
         Timber.tag(TAG).d("isInstalled: checking appId=${libraryItem.appId}")
         return try {
-            // For GOG games, appId is already the numeric game ID
-            val installed = GOGService.isGameInstalled(libraryItem.appId)
+            // GOGService expects numeric gameId
+            val installed = GOGService.isGameInstalled(libraryItem.gameId.toString())
             Timber.tag(TAG).d("isInstalled: appId=${libraryItem.appId}, result=$installed")
             installed
         } catch (e: Exception) {
@@ -233,8 +233,8 @@ class GOGAppScreen : BaseAppScreen() {
     override fun isDownloading(context: Context, libraryItem: LibraryItem): Boolean {
         Timber.tag(TAG).d("isDownloading: checking appId=${libraryItem.appId}")
         // Check if there's an active download for this GOG game
-        // For GOG games, appId is already the numeric game ID
-        val downloadInfo = GOGService.getDownloadInfo(libraryItem.appId)
+        // GOGService expects numeric gameId
+        val downloadInfo = GOGService.getDownloadInfo(libraryItem.gameId.toString())
         val progress = downloadInfo?.getProgress() ?: 0f
         val isActive = downloadInfo?.isActive() ?: false
         val downloading = downloadInfo != null && isActive && progress < 1f
@@ -243,8 +243,8 @@ class GOGAppScreen : BaseAppScreen() {
     }
 
     override fun getDownloadProgress(context: Context, libraryItem: LibraryItem): Float {
-        // For GOG games, appId is already the numeric game ID
-        val downloadInfo = GOGService.getDownloadInfo(libraryItem.appId)
+        // GOGService expects numeric gameId
+        val downloadInfo = GOGService.getDownloadInfo(libraryItem.gameId.toString())
         val progress = downloadInfo?.getProgress() ?: 0f
         Timber.tag(TAG).d("getDownloadProgress: appId=${libraryItem.appId}, progress=$progress")
         return progress
@@ -252,8 +252,9 @@ class GOGAppScreen : BaseAppScreen() {
 
     override fun onDownloadInstallClick(context: Context, libraryItem: LibraryItem, onClickPlay: (Boolean) -> Unit) {
         Timber.tag(TAG).i("onDownloadInstallClick: appId=${libraryItem.appId}, name=${libraryItem.name}")
-        // For GOG games, appId is already the numeric game ID
-        val downloadInfo = GOGService.getDownloadInfo(libraryItem.appId)
+        // GOGService expects numeric gameId
+        val gameId = libraryItem.gameId.toString()
+        val downloadInfo = GOGService.getDownloadInfo(gameId)
         val isDownloading = downloadInfo != null && (downloadInfo.getProgress() ?: 0f) < 1f
         val installed = isInstalled(context, libraryItem)
 
@@ -263,7 +264,7 @@ class GOGAppScreen : BaseAppScreen() {
             // Cancel ongoing download
             Timber.tag(TAG).i("Cancelling GOG download for: ${libraryItem.appId}")
             downloadInfo.cancel()
-            GOGService.cleanupDownload(libraryItem.appId)
+            GOGService.cleanupDownload(gameId)
         } else if (installed) {
             // Already installed: launch game
             Timber.tag(TAG).i("GOG game already installed, launching: ${libraryItem.appId}")
@@ -280,7 +281,7 @@ class GOGAppScreen : BaseAppScreen() {
      * Delegates to GOGService/GOGManager for proper service layer separation
      */
     private fun performDownload(context: Context, libraryItem: LibraryItem, onClickPlay: (Boolean) -> Unit) {
-        val gameId = libraryItem.appId
+        val gameId = libraryItem.gameId.toString()
         Timber.i("Starting GOG game download: ${libraryItem.appId}")
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -329,15 +330,16 @@ class GOGAppScreen : BaseAppScreen() {
 
     override fun onPauseResumeClick(context: Context, libraryItem: LibraryItem) {
         Timber.tag(TAG).i("onPauseResumeClick: appId=${libraryItem.appId}")
-        // For GOG games, appId is already the numeric game ID
-        val downloadInfo = GOGService.getDownloadInfo(libraryItem.appId)
+        // GOGService expects numeric gameId
+        val gameId = libraryItem.gameId.toString()
+        val downloadInfo = GOGService.getDownloadInfo(gameId)
         val isDownloading = downloadInfo != null && (downloadInfo.getProgress() ?: 0f) < 1f
         Timber.tag(TAG).d("onPauseResumeClick: appId=${libraryItem.appId}, isDownloading=$isDownloading")
 
         if (isDownloading) {
             // Cancel/pause download
             Timber.tag(TAG).i("Pausing GOG download: ${libraryItem.appId}")
-            GOGService.cleanupDownload(libraryItem.appId)
+            GOGService.cleanupDownload(gameId)
             downloadInfo.cancel()
         } else {
             // Resume download (restart from beginning for now)
@@ -348,8 +350,9 @@ class GOGAppScreen : BaseAppScreen() {
 
     override fun onDeleteDownloadClick(context: Context, libraryItem: LibraryItem) {
         Timber.tag(TAG).i("onDeleteDownloadClick: appId=${libraryItem.appId}")
-        // For GOG games, appId is already the numeric game ID
-        val downloadInfo = GOGService.getDownloadInfo(libraryItem.appId)
+        // GOGService expects numeric gameId
+        val gameId = libraryItem.gameId.toString()
+        val downloadInfo = GOGService.getDownloadInfo(gameId)
         val isDownloading = downloadInfo != null && (downloadInfo.getProgress() ?: 0f) < 1f
         val isInstalled = isInstalled(context, libraryItem)
         Timber.tag(TAG).d("onDeleteDownloadClick: appId=${libraryItem.appId}, isDownloading=$isDownloading, isInstalled=$isInstalled")
@@ -357,7 +360,7 @@ class GOGAppScreen : BaseAppScreen() {
         if (isDownloading) {
             // Cancel download immediately if currently downloading
             Timber.tag(TAG).i("Cancelling active download for GOG game: ${libraryItem.appId}")
-            GOGService.cleanupDownload(libraryItem.appId)
+            GOGService.cleanupDownload(gameId)
             downloadInfo.cancel()
             android.widget.Toast.makeText(
                 context,
@@ -431,8 +434,8 @@ class GOGAppScreen : BaseAppScreen() {
     override fun getInstallPath(context: Context, libraryItem: LibraryItem): String? {
         Timber.tag(TAG).d("getInstallPath: appId=${libraryItem.appId}")
         return try {
-            // For GOG games, appId is already the numeric game ID
-            val path = GOGService.getInstallPath(libraryItem.appId)
+            // GOGService expects numeric gameId
+            val path = GOGService.getInstallPath(libraryItem.gameId.toString())
             Timber.tag(TAG).d("getInstallPath: appId=${libraryItem.appId}, path=$path")
             path
         } catch (e: Exception) {
@@ -535,8 +538,8 @@ class GOGAppScreen : BaseAppScreen() {
                 Timber.tag(TAG).d("[OBSERVE] Download status changed for ${libraryItem.appId}, isDownloading=${event.isDownloading}")
                 if (event.isDownloading) {
                     // Download started - attach progress listener
-                    // For GOG games, appId is already the numeric game ID
-                    val downloadInfo = GOGService.getDownloadInfo(libraryItem.appId)
+                    // GOGService expects numeric gameId
+                    val downloadInfo = GOGService.getDownloadInfo(libraryItem.gameId.toString())
                     if (downloadInfo != null) {
                         // Remove previous listener if exists
                         currentProgressListener?.let { listener ->
@@ -560,7 +563,7 @@ class GOGAppScreen : BaseAppScreen() {
                 } else {
                     // Download stopped/completed - clean up listener
                     currentProgressListener?.let { listener ->
-                        val downloadInfo = GOGService.getDownloadInfo(libraryItem.appId)
+                        val downloadInfo = GOGService.getDownloadInfo(libraryItem.gameId.toString())
                         downloadInfo?.removeProgressListener(listener)
                         currentProgressListener = null
                     }
@@ -623,8 +626,8 @@ class GOGAppScreen : BaseAppScreen() {
         }
         // Show install confirmation dialog
         if (showInstallDialog) {
-            // For GOG games, appId is already the numeric game ID
-            val gameId = libraryItem.appId
+            // GOGService expects numeric gameId
+            val gameId = libraryItem.gameId.toString()
             val gogGame = remember(gameId) {
                 GOGService.getGOGGameOf(gameId)
             }
@@ -674,8 +677,8 @@ class GOGAppScreen : BaseAppScreen() {
 
         // Show uninstall confirmation dialog
         if (showUninstallDialog) {
-            // For GOG games, appId is already the numeric game ID
-            val gameId = libraryItem.appId
+            // GOGService expects numeric gameId
+            val gameId = libraryItem.gameId.toString()
             val gogGame = remember(gameId) {
                 GOGService.getGOGGameOf(gameId)
             }

@@ -48,13 +48,13 @@ class ProgressBar(threading.Thread):
             timestamp = time()
             while not self.completed and (time() - timestamp) < 1:
                 try:
-                    dl, dec = self.speed_queue.get(timeout=0.5)
+                    dl, dec = self.speed_queue.get(timeout=0.3)
                     self.downloaded_since_last_update += dl
                     self.decompressed_since_last_update += dec
                 except queue.Empty:
                     pass
                 try:
-                    wr, r = self.write_queue.get(timeout=0.5)
+                    wr, r = self.write_queue.get(timeout=0.3)
                     self.written_since_last_update += wr
                     self.read_since_last_update += r
                 except queue.Empty:

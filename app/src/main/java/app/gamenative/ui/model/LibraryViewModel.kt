@@ -115,11 +115,8 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             gogGameDao.getAll().collect { games ->
                 Timber.tag("LibraryViewModel").d("Collecting ${games.size} GOG games")
-
-                val hasChanges = gogGameList.size != games.size || gogGameList != games
-                gogGameList = games
-
-                if (hasChanges) {
+                 if(gogGameList.size != games.size || gogGameList != games) {
+                    gogGameList = games
                     onFilterApps(paginationCurrentPage)
                 }
             }
@@ -367,7 +364,7 @@ class LibraryViewModel @Inject constructor(
                 LibraryEntry(
                     item = LibraryItem(
                         index = 0,
-                        appId = game.id,  // Use plain game ID without GOG_ prefix
+                        appId = "${GameSource.GOG.name}_${game.id}",  // Use GOG_ prefix for consistency
                         name = game.title,
                         iconHash = game.imageUrl.ifEmpty { game.iconUrl },  // Use imageUrl (banner) with iconUrl as fallback
                         isShared = false,

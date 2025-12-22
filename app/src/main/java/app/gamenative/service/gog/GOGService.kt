@@ -31,6 +31,8 @@ import javax.inject.Inject
 class GOGService : Service() {
 
     companion object {
+        private const val ACTION_SYNC_LIBRARY = "app.gamenative.GOG_SYNC_LIBRARY"
+
         private var instance: GOGService? = null
 
         // Sync tracking variables
@@ -41,8 +43,13 @@ class GOGService : Service() {
             get() = instance != null
 
         fun start(context: Context) {
+            val intent = Intent(context, GOGService::class.java)
             if (!isRunning) {
-                val intent = Intent(context, GOGService::class.java)
+                Timber.d("[GOGService] Starting service for first time")
+                context.startForegroundService(intent)
+            } else {
+                Timber.d("[GOGService] Service already running, triggering sync")
+                intent.action = ACTION_SYNC_LIBRARY
                 context.startForegroundService(intent)
             }
         }
@@ -99,6 +106,16 @@ class GOGService : Service() {
         }
 
         fun isSyncInProgress(): Boolean = syncInProgress
+
+        /**
+         * Trigger a background library sync
+         * Can be called even if service is already running
+         */
+        fun triggerLibrarySync(context: Context) {
+            val intent = Intent(context, GOGService::class.java)
+            intent.action = ACTION_SYNC_LIBRARY
+            context.startForegroundService(intent)
+        }
 
         fun getInstance(): GOGService? = instance
 
@@ -238,14 +255,15 @@ class GOGService : Service() {
                         Timber.i("[Download] Completed successfully for game $gameId")
                         downloadInfo.setProgress(1.0f)
                         downloadInfo.setActive(false)
-                        // Remove from activeDownloads so UI knows download is complete
-                        instance.activeDownloads.remove(gameId)
                     }
                 } catch (e: Exception) {
                     Timber.e(e, "[Download] Exception for game $gameId")
                     downloadInfo.setProgress(-1.0f)
                     downloadInfo.setActive(false)
                 } finally {
+                    // Remove from activeDownloads for both success and failure
+                    // so UI knows download is complete and to prevent stale entries
+                    instance.activeDownloads.remove(gameId)
                     Timber.d("[Download] Finished for game $gameId, progress: ${downloadInfo.getProgress()}, active: ${downloadInfo.isActive()}")
                 }
             }
@@ -290,29 +308,35 @@ class GOGService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Timber.d("GOGService.onStartCommand()")
+        Timber.d("[GOGService] onStartCommand() - action: ${intent?.action}")
 
         // Start as foreground service
         val notification = notificationHelper.createForegroundNotification("GOG Service running...")
         startForeground(2, notification) // Use different ID than SteamService (which uses 1)
 
-        // Start background library sync automatically when service starts
-        backgroundSyncJob = scope.launch {
-            try {
-                setSyncInProgress(true)
-                Timber.d("[GOGService]: Starting background library sync")
+        // Start background library sync if service is starting or sync action requested
+        if (intent?.action == ACTION_SYNC_LIBRARY || backgroundSyncJob == null || !backgroundSyncJob!!.isActive) {
+            Timber.i("[GOGService] Triggering background library sync")
+            backgroundSyncJob?.cancel() // Cancel any existing job
+            backgroundSyncJob = scope.launch {
+                try {
+                    setSyncInProgress(true)
+                    Timber.d("[GOGService]: Starting background library sync")
 
-                val syncResult = gogManager.startBackgroundSync(applicationContext)
-                if (syncResult.isFailure) {
-                    Timber.w("[GOGService]: Failed to start background sync: ${syncResult.exceptionOrNull()?.message}")
-                } else {
-                    Timber.i("[GOGService]: Background library sync started successfully")
+                    val syncResult = gogManager.startBackgroundSync(applicationContext)
+                    if (syncResult.isFailure) {
+                        Timber.w("[GOGService]: Failed to start background sync: ${syncResult.exceptionOrNull()?.message}")
+                    } else {
+                        Timber.i("[GOGService]: Background library sync started successfully")
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "[GOGService]: Exception starting background sync")
+                } finally {
+                    setSyncInProgress(false)
                 }
-            } catch (e: Exception) {
-                Timber.e(e, "[GOGService]: Exception starting background sync")
-            } finally {
-                setSyncInProgress(false)
             }
+        } else {
+            Timber.d("[GOGService] Background sync already in progress, skipping")
         }
 
         return START_STICKY

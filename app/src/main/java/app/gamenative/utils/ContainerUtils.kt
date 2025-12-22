@@ -40,19 +40,20 @@ object ContainerUtils {
     fun setContainerDefaults(context: Context){
         // Override default driver and DXVK version based on Turnip capability
         if (GPUInformation.isTurnipCapable(context)) {
-            DefaultVersion.VARIANT = Container.GLIBC
-            DefaultVersion.DEFAULT_GRAPHICS_DRIVER = "turnip"
-            DefaultVersion.DXVK = "2.6.1-gplasync"
+            DefaultVersion.VARIANT = Container.BIONIC
+            DefaultVersion.WINE_VERSION = "proton-9.0-arm64ec"
+            DefaultVersion.DEFAULT_GRAPHICS_DRIVER = "Wrapper"
+            DefaultVersion.DXVK = "async-1.10.3"
             DefaultVersion.VKD3D = "2.14.1"
             DefaultVersion.WRAPPER = "turnip25.3.0_R3_Auto"
             DefaultVersion.STEAM_TYPE = Container.STEAM_TYPE_NORMAL
-            DefaultVersion.ASYNC_CACHE = "1"
+            DefaultVersion.ASYNC_CACHE = "0"
         } else {
             DefaultVersion.VARIANT = Container.BIONIC
             DefaultVersion.WINE_VERSION = "proton-9.0-arm64ec"
-            DefaultVersion.DEFAULT_GRAPHICS_DRIVER = "Wrapper-leegao"
+            DefaultVersion.DEFAULT_GRAPHICS_DRIVER = "Wrapper"
             DefaultVersion.DXVK = "async-1.10.3"
-            DefaultVersion.VKD3D = "2.6"
+            DefaultVersion.VKD3D = "2.14.1"
             DefaultVersion.STEAM_TYPE = Container.STEAM_TYPE_LIGHT
             DefaultVersion.ASYNC_CACHE = "0"
         }
@@ -994,7 +995,9 @@ object ContainerUtils {
      * - STEAM_123456 -> 123456
      * - EPIC_1dea8a6ddb544842a58e4b5c8675ff58 -> hashCode() of UUID
      * - CUSTOM_GAME_571969840 -> 571969840
+     * - GOG_19283103 -> 19283103
      * - STEAM_123456(1) -> 123456
+     * - 19283103 -> 19283103 (legacy GOG format)
      */
     fun extractGameIdFromContainerId(containerId: String): Int {
         // Epic games use string catalog IDs which can't be converted to int
@@ -1032,14 +1035,14 @@ object ContainerUtils {
 
     /**
      * Extracts the game source from a container ID string
-     * Note: GOG games use plain numeric IDs without prefix
      */
     fun extractGameSourceFromContainerId(containerId: String): GameSource {
         return when {
             containerId.startsWith("STEAM_") -> GameSource.STEAM
             containerId.startsWith("EPIC_") -> GameSource.EPIC
             containerId.startsWith("CUSTOM_GAME_") -> GameSource.CUSTOM_GAME
-            // GOG games use plain numeric IDs - check if it's just a number
+            containerId.startsWith("GOG_") -> GameSource.GOG
+            // Legacy fallback for old GOG containers without prefix (numeric only)
             containerId.toIntOrNull() != null -> GameSource.GOG
             // Add other platforms here..
             else -> GameSource.STEAM // default fallback
