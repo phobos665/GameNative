@@ -199,23 +199,12 @@ fun XServerScreen(
         )
     }
 
-    // val xServer by remember {
-    //     val result = mutableStateOf(XServer(ScreenInfo(xServerState.value.screenSize)))
-    //     Log.d("XServerScreen", "Remembering xServer as $result")
-    //     result
-    // }
-    // var xEnvironment: XEnvironment? by remember {
-    //     val result = mutableStateOf<XEnvironment?>(null)
-    //     Log.d("XServerScreen", "Remembering xEnvironment as $result")
-    //     result
-    // }
     var touchMouse by remember {
         val result = mutableStateOf<TouchMouse?>(null)
         Timber.i("Remembering touchMouse as $result")
         result
     }
     var keyboard by remember { mutableStateOf<Keyboard?>(null) }
-    // var pointerEventListener by remember { mutableStateOf<Callback<MotionEvent>?>(null) }
 
     val gameId = ContainerUtils.extractGameIdFromContainerId(appId)
     val appLaunchInfo = SteamService.getAppInfoOf(gameId)?.let { appInfo ->
@@ -861,24 +850,10 @@ fun XServerScreen(
             }
 
             frameLayout
-
-            // } else {
-            //     Log.d("XServerScreen", "Creating XServerView without creating XServer")
-            //     xServerView = XServerView(context, PluviaApp.xServer)
-            // }
-            // xServerView
         },
         update = { view ->
-            // View's been inflated or state read in this block has been updated
-            // Add logic here if necessary
-            // view.requestFocus()
         },
         onRelease = { view ->
-            // view.releasePointerCapture()
-            // pointerEventListener?.let {
-            //     view.removePointerEventListener(pointerEventListener)
-            //     view.onRelease()
-            // }
         },
     )
 
@@ -1032,15 +1007,6 @@ fun XServerScreen(
             }
         }
     }
-
-    // var ranSetup by rememberSaveable { mutableStateOf(false) }
-    // LaunchedEffect(lifecycleOwner) {
-    //     if (!ranSetup) {
-    //         ranSetup = true
-    //
-    //
-    //     }
-    // }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1309,81 +1275,6 @@ fun getAvailableControlProfiles(context: Context): List<String> {
     return PluviaApp.inputControlsManager?.getProfiles(false)?.map { it.getName() } ?: emptyList()
 }
 
-private fun assignTaskAffinity(
-    window: Window,
-    winHandler: WinHandler,
-    taskAffinityMask: Int,
-    taskAffinityMaskWoW64: Int,
-) {
-    if (taskAffinityMask == 0) return
-    val processId = window.getProcessId()
-    val className = window.getClassName()
-    val processAffinity = if (window.isWoW64()) taskAffinityMaskWoW64 else taskAffinityMask
-
-    if (className.equals("steam.exe")) {
-        return;
-    }
-    if (processId > 0) {
-        winHandler.setProcessAffinity(processId, processAffinity)
-    } else if (!className.isEmpty()) {
-        winHandler.setProcessAffinity(window.getClassName(), processAffinity)
-    }
-}
-
-private fun shiftXEnvironmentToContext(
-    context: Context,
-    xEnvironment: XEnvironment,
-    xServer: XServer,
-): XEnvironment {
-    val environment = XEnvironment(context, xEnvironment.imageFs)
-    val rootPath = xEnvironment.imageFs.rootDir.path
-    xEnvironment.getComponent<SysVSharedMemoryComponent>(SysVSharedMemoryComponent::class.java).stop()
-    val sysVSharedMemoryComponent = SysVSharedMemoryComponent(
-        xServer,
-        UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.SYSVSHM_SERVER_PATH),
-    )
-    // val sysVSharedMemoryComponent = xEnvironment.getComponent<SysVSharedMemoryComponent>(SysVSharedMemoryComponent::class.java)
-    // sysVSharedMemoryComponent.connectToXServer(xServer)
-    environment.addComponent(sysVSharedMemoryComponent)
-    xEnvironment.getComponent<XServerComponent>(XServerComponent::class.java).stop()
-    val xServerComponent = XServerComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.XSERVER_PATH))
-    // val xServerComponent = xEnvironment.getComponent<XServerComponent>(XServerComponent::class.java)
-    // xServerComponent.connectToXServer(xServer)
-    environment.addComponent(xServerComponent)
-    xEnvironment.getComponent<NetworkInfoUpdateComponent>(NetworkInfoUpdateComponent::class.java).stop()
-    val networkInfoComponent = NetworkInfoUpdateComponent()
-    environment.addComponent(networkInfoComponent)
-    // environment.addComponent(xEnvironment.getComponent<NetworkInfoUpdateComponent>(NetworkInfoUpdateComponent::class.java))
-    environment.addComponent(xEnvironment.getComponent<SteamClientComponent>(SteamClientComponent::class.java))
-    val alsaComponent = xEnvironment.getComponent<ALSAServerComponent>(ALSAServerComponent::class.java)
-    if (alsaComponent != null) {
-        environment.addComponent(alsaComponent)
-    }
-    val pulseComponent = xEnvironment.getComponent<PulseAudioComponent>(PulseAudioComponent::class.java)
-    if (pulseComponent != null) {
-        environment.addComponent(pulseComponent)
-    }
-    var virglComponent: VirGLRendererComponent? =
-        xEnvironment.getComponent<VirGLRendererComponent>(VirGLRendererComponent::class.java)
-    if (virglComponent != null) {
-        virglComponent.stop()
-        virglComponent = VirGLRendererComponent(
-            xServer,
-            UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VIRGL_SERVER_PATH),
-        )
-        environment.addComponent(virglComponent)
-    }
-    environment.addComponent(xEnvironment.getComponent<GlibcProgramLauncherComponent>(GlibcProgramLauncherComponent::class.java))
-
-    FileUtils.clear(XEnvironment.getTmpDir(context))
-    sysVSharedMemoryComponent.start()
-    xServerComponent.start()
-    networkInfoComponent.start()
-    virglComponent?.start()
-    // environment.startEnvironmentComponents()
-
-    return environment
-}
 private fun setupXEnvironment(
     context: Context,
     appId: String,
@@ -1553,13 +1444,6 @@ private fun setupXEnvironment(
     environment.addComponent(NetworkInfoUpdateComponent())
     environment.addComponent(SteamClientComponent())
 
-    // environment.addComponent(SteamClientComponent(UnixSocketConfig.createSocket(
-    //     rootPath,
-    //     Paths.get(ImageFs.WINEPREFIX, "drive_c", UnixSocketConfig.STEAM_PIPE_PATH).toString()
-    // )))
-    // environment.addComponent(SteamClientComponent(UnixSocketConfig.createSocket(SteamService.getAppDirPath(appId), "/steam_pipe")))
-    // environment.addComponent(SteamClientComponent(UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.STEAM_PIPE_PATH)))
-
     if (xServerState.value.audioDriver == "alsa") {
         envVars.put("ANDROID_ALSA_SERVER", imageFs.getRootDir().getPath() + UnixSocketConfig.ALSA_SERVER_PATH)
         envVars.put("ANDROID_ASERVER_USE_SHM", "true")
@@ -1652,6 +1536,7 @@ private fun setupXEnvironment(
     )
     return environment
 }
+
 private fun getWineStartCommand(
     appId: String,
     container: Container,
@@ -1813,16 +1698,10 @@ private fun exit(winHandler: WinHandler?, environment: XEnvironment?, frameRatin
     winHandler?.stop()
     environment?.stopEnvironmentComponents()
     SteamService.isGameRunning = false
-    // AppUtils.restartApplication(this)
-    // PluviaApp.xServerState = null
-    // PluviaApp.xServer = null
-    // PluviaApp.xServerView = null
     PluviaApp.xEnvironment = null
     PluviaApp.inputControlsView = null
     PluviaApp.inputControlsManager = null
     PluviaApp.touchpadView = null
-    // PluviaApp.touchMouse = null
-    // PluviaApp.keyboard = null
     frameRating?.writeSessionSummary()
     onExit()
     navigateBack()
@@ -2113,10 +1992,8 @@ private fun setupWineSystemFiles(
     firstTimeBoot: Boolean,
     screenInfo: ScreenInfo,
     xServerState: MutableState<XServerState>,
-    // xServerViewModel: XServerViewModel,
     container: Container,
     containerManager: ContainerManager,
-    // shortcut: Shortcut?,
     envVars: EnvVars,
     contentsManager: ContentsManager,
     onExtractFileListener: OnExtractFileListener?,
@@ -2173,7 +2050,6 @@ private fun setupWineSystemFiles(
 
     if (xServerState.value.dxwrapper == "cnc-ddraw") envVars.put("CNC_DDRAW_CONFIG_FILE", "C:\\ProgramData\\cnc-ddraw\\ddraw.ini")
 
-    // val wincomponents = if (shortcut != null) shortcut.getExtra("wincomponents", container.winComponents) else container.winComponents
     val wincomponents = container.winComponents
     if (!wincomponents.equals(container.getExtra("wincomponents"))) {
         extractWinComponentFiles(context, firstTimeBoot, imageFs, container, containerManager, onExtractFileListener)
@@ -2430,7 +2306,6 @@ private fun extractWinComponentFiles(
     imageFs: ImageFs,
     container: Container,
     containerManager: ContainerManager,
-    // shortcut: Shortcut?,
     onExtractFileListener: OnExtractFileListener?,
 ) {
     val rootDir = imageFs.rootDir
@@ -2440,7 +2315,6 @@ private fun extractWinComponentFiles(
     try {
         val wincomponentsJSONObject = JSONObject(FileUtils.readString(context, "wincomponents/wincomponents.json"))
         val dlls = mutableListOf<String>()
-        // val wincomponents = if (shortcut != null) shortcut.getExtra("wincomponents", container.winComponents) else container.winComponents
         val wincomponents = container.winComponents
 
         if (firstTimeBoot) {
@@ -2695,13 +2569,6 @@ private fun extractGraphicsDriverFiles(
         envVars.put("GALLIUM_DRIVER", "zink")
         envVars.put("LIBGL_KOPPER_DISABLE", "true")
 
-
-        //        if (firstTimeBoot) {
-//            Log.d("XServerDisplayActivity", "First time container boot, re-extracting wrapper");
-//            TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/wrapper" + ".tzst", rootDir);
-//            TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/extra_libs" + ".tzst", rootDir);
-//        }
-
         // 1. Get the main WRAPPER selection (e.g., "Wrapper-v2") from the class field.
         val mainWrapperSelection: String = graphicsDriver
 
@@ -2803,20 +2670,6 @@ private fun readZipManifestNameFromAssets(context: Context, assetName: String): 
     return com.winlator.core.FileUtils.readZipManifestNameFromAssets(context, assetName)
 }
 
-private fun readLibraryNameFromExtractedDir(destinationDir: File): String? {
-    return try {
-        val manifests = destinationDir.listFiles { _, name -> name.endsWith(".json") }
-        if (manifests != null && manifests.isNotEmpty()) {
-            val manifest = manifests[0]
-            val content = com.winlator.core.FileUtils.readString(manifest)
-            val json = org.json.JSONObject(content)
-            val libraryName = json.optString("libraryName", "").trim()
-            if (libraryName.isNotEmpty()) libraryName else null
-        } else null
-    } catch (_: Exception) {
-        null
-    }
-}
 private fun changeWineAudioDriver(audioDriver: String, container: Container, imageFs: ImageFs) {
     if (audioDriver != container.getExtra("audioDriver")) {
         val rootDir = imageFs.rootDir
