@@ -38,6 +38,9 @@ import okhttp3.*
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 object SteamUtils {
 
@@ -757,6 +760,10 @@ object SteamUtils {
 
         if (Files.notExists(configsIni)) Files.createFile(configsIni)
         configsIni.toFile().writeText(iniContent)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            SteamAchievements.ensureSchemaIfMissing(steamAppId, settingsDir)
+        }
 
         val appIni = settingsDir.resolve("configs.app.ini")
         val dlcIds = SteamService.getDlcDepotsOf(steamAppId)

@@ -8,6 +8,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -27,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +67,7 @@ import app.gamenative.ui.data.XServerState
 import app.gamenative.ui.theme.settingsTileColors
 import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.CustomGameScanner
+import app.gamenative.utils.SteamAchievements
 import app.gamenative.utils.SteamUtils
 import com.posthog.PostHog
 import com.winlator.alsaserver.ALSAClient
@@ -127,7 +130,10 @@ import com.winlator.xserver.WindowManager
 import com.winlator.xserver.XServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
 import timber.log.Timber
@@ -220,6 +226,40 @@ fun XServerScreen(
     val gameId = ContainerUtils.extractGameIdFromContainerId(appId)
     val appLaunchInfo = SteamService.getAppInfoOf(gameId)?.let { appInfo ->
         SteamService.getWindowsLaunchInfos(gameId).firstOrNull()
+    }
+    val gameSource = remember(appId) {
+        ContainerUtils.extractGameSourceFromContainerId(appId)
+    }
+
+    LaunchedEffect(appId, bootToContainer, gameSource) {
+        if (bootToContainer || gameSource != GameSource.STEAM) return@LaunchedEffect
+        val numericGameId = ContainerUtils.extractGameIdFromContainerId(appId) ?: return@LaunchedEffect
+        var baselineSet = false
+        var lastEarned: Set<String> = emptySet()
+
+        while (isActive) {
+            val achievementsFile = SteamAchievements.findUserAchievementsFile(numericGameId, container)
+            val earned = withContext(Dispatchers.IO) {
+                SteamAchievements.readEarnedAchievements(achievementsFile)
+            }
+
+            if (!baselineSet) {
+                if (earned.isNotEmpty()) {
+                    lastEarned = earned
+                    baselineSet = true
+                }
+            } else {
+                val newlyEarned = earned - lastEarned
+                if (newlyEarned.isNotEmpty()) {
+                    newlyEarned.forEach { name ->
+                        Toast.makeText(context, "Achievement unlocked: $name", Toast.LENGTH_SHORT).show()
+                    }
+                    lastEarned = earned
+                }
+            }
+
+            delay(2000)
+        }
     }
 
     var currentAppInfo = SteamService.getAppInfoOf(gameId)
