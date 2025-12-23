@@ -40,6 +40,10 @@
     <string name="steam_uninstall_confirmation_message">Êtes-vous sûr de vouloir désinstaller %1$s ? Cette action ne peut pas être annulée.</string>
     <string name="steam_uninstall_success">%1$s a été désinstallé</string>
     <string name="steam_uninstall_failed">Échec de la désinstallation du jeu</string>
+    <string name="gog_uninstall_game_title">Désinstaller le jeu</string>
+    <string name="gog_uninstall_confirmation_message">Êtes-vous sûr de vouloir désinstaller %1$s ? Cette action ne peut pas être annulée.</string>
+    <string name="gog_install_game_title">Télécharger le jeu</string>
+    <string name="gog_install_confirmation_message">Télécharger %1$s (%2$s) ? Assurez-vous d\'avoir suffisamment d\'espace de stockage.</string>
     <string name="steam_never">Jamais</string>
     <string name="steam_continue">Continuer</string>
     <string name="header_img_desc">Image d\'en-tête de l\'application</string>

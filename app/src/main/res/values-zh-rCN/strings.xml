@@ -39,6 +39,10 @@
     <string name="steam_uninstall_confirmation_message">您确定要卸载 %1$s 吗? 此操作无法撤回</string>
     <string name="steam_uninstall_success">%1$s 已卸载</string>
     <string name="steam_uninstall_failed">卸载游戏失败</string>
+    <string name="gog_uninstall_game_title">卸载游戏</string>
+    <string name="gog_uninstall_confirmation_message">您确定要卸载 %1$s 吗? 此操作无法撤回</string>
+    <string name="gog_install_game_title">下载游戏</string>
+    <string name="gog_install_confirmation_message">下载 %1$s (%2$s)? 请确保有足够的存储空间</string>
     <string name="steam_never">从不</string>
     <string name="steam_continue">继续</string>
     <string name="header_img_desc">App header image</string>

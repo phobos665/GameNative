@@ -175,9 +175,11 @@ class GOGManager @Inject constructor(
                         Timber.tag("GOG").d("Got Game Details for ID: $id")
                         val gameDetails = JSONObject(output.trim())
                         val game = parseGameObject(gameDetails)
-                        games.add(game)
-                        Timber.tag("GOG").d("Refreshed GOG game ID $id: ${game.title}")
-                        totalProcessed++
+                        if(game != null) {
+                            games.add(game)
+                            Timber.tag("GOG").d("Refreshed Game: ${game.title}")
+                            totalProcessed++
+                        }
                     } else {
                         Timber.w("GOG game ID $id not found in library after refresh")
                     }
@@ -236,13 +238,23 @@ class GOGManager @Inject constructor(
             return Result.success(gameIds)
     }
 
-    private fun parseGameObject(gameObj: JSONObject): GOGGame {
+    private fun parseGameObject(gameObj: JSONObject): GOGGame? {
         val genresList = parseJsonArray(gameObj.optJSONArray("genres"))
         val languagesList = parseJsonArray(gameObj.optJSONArray("languages"))
 
+        val title = gameObj.optString("title", "Unknown Game")
+        val id = gameObj.optString("id", "")
+
+        val isInvalidGame = title == "Unknown Game" || title.startsWith("product_title_")
+
+        if(isInvalidGame){
+            Timber.tag("GOG").w("Found incorrectly formatted game: $title, $id")
+            return null
+        }
+
         return GOGGame(
-            id = gameObj.optString("id", ""),
-            title = gameObj.optString("title", "Unknown Game"),
+            id,
+            title,
             slug = gameObj.optString("slug", ""),
             imageUrl = gameObj.optString("imageUrl", ""),
             iconUrl = gameObj.optString("iconUrl", ""),
@@ -442,15 +454,19 @@ class GOGManager @Inject constructor(
 
             val output = result.getOrNull() ?: ""
 
-            if(result != null){
-                val gameDetails = org.json.JSONObject(output.trim())
-                var game = parseGameObject(gameDetails)
-                insertGame(game)
-                return Result.success(game)
+            if(result == null) {
+                Timber.w("Game $gameId not found in GOG library")
+                return Result.success(null)
             }
 
-            Timber.w("Game $gameId not found in GOG library")
-            Result.success(null)
+            val gameDetails = org.json.JSONObject(output.trim())
+            var game = parseGameObject(gameDetails)
+            if(game == null){
+                Timber.tag("GOG").w("Skipping Invalid GOG App with id: $gameId")
+                return Result.success(null)
+            }
+            insertGame(game)
+            return Result.success(game)
         } catch (e: Exception) {
             Timber.e(e, "Error fetching single game data for $gameId")
             Result.failure(e)
@@ -514,7 +530,7 @@ class GOGManager @Inject constructor(
                     "--platform", "windows",
                     "--path", installPath,
                     "--support", supportDir.absolutePath,
-                    "--skip-dlcs",
+                    "--with-dlcs",
                     "--lang", "en-US",
                     "--max-workers", "1",
                 )

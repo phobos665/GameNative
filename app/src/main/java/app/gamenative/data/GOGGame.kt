@@ -69,22 +69,6 @@ data class GOGGame(
     companion object {
         const val GOG_IMAGE_BASE_URL = "https://images.gog.com/images"
     }
-
-    /**
-     * Get the GOG CDN image URL for this game
-     * GOG uses a specific URL pattern for game images
-     */
-    val gogImageUrl: String
-        get() = if (imageUrl.isNotEmpty()) {
-            imageUrl
-        } else if (slug.isNotEmpty()) {
-            "$GOG_IMAGE_BASE_URL/$slug.jpg"
-        } else {
-            ""
-        }
-
-    val gogIconUrl: String
-        get() = iconUrl.ifEmpty { gogImageUrl }
 }
 
 data class GOGCredentials(

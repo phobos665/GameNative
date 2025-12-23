@@ -17,6 +17,10 @@
     <string name="delete_app">Slet</string>
     <string name="uninstall">Afinstallér</string>
     <string name="run_app">Spil</string>
+    <string name="gog_uninstall_game_title">Afinstallér spil</string>
+    <string name="gog_uninstall_confirmation_message">Er du sikker på, at du vil afinstallere %1$s? Denne handling kan ikke fortrydes.</string>
+    <string name="gog_install_game_title">Download spil</string>
+    <string name="gog_install_confirmation_message">Download %1$s (%2$s)? Sørg for at have tilstrækkelig lagerplads.</string>
     <string name="download_prompt_title">Installér app</string>
     <string name="delete_prompt_title">Slet app</string>
     <string name="cancel_download_prompt_title">Annullér download</string>

@@ -234,12 +234,7 @@ internal fun AppItem(
                                 }
                             }
                             GameSource.GOG -> {
-                                // For GOG games, use the iconHash which contains the full image URL
-                                // GOG stores images directly in iconHash (populated from GOGGame.imageUrl or iconUrl)
-                                // The imageUrl is typically a larger banner/hero image, iconUrl is smaller icon
-                                val gogUrl = appInfo.iconHash.ifEmpty { appInfo.clientIconUrl }
-                                timber.log.Timber.d("GOG image URL for ${appInfo.name}: iconHash='${appInfo.iconHash}', clientIconUrl='${appInfo.clientIconUrl}', final='$gogUrl'")
-                                gogUrl
+                                appInfo.iconHash
                             }
                             GameSource.EPIC -> {
                                 // For Epic games, use the iconHash which contains the full image URL from Epic CDN
@@ -321,14 +316,20 @@ internal fun AppItem(
                         )
                     } else {
                         var isInstalled by remember(appInfo.appId, appInfo.gameSource) {
-                            when (appInfo.gameSource) {
-                                GameSource.STEAM -> mutableStateOf(SteamService.isAppInstalled(appInfo.gameId))
-                                GameSource.EPIC -> mutableStateOf(EpicService.isGameInstalled(appInfo.gameIdString))
-                                GameSource.GOG -> mutableStateOf(GOGService.isGameInstalled(appInfo.gameId.toString()))
-                                GameSource.CUSTOM_GAME -> mutableStateOf(true) // Custom Games are always considered installed
-                                else -> mutableStateOf(false)
+                            mutableStateOf(false)
+                        }
+
+                        // Initialize installation status
+                        LaunchedEffect(appInfo.appId, appInfo.gameSource) {
+                            isInstalled = when (appInfo.gameSource) {
+                                GameSource.STEAM -> SteamService.isAppInstalled(appInfo.gameId)
+                                GameSource.GOG -> GOGService.isGameInstalled(appInfo.gameId.toString())
+                                GameSource.EPIC -> EpicService.isGameInstalled(appInfo.gameIdString))
+                                GameSource.CUSTOM_GAME -> true
+                                else -> false
                             }
                         }
+
                         // Update installation status when refresh completes
                         LaunchedEffect(isRefreshing) {
                             if (!isRefreshing) {

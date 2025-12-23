@@ -534,8 +534,8 @@ object ContainerUtils {
             }
             GameSource.GOG -> {
                 // For GOG games, map the specific game directory to A: drive
-                val gameId = extractGameIdFromContainerId(containerId)
-                val game = runBlocking { GOGService.getGOGGameOf(gameId.toString()) }
+                val gameId = extractGameIdFromContainerId(appId)
+                val game = GOGService.getGOGGameOf(gameId.toString())
                 if (game != null) {
                     val gameInstallPath = GOGConstants.getGameInstallPath(game.title)
                     val drive: Char = if (defaultDrives.contains("A:")) {
@@ -887,7 +887,7 @@ object ContainerUtils {
         } else if (gameSource == GameSource.EPIC) {
             // Ensure Epic games have the specific game directory mapped
             val epicAppName = extractGameIdFromContainerId(appId).toString()
-            val game = runBlocking { 
+            val game = runBlocking {
                 app.gamenative.service.epic.EpicService.getEpicGameOf(epicAppName)
             }
             if (game != null && game.isInstalled && game.installPath.isNotEmpty()) {
@@ -1042,8 +1042,6 @@ object ContainerUtils {
             containerId.startsWith("EPIC_") -> GameSource.EPIC
             containerId.startsWith("CUSTOM_GAME_") -> GameSource.CUSTOM_GAME
             containerId.startsWith("GOG_") -> GameSource.GOG
-            // Legacy fallback for old GOG containers without prefix (numeric only)
-            containerId.toIntOrNull() != null -> GameSource.GOG
             // Add other platforms here..
             else -> GameSource.STEAM // default fallback
         }

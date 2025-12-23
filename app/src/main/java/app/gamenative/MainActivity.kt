@@ -196,7 +196,6 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         handleLaunchIntent(intent)
     }
-
     private fun handleLaunchIntent(intent: Intent) {
         Timber.d("[IntentLaunch]: handleLaunchIntent called with action=${intent.action}")
         try {

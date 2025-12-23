@@ -17,6 +17,10 @@
     <string name="delete_app">Deletar</string>
     <string name="uninstall">Desinstalar</string>
     <string name="run_app">Jogar</string>
+    <string name="gog_uninstall_game_title">Desinstalar Jogo</string>
+    <string name="gog_uninstall_confirmation_message">Tem certeza que deseja desinstalar %1$s? Esta ação não pode ser desfeita.</string>
+    <string name="gog_install_game_title">Baixar Jogo</string>
+    <string name="gog_install_confirmation_message">Baixar %1$s (%2$s)? Certifique-se de ter espaço de armazenamento suficiente.</string>
     <string name="download_prompt_title">Instalar App</string>
     <string name="delete_prompt_title">Deletar App</string>
     <string name="cancel_download_prompt_title">Cancelar Download</string>

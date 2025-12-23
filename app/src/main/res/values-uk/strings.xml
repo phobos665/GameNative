@@ -19,6 +19,10 @@
     <string name="delete_app">Видалити</string>
     <string name="uninstall">Деінсталювати</string>
     <string name="run_app">Грати</string>
+    <string name="gog_uninstall_game_title">Деінсталювати гру</string>
+    <string name="gog_uninstall_confirmation_message">Ви впевнені, що хочете деінсталювати %1$s? Цю дію не можна скасувати.</string>
+    <string name="gog_install_game_title">Завантажити гру</string>
+    <string name="gog_install_confirmation_message">Завантажити %1$s (%2$s)? Переконайтеся, що у вас достатньо місця для зберігання.</string>
     <string name="download_prompt_title">Інсталювати застосунок</string>
     <string name="delete_prompt_title">Деінсталювати застосунок</string>
     <string name="cancel_download_prompt_title">Скасувати завантаження</string>
