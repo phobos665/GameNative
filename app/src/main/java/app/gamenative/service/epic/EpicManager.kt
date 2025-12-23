@@ -41,10 +41,6 @@ class EpicManager @Inject constructor(
     private val epicGameDao: EpicGameDao,
 ) {
 
-    /**
-     * Refresh the entire library (called manually by user or after login)
-     * Fetches all games from Epic via Legendary and updates the database
-     */
     suspend fun refreshLibrary(context: Context): Result<Int> = withContext(Dispatchers.IO) {
         try {
             if (!EpicAuthManager.hasStoredCredentials(context)) {
@@ -83,12 +79,6 @@ class EpicManager @Inject constructor(
         }
     }
 
-    /**
-     * Fetch the user's Epic library (list of owned games)
-     * Returns a list of EpicGame objects with basic metadata
-     *
-     * Uses: legendary list --third-party --json
-     */
     private suspend fun listGames(context: Context): Result<List<EpicGame>> {
         return try {
             Timber.d("Fetching Epic library via Legendary...")
@@ -155,6 +145,7 @@ class EpicManager @Inject constructor(
             for (i in 0 until gamesArray.length()) {
                 try {
                     val gameObj = gamesArray.getJSONObject(i)
+                    Timber.tag("EPIC").d("gameObj=%s", gameObj.toString(2))
                     games.add(parseGameObject(gameObj, i))
                 } catch (e: Exception) {
                     Timber.w(e, "Failed to parse game at index $i, skipping")
@@ -447,6 +438,67 @@ except Exception as e:
         } catch (e: Exception) {
             Timber.e(e, "Exception fetching install size for $appName")
             0L
+        }
+    }
+
+    fun getGameInstallPath(gameTitle: String): String {
+        return EpicConstants.getGameInstallPath(gameTitle)
+    }
+
+    suspend fun deleteGame(context: Context, libraryItem: LibraryItem): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val gameId = libraryItem.gameId.toString()
+                val installPath = getGameInstallPath(context, gameId, libraryItem.name)
+                val installDir = File(installPath)
+
+                // Delete the manifest file
+                val manifestPath = File(context.filesDir, "manifests/$gameId")
+                if (manifestPath.exists()) {
+                    manifestPath.delete()
+                    Timber.i("Deleted manifest file for game $gameId")
+                }
+
+                // Delete game files
+                if (installDir.exists()) {
+                    val success = installDir.deleteRecursively()
+                    if (success) {
+                        Timber.i("Successfully deleted game directory: $installPath")
+                    } else {
+                        Timber.w("Failed to delete some game files")
+                    }
+                } else {
+                    Timber.w("Epic game directory doesn't exist: $installPath")
+                }
+
+                // Remove all markers
+                val appDirPath = getAppDirPath(libraryItem.appId)
+                MarkerUtils.removeMarker(appDirPath, Marker.DOWNLOAD_COMPLETE_MARKER)
+                MarkerUtils.removeMarker(appDirPath, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+
+                // Update database - mark as not installed
+                val game = getGameById(gameId)
+                if (game != null) {
+                    val updatedGame = game.copy(isInstalled = false, installPath = "")
+                    epicGameDao.update(updatedGame)
+                    Timber.d("Updated database: game marked as not installed")
+                }
+
+                // Delete container (must run on Main thread)
+                withContext(Dispatchers.Main) {
+                    ContainerUtils.deleteContainer(context, libraryItem.appId)
+                }
+
+                // Trigger library refresh event
+                app.gamenative.PluviaApp.events.emitJava(
+                    app.gamenative.events.AndroidEvent.LibraryInstallStatusChanged(libraryItem.gameId)
+                )
+
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to delete epic game ${libraryItem.gameId}")
+                Result.failure(e)
+            }
         }
     }
 }
