@@ -74,8 +74,14 @@ object EpicPythonBridge {
                 val sys = python.getModule("sys")
                 val io = python.getModule("io")
 
-                // Capture stdout
+                // Capture stdout with a wrapper that supports reconfigure()
+                // StringIO doesn't have reconfigure(), but legendary CLI tries to call it
                 val stdoutCapture = io.callAttr("StringIO")
+
+                // Add a no-op reconfigure method to the StringIO object
+                python.builtins.callAttr("setattr", stdoutCapture, "reconfigure",
+                    python.builtins.callAttr("eval", "lambda **kwargs: None"))
+
                 val originalStdout = sys.get("stdout")
                 sys.put("stdout", stdoutCapture)
 
@@ -84,7 +90,7 @@ object EpicPythonBridge {
                     // Create empty dicts for globals and locals to give exec() proper context
                     val builtins = python.getBuiltins()
                     val dict = builtins.callAttr("dict")
-                    
+
                     // Execute with separate namespace to avoid frame issues
                     builtins.callAttr("exec", pythonCode, dict)
 
@@ -146,6 +152,17 @@ object EpicPythonBridge {
 
                     // Capture stdout
                     val stdoutCapture = io.callAttr("StringIO")
+
+                    // Add a no-op reconfigure method to the StringIO object
+                    python.builtins.callAttr("setattr", stdoutCapture, "reconfigure",
+                        python.builtins.callAttr("eval", "lambda **kwargs: None"))
+
+
+                    // Add a no-op reconfigure method to the StringIO object
+                    // legendary CLI tries to call reconfigure() which StringIO doesn't have
+                    python.builtins.callAttr("setattr", stdoutCapture, "reconfigure",
+                        python.builtins.callAttr("eval", "lambda **kwargs: None"))
+
                     val originalStdout = sys.get("stdout")
                     sys.put("stdout", stdoutCapture)
                     Timber.d("stdout capture configured")
