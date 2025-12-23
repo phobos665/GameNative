@@ -143,6 +143,20 @@ object EpicPythonBridge {
                     val legendaryCli = python.getModule("legendary.cli")
                     Timber.d("legendary.cli module imported successfully")
 
+                    // Monkey-patch sys._getframe to avoid "frame does not exist" errors
+                    // Chaquopy doesn't support frame introspection, so we provide a dummy implementation
+                    python.builtins.callAttr("exec", """
+import sys
+def _dummy_getframe(depth=0):
+    class DummyFrame:
+        f_code = type('obj', (object,), {'co_filename': '<unknown>', 'co_name': '<unknown>'})()
+        f_lineno = 0
+        f_back = None
+    return DummyFrame()
+sys._getframe = _dummy_getframe
+""")
+                    Timber.d("sys._getframe monkey-patched successfully")
+
                     // Set up arguments for argparse
                     val argsList = listOf("legendary") + args.toList()
                     Timber.d("Setting Legendary arguments for argparse: ${args.joinToString(" ")}")
@@ -150,22 +164,22 @@ object EpicPythonBridge {
                     sys.put("argv", pythonList)
                     Timber.d("sys.argv set to: $argsList")
 
-                    // Capture stdout
+                    // Capture stdout and stderr
                     val stdoutCapture = io.callAttr("StringIO")
+                    val stderrCapture = io.callAttr("StringIO")
 
-                    // Add a no-op reconfigure method to the StringIO object
-                    python.builtins.callAttr("setattr", stdoutCapture, "reconfigure",
-                        python.builtins.callAttr("eval", "lambda **kwargs: None"))
-
-
-                    // Add a no-op reconfigure method to the StringIO object
+                    // Add a no-op reconfigure method to both StringIO objects
                     // legendary CLI tries to call reconfigure() which StringIO doesn't have
                     python.builtins.callAttr("setattr", stdoutCapture, "reconfigure",
                         python.builtins.callAttr("eval", "lambda **kwargs: None"))
+                    python.builtins.callAttr("setattr", stderrCapture, "reconfigure",
+                        python.builtins.callAttr("eval", "lambda **kwargs: None"))
 
                     val originalStdout = sys.get("stdout")
+                    val originalStderr = sys.get("stderr")
                     sys.put("stdout", stdoutCapture)
-                    Timber.d("stdout capture configured")
+                    sys.put("stderr", stderrCapture)
+                    Timber.d("stdout and stderr capture configured")
 
                     // Execute the main function
                     Timber.d("Calling legendary.cli.main()...")
@@ -190,10 +204,15 @@ object EpicPythonBridge {
 
                     // Get the captured output
                     val output = stdoutCapture.callAttr("getvalue").toString()
+                    val errorOutput = stderrCapture.callAttr("getvalue").toString()
                     Timber.d("Legendary raw output (length: ${output.length}): $output")
+                    if (errorOutput.isNotEmpty()) {
+                        Timber.w("Legendary stderr output: $errorOutput")
+                    }
 
-                    // Restore original stdout
+                    // Restore original stdout and stderr
                     sys.put("stdout", originalStdout)
+                    sys.put("stderr", originalStderr)
 
                     if (output.isNotEmpty()) {
                         Timber.d("Returning success with output")
@@ -248,6 +267,7 @@ object EpicPythonBridge {
                 val io = python.getModule("io")
                 val originalArgv = sys.get("argv")
                 val originalStdout = sys.get("stdout")
+                val originalStderr = sys.get("stderr")
 
                 try {
                     val legendaryCli = python.getModule("legendary.cli")
@@ -257,9 +277,18 @@ object EpicPythonBridge {
                     val pythonList = python.builtins.callAttr("list", argsList.toTypedArray())
                     sys.put("argv", pythonList)
 
-                    // Capture stdout for parsing
+                    // Capture stdout and stderr for parsing
                     val stdoutCapture = io.callAttr("StringIO")
+                    val stderrCapture = io.callAttr("StringIO")
+
+                    // Add reconfigure support to both StringIO objects
+                    python.builtins.callAttr("setattr", stdoutCapture, "reconfigure",
+                        python.builtins.callAttr("eval", "lambda **kwargs: None"))
+                    python.builtins.callAttr("setattr", stderrCapture, "reconfigure",
+                        python.builtins.callAttr("eval", "lambda **kwargs: None"))
+
                     sys.put("stdout", stdoutCapture)
+                    sys.put("stderr", stderrCapture)
 
                     // Check for cancellation before starting
                     ensureActive()
@@ -294,6 +323,8 @@ object EpicPythonBridge {
                     Result.failure(e)
                 } finally {
                     sys.put("argv", originalArgv)
+                    sys.put("stdout", originalStdout)
+                    sys.put("stderr", originalStderr)
                 }
             } catch (e: CancellationException) {
                 Timber.i("Legendary download cancelled")
