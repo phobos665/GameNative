@@ -139,12 +139,10 @@ object EpicPythonBridge {
                 val originalArgv = sys.get("argv")
 
                 try {
-                    Timber.d("Importing legendary.cli module...")
-                    val legendaryCli = python.getModule("legendary.cli")
-                    Timber.d("legendary.cli module imported successfully")
-
-                    // Monkey-patch sys._getframe to avoid "frame does not exist" errors
+                    // Monkey-patch sys._getframe BEFORE importing legendary.cli
                     // Chaquopy doesn't support frame introspection, so we provide a dummy implementation
+                    // This must be done before importing legendary because some modules check frames on import
+                    Timber.d("Monkey-patching sys._getframe...")
                     python.builtins.callAttr("exec", """
 import sys
 def _dummy_getframe(depth=0):
@@ -156,6 +154,10 @@ def _dummy_getframe(depth=0):
 sys._getframe = _dummy_getframe
 """)
                     Timber.d("sys._getframe monkey-patched successfully")
+
+                    Timber.d("Importing legendary.cli module...")
+                    val legendaryCli = python.getModule("legendary.cli")
+                    Timber.d("legendary.cli module imported successfully")
 
                     // Set up arguments for argparse
                     val argsList = listOf("legendary") + args.toList()

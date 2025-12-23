@@ -21,8 +21,9 @@ import javax.inject.Inject
  * Epic Games Service - thin coordinator that delegates to specialized managers.
  *
  * Architecture:
- * - EpicPythonBridge: Low-level Legendary CLI command execution
- * - EpicAuthManager: Authentication and account management
+ * - EpicApiClient: Native HTTP API client for library sync (no Python)
+ * - EpicAuthClient: Native OAuth authentication (no Python)
+ * - EpicAuthManager: Authentication and credential management
  * - EpicManager: Game library, downloads, and installation
  *
  * This service maintains backward compatibility through static accessors
@@ -60,8 +61,13 @@ class EpicService : Service() {
             }
         }
 
+        /**
+         * Initialize Epic service (no-op now, kept for compatibility)
+         * Previously initialized Python bridge, now uses native implementation
+         */
         fun initialize(context: Context): Boolean {
-            return EpicPythonBridge.initialize(context)
+            Timber.d("Epic service initialize called (native implementation)")
+            return true
         }
 
         // ==========================================================================

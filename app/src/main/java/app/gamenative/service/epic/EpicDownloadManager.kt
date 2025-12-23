@@ -35,6 +35,9 @@ import javax.inject.Singleton
  * - meta: App metadata (app_name, build_version, etc.)
  * - chunk_data_list: List of chunks to download
  * - file_manifest_list: List of files and their chunk composition
+ *
+ * NOTE: This still uses EpicPythonBridge for manifest parsing
+ * TODO: Implement native manifest parsing to fully remove Python dependency
  */
 @Singleton
 class EpicDownloadManager @Inject constructor() {
