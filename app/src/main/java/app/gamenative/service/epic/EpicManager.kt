@@ -2,12 +2,17 @@ package app.gamenative.service.epic
 
 import android.content.Context
 import app.gamenative.data.EpicGame
+import app.gamenative.data.LibraryItem
 import app.gamenative.db.dao.EpicGameDao
+import app.gamenative.enums.Marker
+import app.gamenative.utils.ContainerUtils
+import app.gamenative.utils.MarkerUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -364,7 +369,6 @@ class EpicManager @Inject constructor(
     suspend fun fetchInstallSize(context: Context, appName: String): Long = withContext(Dispatchers.IO) {
         try {
             Timber.tag("Epic").d("Fetching install size for $appName via manifest...")
-
             val pythonCode = """
 import json
 from legendary.core import LegendaryCore
@@ -448,8 +452,8 @@ except Exception as e:
     suspend fun deleteGame(context: Context, libraryItem: LibraryItem): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val gameId = libraryItem.gameId.toString()
-                val installPath = getGameInstallPath(context, gameId, libraryItem.name)
+                val gameId = libraryItem.gameIdString
+                val installPath = getGameInstallPath(libraryItem.name)
                 val installDir = File(installPath)
 
                 // Delete the manifest file
@@ -471,10 +475,15 @@ except Exception as e:
                     Timber.w("Epic game directory doesn't exist: $installPath")
                 }
 
-                // Remove all markers
-                val appDirPath = getAppDirPath(libraryItem.appId)
-                MarkerUtils.removeMarker(appDirPath, Marker.DOWNLOAD_COMPLETE_MARKER)
-                MarkerUtils.removeMarker(appDirPath, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+                // Remove all markers from container directory
+                try {
+                    val container = ContainerUtils.getContainer(context, libraryItem.appId)
+                    val containerPath = container.rootDir.absolutePath
+                    MarkerUtils.removeMarker(containerPath, Marker.DOWNLOAD_COMPLETE_MARKER)
+                    MarkerUtils.removeMarker(containerPath, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+                } catch (e: Exception) {
+                    Timber.w(e, "Could not remove markers - container may not exist")
+                }
 
                 // Update database - mark as not installed
                 val game = getGameById(gameId)
@@ -496,7 +505,7 @@ except Exception as e:
 
                 Result.success(Unit)
             } catch (e: Exception) {
-                Timber.e(e, "Failed to delete epic game ${libraryItem.gameId}")
+                Timber.e(e, "Failed to delete epic game ${libraryItem.gameIdString}")
                 Result.failure(e)
             }
         }

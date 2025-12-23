@@ -391,6 +391,7 @@ class LibraryViewModel @Inject constructor(
                         true
                     }
                 }
+                .toList()
 
             val epicEntries = filteredEpicGames.map { game ->
                 LibraryEntry(
@@ -410,7 +411,6 @@ class LibraryViewModel @Inject constructor(
             val gogInstalledCount = filteredGOGGames.count { it.isInstalled }
             val epicInstalledCount = filteredEpicGames.count { it.isInstalled }
 
-            val gogInstalledCount = filteredGOGGames.count { it.isInstalled }
             // Save game counts for skeleton loaders (only when not searching, to get accurate counts)
             // This needs to happen before filtering by source, so we save the total counts
             if (currentState.searchQuery.isEmpty()) {

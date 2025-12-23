@@ -324,7 +324,7 @@ internal fun AppItem(
                             isInstalled = when (appInfo.gameSource) {
                                 GameSource.STEAM -> SteamService.isAppInstalled(appInfo.gameId)
                                 GameSource.GOG -> GOGService.isGameInstalled(appInfo.gameId.toString())
-                                GameSource.EPIC -> EpicService.isGameInstalled(appInfo.gameIdString))
+                                GameSource.EPIC -> EpicService.isGameInstalled(appInfo.gameIdString)
                                 GameSource.CUSTOM_GAME -> true
                                 else -> false
                             }

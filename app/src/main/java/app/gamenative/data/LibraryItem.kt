@@ -74,9 +74,7 @@ data class LibraryItem(
         get() = appId.removePrefix("${gameSource.name}_").toIntOrNull() ?: 0
 
     /**
-     * Helper property to get the raw game ID as a string (works for all sources)
      * Epic games use string identifiers (app names like "fortnite")
-     * Steam/GOG use numeric IDs that can be converted to strings
      */
     val gameIdString: String
         get() = appId.removePrefix("${gameSource.name}_")
