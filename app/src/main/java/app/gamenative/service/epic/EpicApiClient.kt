@@ -26,14 +26,17 @@ import java.util.concurrent.TimeUnit
  */
 
 /** Checklist:
- * Create file with authorization token (Done with authenticateWithCode and saveCredentials)
- * Authenticate with token and get refresh token & access token - Refresh when close to expiry (Done with EpicAuthManager loadCredentials, getStoredCredentials)
- * Get Library -> Ids or just all the game details (fetchLibrary and fetchGameInfo)
- * Getting the Manifest and the Downoad -> DownloadManager... fetchManifestData ->  downloadGame( Composite of readEpicChunk, downloadChunk, verifyChunkHash, verifyChunkHashBytes
- * Downloading happens like this: Grab Manifest, store any manifest extra data. Get the chunk information from the manifest. From there, understand the chunks, download and store them. We still need Python for this due to the manifest binary format.
- *
- *
- *
+ * ! Create file with authorization token (Done with authenticateWithCode and saveCredentials)
+ * ! Authenticate with token and get refresh token & access token - Refresh when close to expiry (Done with EpicAuthManager loadCredentials, getStoredCredentials)
+ * ! Get Library -> Ids or just all the game details (fetchLibrary and fetchGameInfo)
+ * ! Getting the Manifest and the Downoad -> DownloadManager... fetchManifestData ->  downloadGame( Composite of readEpicChunk, downloadChunk, verifyChunkHash, verifyChunkHashBytes
+ * ! Downloading happens like this: Grab Manifest, store any manifest extra data. Get the chunk information from the manifest. From there, understand the chunks, download and store them. We still need Python for this due to the manifest binary format.
+ * ? Cloud Saves
+ * ? DLC Handling
+ * ? Any updates that are required after pulling the manifest
+ * ? Test uninstalling / Pausing / Delete
+ * ? Removing the last parts of Python Code if possible
+ * * Focus on the basics and refactor for readability then move onto the DLC & Cloud Saves
  */
 
 object EpicApiClient {
