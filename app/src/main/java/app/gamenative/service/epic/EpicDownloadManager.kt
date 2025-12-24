@@ -162,98 +162,208 @@ class EpicDownloadManager @Inject constructor() {
     }
 
     /**
-     * Fetch manifest data from Epic CDN
+     * Fetch manifest data from Epic CDN using native Kotlin/HTTP
+     *
+     * This replaces the Python/Legendary implementation with direct API calls:
+     * 1. Get manifest URLs from Epic's launcher API
+     * 2. Download manifest bytes from CDN
+     * 3. Parse manifest using Python (still needed for complex binary format)
      */
     private suspend fun fetchManifestData(context: Context, appName: String): Result<ManifestData> {
         return try {
-            val pythonCode = """
-import json
-from legendary.core import LegendaryCore
+            // Step 1: Get credentials
+            val credentialsResult = EpicAuthManager.getStoredCredentials(context)
+            if (credentialsResult.isFailure) {
+                return Result.failure(Exception("Not authenticated with Epic Games"))
+            }
+            val credentials = credentialsResult.getOrNull()!!
+            val accessToken = credentials.accessToken
 
-def to_hex(value):
-    # Convert guid/hash to hex string safely
-    if value is None:
-        return None
-    if isinstance(value, bytes):
-        return value.hex()
-    if isinstance(value, str):
-        return value
-    if hasattr(value, 'hex'):
-        try:
-            return value.hex()
-        except:
-            pass
-    # Fallback: convert to string
-    return str(value)
+            // Step 2: Get game metadata to find namespace and catalog ID
+            val gameMetadata = getGameMetadata(context, appName, accessToken)
+                ?: return Result.failure(Exception("Game not found: $appName"))
 
-try:
-    core = LegendaryCore()
-    if not core.login():
-        print(json.dumps({"error": "Authentication failed"}))
-    else:
-        game = core.get_game('$appName')
-        if not game:
-            print(json.dumps({"error": "Game not found"}))
-        else:
-            manifest_data, base_urls = core.get_cdn_manifest(game, platform='Windows')
-            manifest = core.load_manifest(manifest_data)
+            Timber.tag("Epic").d("Found game: ${gameMetadata.title} (${gameMetadata.namespace}/${gameMetadata.catalogItemId})")
 
-            # Extract manifest data
-            result = {
-                "base_urls": base_urls,
-                "chunks": [],
-                "files": []
+            // Step 3: Get manifest URLs from Epic launcher API
+            val manifestApiUrl = "https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/public/assets/v2/platform/Windows/namespace/${gameMetadata.namespace}/catalogItem/${gameMetadata.catalogItemId}/app/$appName/label/Live"
+
+            val manifestRequest = Request.Builder()
+                .url(manifestApiUrl)
+                .header("Authorization", "Bearer $accessToken")
+                .header("User-Agent", "UELauncher/11.0.1-14907503+++Portal+Release-Live Windows/10.0.19041.1.256.64bit")
+                .build()
+
+            Timber.tag("Epic").d("Fetching manifest metadata from: $manifestApiUrl")
+            val manifestResponse = okHttpClient.newCall(manifestRequest).execute()
+
+            if (!manifestResponse.isSuccessful) {
+                val error = manifestResponse.body?.string() ?: "Unknown error"
+                return Result.failure(Exception("Failed to get manifest URLs: HTTP ${manifestResponse.code} - $error"))
             }
 
-            # Chunk data
-            for chunk in manifest.chunk_data_list.elements:
-                result["chunks"].append({
-                    "guid": to_hex(chunk.guid),
-                    "hash": to_hex(getattr(chunk, 'hash', None)),
-                    "sha_hash": to_hex(chunk.sha_hash),
-                    "size": chunk.file_size,
-                    "window_size": chunk.window_size,
-                    "path": chunk.path
-                })
+            val manifestApiJson = JSONObject(manifestResponse.body!!.string())
+            val elements = manifestApiJson.getJSONArray("elements")
 
-            # File data
-            for fm in manifest.file_manifest_list.elements:
-                result["files"].append({
-                    "filename": fm.filename,
-                    "file_size": fm.file_size,
-                    "hash": to_hex(getattr(fm, 'hash', None)),
-                    "chunk_parts": [
-                        {"guid": to_hex(cp.guid), "offset": cp.offset, "size": cp.size}
-                        for cp in fm.chunk_parts
-                    ]
-                })
-
-            print(json.dumps(result))
-except Exception as e:
-    import traceback
-    print(json.dumps({"error": str(e), "traceback": traceback.format_exc()}))
-"""
-
-            val result = EpicPythonBridge.executePythonCode(context, pythonCode)
-
-            if (result.isFailure) {
-                return Result.failure(result.exceptionOrNull() ?: Exception("Python execution failed"))
+            if (elements.length() == 0) {
+                return Result.failure(Exception("No manifest elements found for game"))
             }
 
-            val output = result.getOrNull() ?: ""
-            val lines = output.trim().lines()
-            val lastLine = lines.last()
-            val json = JSONObject(lastLine)
+            val element = elements.getJSONObject(0)
+            val manifestHash = element.getString("hash")
+            val manifests = element.getJSONArray("manifests")
+
+            // Extract base URLs and manifest URLs
+            val baseUrls = mutableListOf<String>()
+            val manifestUrls = mutableListOf<String>()
+
+            for (i in 0 until manifests.length()) {
+                val manifest = manifests.getJSONObject(i)
+                val uri = manifest.getString("uri")
+                val baseUrl = uri.substringBeforeLast('/')
+
+                if (baseUrl !in baseUrls) {
+                    baseUrls.add(baseUrl)
+                }
+
+                // Add query params if present
+                val queryParams = manifest.optJSONArray("queryParams")
+                val fullUri = if (queryParams != null && queryParams.length() > 0) {
+                    val params = (0 until queryParams.length()).joinToString("&") { j ->
+                        val param = queryParams.getJSONObject(j)
+                        "${param.getString("name")}=${param.getString("value")}"
+                    }
+                    "$uri?$params"
+                } else {
+                    uri
+                }
+                manifestUrls.add(fullUri)
+            }
+
+            Timber.tag("Epic").d("Found ${manifestUrls.size} manifest URLs, ${baseUrls.size} base URLs")
+
+            // Step 4: Download manifest bytes from CDN
+            var manifestBytes: ByteArray? = null
+            for (url in manifestUrls) {
+                try {
+                    Timber.tag("Epic").d("Downloading manifest from: $url")
+                    val downloadRequest = Request.Builder()
+                        .url(url)
+                        .build()
+
+                    val downloadResponse = okHttpClient.newCall(downloadRequest).execute()
+                    if (downloadResponse.isSuccessful) {
+                        manifestBytes = downloadResponse.body?.bytes()
+                        if (manifestBytes != null) {
+                            // Verify SHA-1 hash
+                            val digest = MessageDigest.getInstance("SHA-1")
+                            val actualHash = digest.digest(manifestBytes).joinToString("") { "%02x".format(it) }
+
+                            if (actualHash.equals(manifestHash, ignoreCase = true)) {
+                                Timber.tag("Epic").d("Manifest downloaded and verified successfully")
+                                break
+                            } else {
+                                Timber.tag("Epic").w("Manifest hash mismatch, trying next URL...")
+                                manifestBytes = null
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("Epic").w(e, "Failed to download from $url, trying next...")
+                }
+            }
+
+            if (manifestBytes == null) {
+                return Result.failure(Exception("Failed to download manifest from any CDN URL"))
+            }
+
+            // Step 5: Parse manifest using Python (binary format is complex)
+            // We still need Python for this part as the manifest format is proprietary
+            val manifestParsed = parseManifestBytes(context, manifestBytes, baseUrls)
+            if (manifestParsed.isFailure) {
+                return Result.failure(manifestParsed.exceptionOrNull() ?: Exception("Failed to parse manifest"))
+            }
+
+            manifestParsed
+
+        } catch (e: Exception) {
+            Timber.tag("Epic").e(e, "Failed to fetch manifest data")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Get game metadata (namespace and catalog ID) from library or API
+     */
+    private suspend fun getGameMetadata(context: Context, appName: String, accessToken: String): GameMetadata? {
+        return try {
+            // Try to fetch from library API and find the matching game
+            val libraryUrl = "https://library-service.live.use1a.on.epicgames.com/library/api/public/items?includeMetadata=true"
+
+            val request = Request.Builder()
+                .url(libraryUrl)
+                .header("Authorization", "Bearer $accessToken")
+                .header("User-Agent", "UELauncher/11.0.1-14907503+++Portal+Release-Live Windows/10.0.19041.1.256.64bit")
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                Timber.tag("Epic").w("Failed to fetch library: ${response.code}")
+                return null
+            }
+
+            val json = JSONObject(response.body!!.string())
+            val records = json.getJSONArray("records")
+
+            for (i in 0 until records.length()) {
+                val record = records.getJSONObject(i)
+                if (record.optString("appName") == appName) {
+                    return GameMetadata(
+                        appName = appName,
+                        namespace = record.getString("namespace"),
+                        catalogItemId = record.getString("catalogItemId"),
+                        title = record.optString("productName", appName)
+                    )
+                }
+            }
+
+            Timber.tag("Epic").w("Game not found in library: $appName")
+            null
+        } catch (e: Exception) {
+            Timber.tag("Epic").e(e, "Failed to get game metadata")
+            null
+        }
+    }
+
+    /**
+     * Parse manifest bytes using Python (still required for complex binary format)
+     */
+    private suspend fun parseManifestBytes(context: Context, manifestBytes: ByteArray, baseUrls: List<String>): Result<ManifestData> {
+        return try {
+            // Save manifest to temporary file
+            val manifestFile = File(context.cacheDir, "temp_manifest_${System.currentTimeMillis()}.manifest")
+            manifestFile.outputStream().use { it.write(manifestBytes) }
+
+            // Use EpicPythonBridge to parse the manifest
+            val parseResult = EpicPythonBridge.parseManifestFile(context, manifestFile.absolutePath)
+
+            // Clean up temp file
+            manifestFile.delete()
+
+            if (parseResult.isFailure) {
+                return Result.failure(
+                    parseResult.exceptionOrNull() ?: Exception("Failed to parse manifest")
+                )
+            }
+
+            val jsonOutput = parseResult.getOrNull() ?: ""
+            val json = JSONObject(jsonOutput)
 
             if (json.has("error")) {
                 return Result.failure(Exception(json.getString("error")))
             }
 
             // Parse manifest data
-            val baseUrls = json.getJSONArray("base_urls").let { arr ->
-                (0 until arr.length()).map { arr.getString(it) }
-            }
-
             val chunks = json.getJSONArray("chunks").let { arr ->
                 (0 until arr.length()).map { i ->
                     val chunk = arr.getJSONObject(i)
@@ -294,7 +404,7 @@ except Exception as e:
 
             Result.success(ManifestData(baseUrls, chunks, files, totalSize))
         } catch (e: Exception) {
-            Timber.tag("Epic").e(e, "Failed to fetch manifest data")
+            Timber.tag("Epic").e(e, "Failed to parse manifest")
             Result.failure(e)
         }
     }
@@ -435,40 +545,6 @@ except Exception as e:
         } else {
             // Already uncompressed
             dataBytes
-        }
-    }
-
-    /**
-     * Decompress a chunk file using zlib inflation (deprecated - keeping for reference)
-     * Epic chunks use zlib compression (deflate algorithm)
-     */
-    @Deprecated("Use readEpicChunk instead")
-    private fun decompressChunk(compressedFile: File, outputFile: File, expectedSize: Long) {
-        val inflater = Inflater()
-        try {
-            compressedFile.inputStream().use { input ->
-                outputFile.outputStream().use { output ->
-                    val compressedData = input.readBytes()
-                    inflater.setInput(compressedData)
-
-                    val buffer = ByteArray(CHUNK_BUFFER_SIZE)
-                    var totalDecompressed = 0L
-
-                    while (!inflater.finished()) {
-                        val decompressedCount = inflater.inflate(buffer)
-                        if (decompressedCount > 0) {
-                            output.write(buffer, 0, decompressedCount)
-                            totalDecompressed += decompressedCount
-                        }
-                    }
-
-                    if (totalDecompressed != expectedSize) {
-                        throw Exception("Decompressed size mismatch: expected $expectedSize, got $totalDecompressed")
-                    }
-                }
-            }
-        } finally {
-            inflater.end()
         }
     }
 
@@ -670,5 +746,15 @@ except Exception as e:
         val guid: String,
         val offset: Long,
         val size: Long
+    )
+
+    /**
+     * Game metadata for manifest fetching
+     */
+    private data class GameMetadata(
+        val appName: String,
+        val namespace: String,
+        val catalogItemId: String,
+        val title: String
     )
 }

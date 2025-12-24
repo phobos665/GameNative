@@ -24,6 +24,18 @@ import java.util.concurrent.TimeUnit
  * - Game Info: https://catalog-public-service-prod06.ol.epicgames.com/catalog/api/shared/namespace/{namespace}/bulk/items
  * - Assets: https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/public/assets/{platform}
  */
+
+/** Checklist:
+ * Create file with authorization token (Done with authenticateWithCode and saveCredentials)
+ * Authenticate with token and get refresh token & access token - Refresh when close to expiry (Done with EpicAuthManager loadCredentials, getStoredCredentials)
+ * Get Library -> Ids or just all the game details (fetchLibrary and fetchGameInfo)
+ * Getting the Manifest and the Downoad -> DownloadManager... fetchManifestData ->  downloadGame( Composite of readEpicChunk, downloadChunk, verifyChunkHash, verifyChunkHashBytes
+ * Downloading happens like this: Grab Manifest, store any manifest extra data. Get the chunk information from the manifest. From there, understand the chunks, download and store them. We still need Python for this due to the manifest binary format.
+ *
+ *
+ *
+ */
+
 object EpicApiClient {
 
     private const val OAUTH_HOST = "account-public-service-prod03.ol.epicgames.com"
@@ -52,6 +64,8 @@ object EpicApiClient {
      */
     suspend fun fetchLibrary(context: Context): Result<List<EpicGame>> = withContext(Dispatchers.IO) {
         try {
+
+            // Get Credentials and restore them
             val credentials = EpicAuthManager.getStoredCredentials(context)
             if (credentials.isFailure) {
                 return@withContext Result.failure(credentials.exceptionOrNull() ?: Exception("No credentials"))

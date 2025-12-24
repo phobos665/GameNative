@@ -489,6 +489,111 @@ sys._getframe = _dummy_getframe
     }
 
     /**
+     * Parse Epic manifest file using Legendary's binary parser
+     *
+     * Takes a manifest binary file and extracts:
+     * - Chunk data (GUID, hash, size, path)
+     * - File manifest list (filename, size, chunk parts)
+     *
+     * @param context Android context
+     * @param manifestFilePath Absolute path to the manifest file
+     * @return Result containing JSON string with chunks and files data
+     */
+    suspend fun parseManifestFile(context: Context, manifestFilePath: String): Result<String> {
+        return withContext(Dispatchers.IO) {
+            try {
+                initialize(context)
+
+                if (!Python.isStarted()) {
+                    return@withContext Result.failure(Exception("Python environment not initialized"))
+                }
+
+                val pythonCode = """
+import json
+from legendary.core import LegendaryCore
+
+def to_hex(value):
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        return value.hex()
+    if isinstance(value, str):
+        return value
+    if hasattr(value, 'hex'):
+        try:
+            return value.hex()
+        except:
+            pass
+    return str(value)
+
+try:
+    core = LegendaryCore()
+
+    # Load manifest from file
+    with open('$manifestFilePath', 'rb') as f:
+        manifest_data = f.read()
+
+    manifest = core.load_manifest(manifest_data)
+
+    result = {
+        "chunks": [],
+        "files": []
+    }
+
+    # Chunk data
+    for chunk in manifest.chunk_data_list.elements:
+        result["chunks"].append({
+            "guid": to_hex(chunk.guid),
+            "hash": to_hex(getattr(chunk, 'hash', None)),
+            "sha_hash": to_hex(chunk.sha_hash),
+            "size": chunk.file_size,
+            "window_size": chunk.window_size,
+            "path": chunk.path
+        })
+
+    # File data
+    for fm in manifest.file_manifest_list.elements:
+        result["files"].append({
+            "filename": fm.filename,
+            "file_size": fm.file_size,
+            "hash": to_hex(getattr(fm, 'hash', None)),
+            "chunk_parts": [
+                {"guid": to_hex(cp.guid), "offset": cp.offset, "size": cp.size}
+                for cp in fm.chunk_parts
+            ]
+        })
+
+    print(json.dumps(result))
+except Exception as e:
+    import traceback
+    print(json.dumps({"error": str(e), "traceback": traceback.format_exc()}))
+"""
+
+                val result = executePythonCode(context, pythonCode)
+
+                if (result.isFailure) {
+                    return@withContext Result.failure(
+                        result.exceptionOrNull() ?: Exception("Python execution failed")
+                    )
+                }
+
+                val output = result.getOrNull() ?: ""
+                val lines = output.trim().lines()
+                if (lines.isEmpty()) {
+                    return@withContext Result.failure(Exception("No output from Python manifest parser"))
+                }
+
+                val lastLine = lines.last()
+                Result.success(lastLine)
+
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to parse manifest file: $manifestFilePath")
+                Result.failure(e)
+            }
+        }
+    }
+
+    /**
      * Test legendary import - verifies legendary-android can be imported without multiprocessing errors
      * @return Version string if successful, error message if failed
      */

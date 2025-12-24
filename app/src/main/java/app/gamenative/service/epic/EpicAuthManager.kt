@@ -155,36 +155,6 @@ object EpicAuthManager {
     }
 
     /**
-     * Validate credentials by verifying access token
-     */
-    suspend fun validateCredentials(context: Context): Result<Boolean> {
-        return try {
-            if (!hasStoredCredentials(context)) {
-                Timber.d("No stored credentials found for validation")
-                return Result.success(false)
-            }
-
-            Timber.d("Starting credentials validation")
-
-            val credentialsResult = getStoredCredentials(context)
-            if (credentialsResult.isFailure) {
-                return Result.success(false)
-            }
-
-            val credentials = credentialsResult.getOrNull()!!
-            val verifyResult = EpicAuthClient.verifyToken(credentials.accessToken)
-
-            val isValid = verifyResult.getOrNull() ?: false
-            Timber.d("Credentials validation result: $isValid")
-
-            Result.success(isValid)
-        } catch (e: Exception) {
-            Timber.w(e, "Credentials validation failed")
-            Result.success(false)
-        }
-    }
-
-    /**
      * Logout and clear stored credentials
      */
     suspend fun logout(context: Context): Result<Unit> {
