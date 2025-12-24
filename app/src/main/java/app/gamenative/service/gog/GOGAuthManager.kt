@@ -256,38 +256,6 @@ object GOGAuthManager {
         }
     }
 
-    private fun parseCredentialsFromOutput(output: String): Result<GOGCredentials> {
-        try {
-            val credentialsJson = JSONObject(output.trim())
-
-            // Check if there's an error
-            if (credentialsJson.has("error") && credentialsJson.getBoolean("error")) {
-                val errorMsg = credentialsJson.optString("message", "Authentication failed")
-                Timber.e("GOGDL credentials failed: $errorMsg")
-                return Result.failure(Exception("Authentication failed: $errorMsg"))
-            }
-
-            // Extract credentials from GOGDL response
-            val accessToken = credentialsJson.optString("access_token", "")
-            val refreshToken = credentialsJson.optString("refresh_token", "")
-            val username = credentialsJson.optString("username", "GOG User")
-            val userId = credentialsJson.optString("user_id", "")
-
-            val credentials = GOGCredentials(
-                accessToken = accessToken,
-                refreshToken = refreshToken,
-                username = username,
-                userId = userId,
-            )
-
-            Timber.d("Got credentials for user")
-            return Result.success(credentials)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to parse GOGDL credentials response")
-            return Result.failure(e)
-        }
-    }
-
     private fun parseFullCredentialsFromFile(authConfigPath: String): GOGCredentials? {
         return try {
             val authFile = File(authConfigPath)

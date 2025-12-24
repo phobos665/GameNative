@@ -178,15 +178,11 @@ class EpicManager @Inject constructor(
         }
     }
 
-    fun getGameInstallPath(gameTitle: String): String {
-        return EpicConstants.getGameInstallPath(gameTitle)
-    }
-
     suspend fun deleteGame(context: Context, libraryItem: LibraryItem): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
                 val gameId = libraryItem.gameIdString
-                val installPath = getGameInstallPath(libraryItem.name)
+                val installPath = EpicConstants.getGameInstallPath(libraryItem.name)
                 val installDir = File(installPath)
 
                 // Delete the manifest file

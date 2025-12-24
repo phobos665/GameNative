@@ -25,7 +25,8 @@ import java.util.concurrent.TimeUnit
  * - Assets: https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/public/assets/{platform}
  */
 
-/** Checklist:
+/**
+ * * Checklist:
  * ! Create file with authorization token (Done with authenticateWithCode and saveCredentials)
  * ! Authenticate with token and get refresh token & access token - Refresh when close to expiry (Done with EpicAuthManager loadCredentials, getStoredCredentials)
  * ! Get Library -> Ids or just all the game details (fetchLibrary and fetchGameInfo)
