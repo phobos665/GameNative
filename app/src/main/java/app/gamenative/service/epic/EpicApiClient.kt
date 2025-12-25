@@ -46,7 +46,7 @@ object EpicApiClient {
     private const val LIBRARY_HOST = "library-service.live.use1a.on.epicgames.com"
     private const val CATALOG_HOST = "catalog-public-service-prod06.ol.epicgames.com"
     private const val LAUNCHER_HOST = "launcher-public-service-prod06.ol.epicgames.com"
-
+    private const val DATA_STORAGE_HOST = "datastorage-public-service-liveegs.live.use1a.on.epicgames.com"
     private const val USER_AGENT = "UELauncher/11.0.1-14907503+++Portal+Release-Live Windows/10.0.19041.1.256.64bit"
 
     // OAuth credentials (from legendary - these are public and safe to include)
@@ -162,6 +162,63 @@ object EpicApiClient {
         }
     }
 
+    suspend fun getCloudSaves(context: Context,
+        appName: String,
+        manifests: Boolean = false,
+        fileNames: String[],
+    {
+        // Get Credentials and restore them
+        val credentials = EpicAuthManager.getStoredCredentials(context)
+        if (credentials.isFailure) {
+            return@withContext Result.failure(credentials.exceptionOrNull() ?: Exception("No credentials"))
+        }
+
+        val accessToken = credentials.getOrNull()?.accessToken
+        if (accessToken.isNullOrEmpty()) {
+            return@withContext Result.failure(Exception("No access token"))
+        }
+
+        val userId = credentials.userId
+        val url = "https://$DATA_STORAGE_HOST/api/v1/access/egstore/savesync/$userId/$appName"
+        val requestBody = JSONObject().apply {
+            put("files", fileNames)
+        }
+
+        val mediaType = "application/json".toMediaType()
+        val body = requestBody.toString().toRequestBody(mediaType)
+
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $accessToken")
+            .header("User-Agent", USER_AGENT)
+            .post(requestBody)
+            .build()
+    }
+
+    fun getCloudSaves(context: Context,
+        appName: String,
+        manifests: Boolean = false) {
+            // TODO: Figure out how to get the accountId. Most likely in the JSON?
+            // Get Credentials and restore them
+            val credentials = EpicAuthManager.getStoredCredentials(context)
+            if (credentials.isFailure) {
+                return@withContext Result.failure(credentials.exceptionOrNull() ?: Exception("No credentials"))
+            }
+
+            val accessToken = credentials.getOrNull()?.accessToken
+            if (accessToken.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("No access token"))
+            }
+            val userId = credentials.userId
+            val url = "https://$DATA_STORAGE_HOST/api/v1/access/egstore/savesync/$userId/$appName"
+
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $accessToken")
+                .header("User-Agent", USER_AGENT)
+                .get()
+                .build()
+    }
     /**
      * Fetch detailed game info from catalog
      *
