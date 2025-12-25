@@ -141,7 +141,7 @@ object EpicApiClient {
                     }
 
                     // Fetch detailed game info from catalog
-                    val gameInfo = fetchGameInfo(accessToken, namespace, catalogItemId)
+                    val gameInfo = fetchGameInfo(accessToken, namespace, catalogItemId, appName)
                     if (gameInfo != null) {
                         games.add(gameInfo)
                     }
@@ -162,86 +162,86 @@ object EpicApiClient {
         }
     }
 
-    suspend fun saveCloudSaves(context: Context,
-        appName: String,
-        manifests: Boolean = false,
-        fileNames: String[],
-    {
-        // Get Credentials and restore them
-        val credentials = EpicAuthManager.getStoredCredentials(context)
-        if (credentials.isFailure) {
-            return@withContext Result.failure(credentials.exceptionOrNull() ?: Exception("No credentials"))
-        }
+    // suspend fun saveCloudSaves(context: Context,
+    //     appName: String,
+    //     manifests: Boolean = false,
+    //     fileNames: String[],
+    // {
+    //     // Get Credentials and restore them
+    //     val credentials = EpicAuthManager.getStoredCredentials(context)
+    //     if (credentials.isFailure) {
+    //         return@withContext Result.failure(credentials.exceptionOrNull() ?: Exception("No credentials"))
+    //     }
 
-        val accessToken = credentials.getOrNull()?.accessToken
-        if (accessToken.isNullOrEmpty()) {
-            return@withContext Result.failure(Exception("No access token"))
-        }
+    //     val accessToken = credentials.getOrNull()?.accessToken
+    //     if (accessToken.isNullOrEmpty()) {
+    //         return@withContext Result.failure(Exception("No access token"))
+    //     }
 
-        val userId = credentials.userId
-        val url = "https://$DATA_STORAGE_HOST/api/v1/access/egstore/savesync/$userId/$appName"
-        val requestBody = JSONObject().apply {
-            put("files", fileNames)
-        }
+    //     val userId = credentials.userId
+    //     val url = "https://$DATA_STORAGE_HOST/api/v1/access/egstore/savesync/$userId/$appName"
+    //     val requestBody = JSONObject().apply {
+    //         put("files", fileNames)
+    //     }
 
-        val mediaType = "application/json".toMediaType()
-        val body = requestBody.toString().toRequestBody(mediaType)
+    //     val mediaType = "application/json".toMediaType()
+    //     val body = requestBody.toString().toRequestBody(mediaType)
 
-        val request = Request.Builder()
-            .url(url)
-            .header("Authorization", "Bearer $accessToken")
-            .header("User-Agent", USER_AGENT)
-            .post(requestBody)
-            .build()
-    }
+    //     val request = Request.Builder()
+    //         .url(url)
+    //         .header("Authorization", "Bearer $accessToken")
+    //         .header("User-Agent", USER_AGENT)
+    //         .post(requestBody)
+    //         .build()
+    // }
 
-    fun getCloudSaves(context: Context,
-        appName: String,
-        manifests: Boolean = false) {
-            // Get Credentials and restore them
-            val credentials = EpicAuthManager.getStoredCredentials(context)
-            if (credentials.isFailure) {
-                return@withContext Result.failure(credentials.exceptionOrNull() ?: Exception("No credentials"))
-            }
+    // fun getCloudSaves(context: Context,
+    //     appName: String,
+    //     manifests: Boolean = false) {
+    //         // Get Credentials and restore them
+    //         val credentials = EpicAuthManager.getStoredCredentials(context)
+    //         if (credentials.isFailure) {
+    //             return@withContext Result.failure(credentials.exceptionOrNull() ?: Exception("No credentials"))
+    //         }
 
-            val accessToken = credentials.getOrNull()?.accessToken
-            if (accessToken.isNullOrEmpty()) {
-                return@withContext Result.failure(Exception("No access token"))
-            }
-            val userId = credentials.userId
-            val url = "https://$DATA_STORAGE_HOST/api/v1/access/egstore/savesync/$userId/$appName"
+    //         val accessToken = credentials.getOrNull()?.accessToken
+    //         if (accessToken.isNullOrEmpty()) {
+    //             return@withContext Result.failure(Exception("No access token"))
+    //         }
+    //         val userId = credentials.userId
+    //         val url = "https://$DATA_STORAGE_HOST/api/v1/access/egstore/savesync/$userId/$appName"
 
-            val request = Request.Builder()
-                .url(url)
-                .header("Authorization", "Bearer $accessToken")
-                .header("User-Agent", USER_AGENT)
-                .get()
-                .build()
-    }
+    //         val request = Request.Builder()
+    //             .url(url)
+    //             .header("Authorization", "Bearer $accessToken")
+    //             .header("User-Agent", USER_AGENT)
+    //             .get()
+    //             .build()
+    // }
 
-    fun deleteCloudSaves(context: Context,
-        appName: String,
-        manifests: Boolean = false) {
-            // Get Credentials and restore them
-            val credentials = EpicAuthManager.getStoredCredentials(context)
-            if (credentials.isFailure) {
-                return@withContext Result.failure(credentials.exceptionOrNull() ?: Exception("No credentials"))
-            }
+    // fun deleteCloudSaves(context: Context,
+    //     appName: String,
+    //     manifests: Boolean = false) {
+    //         // Get Credentials and restore them
+    //         val credentials = EpicAuthManager.getStoredCredentials(context)
+    //         if (credentials.isFailure) {
+    //             return@withContext Result.failure(credentials.exceptionOrNull() ?: Exception("No credentials"))
+    //         }
 
-            val accessToken = credentials.getOrNull()?.accessToken
-            if (accessToken.isNullOrEmpty()) {
-                return@withContext Result.failure(Exception("No access token"))
-            }
-            val userId = credentials.userId
-            val url = "https://$DATA_STORAGE_HOST/api/v1/access/egstore/savesync/$userId/$appName"
+    //         val accessToken = credentials.getOrNull()?.accessToken
+    //         if (accessToken.isNullOrEmpty()) {
+    //             return@withContext Result.failure(Exception("No access token"))
+    //         }
+    //         val userId = credentials.userId
+    //         val url = "https://$DATA_STORAGE_HOST/api/v1/access/egstore/savesync/$userId/$appName"
 
-            val request = Request.Builder()
-                .url(url)
-                .header("Authorization", "Bearer $accessToken")
-                .header("User-Agent", USER_AGENT)
-                .get()
-                .build()
-    }
+    //         val request = Request.Builder()
+    //             .url(url)
+    //             .header("Authorization", "Bearer $accessToken")
+    //             .header("User-Agent", USER_AGENT)
+    //             .get()
+    //             .build()
+    // }
     /**
      * Fetch detailed game info from catalog
      *
@@ -250,7 +250,8 @@ object EpicApiClient {
     private suspend fun fetchGameInfo(
         accessToken: String,
         namespace: String,
-        catalogItemId: String
+        catalogItemId: String,
+        libraryAppName: String
     ): EpicGame? = withContext(Dispatchers.IO) {
         try {
             val url = "https://$CATALOG_HOST/catalog/api/shared/namespace/$namespace/bulk/items" +
@@ -280,7 +281,7 @@ object EpicApiClient {
             val gameData = json.optJSONObject(catalogItemId)
 
             if (gameData != null) {
-                parseGameFromCatalog(gameData)
+                parseGameFromCatalog(gameData, libraryAppName)
             } else {
                 null
             }
@@ -311,16 +312,15 @@ object EpicApiClient {
      *   ...
      * }
      */
-    private fun parseGameFromCatalog(data: JSONObject): EpicGame {
+    private fun parseGameFromCatalog(data: JSONObject, libraryAppName: String): EpicGame {
         val catalogItemId = data.getString("id")
         val namespace = data.getString("namespace")
         val title = data.getString("title")
         val description = data.optString("description", "")
 
-        // Get app name from data (it may be in different fields)
-        val appName = data.optString("appName", "") // Sometimes available
-            .takeIf { it.isNotEmpty() }
-            ?: catalogItemId // Fallback to catalog ID
+        // Use the appName from library API (passed as parameter)
+        // This is the real appName needed for downloads, not the catalog ID
+        val appName = libraryAppName
 
         // Extract images - map to EpicGame's art fields
         val keyImages = data.optJSONArray("keyImages")

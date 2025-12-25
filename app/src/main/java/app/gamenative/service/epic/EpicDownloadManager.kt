@@ -36,8 +36,7 @@ import javax.inject.Singleton
  * - chunk_data_list: List of chunks to download
  * - file_manifest_list: List of files and their chunk composition
  *
- * NOTE: This still uses EpicPythonBridge for manifest parsing
- * TODO: Implement native manifest parsing to fully remove Python dependency
+ * Uses native Kotlin parser (EpicManifest.kt) - no Python dependency!
  */
 @Singleton
 class EpicDownloadManager @Inject constructor() {
@@ -73,7 +72,8 @@ class EpicDownloadManager @Inject constructor() {
             Timber.tag("Epic").i("Starting download for ${game.title} to $installPath")
 
             // Step 1: Authenticate and get manifest
-            val manifestResult = fetchManifestData(context, game.appName)
+            // Use game metadata from database instead of querying library API again
+            val manifestResult = fetchManifestData(context, game)
             if (manifestResult.isFailure) {
                 return@withContext Result.failure(
                     manifestResult.exceptionOrNull() ?: Exception("Failed to fetch manifest")
@@ -81,10 +81,9 @@ class EpicDownloadManager @Inject constructor() {
             }
 
             val manifestData = manifestResult.getOrNull()!!
-            Timber.tag("Epic").d("Manifest fetched, parsing...")
 
-            // Step 2: Parse manifest to get chunks and files
-            val manifest = parseManifest(manifestData)
+            // Step 2: Get parsed manifest (already parsed in fetchManifestData)
+            val manifest = manifestData.manifest
 
             val totalSize = manifest.totalSize
             val chunkCount = manifest.chunks.size
@@ -165,11 +164,11 @@ class EpicDownloadManager @Inject constructor() {
      * Fetch manifest data from Epic CDN using native Kotlin/HTTP
      *
      * This replaces the Python/Legendary implementation with direct API calls:
-     * 1. Get manifest URLs from Epic's launcher API
+     * 1. Get manifest URLs from Epic's launcher API (using game metadata from database)
      * 2. Download manifest bytes from CDN
      * 3. Parse manifest using Python (still needed for complex binary format)
      */
-    private suspend fun fetchManifestData(context: Context, appName: String): Result<ManifestData> {
+    private suspend fun fetchManifestData(context: Context, game: EpicGame): Result<ManifestData> {
         return try {
             // Step 1: Get credentials
             val credentialsResult = EpicAuthManager.getStoredCredentials(context)
@@ -179,14 +178,19 @@ class EpicDownloadManager @Inject constructor() {
             val credentials = credentialsResult.getOrNull()!!
             val accessToken = credentials.accessToken
 
-            // Step 2: Get game metadata to find namespace and catalog ID
-            val gameMetadata = getGameMetadata(context, appName, accessToken)
-                ?: return Result.failure(Exception("Game not found: $appName"))
+            // Step 2: Use game metadata from database (appName should be the real one from library API)
+            val namespace = game.namespace
+            val catalogItemId = game.id
+            val appName = game.appName
 
-            Timber.tag("Epic").d("Found game: ${gameMetadata.title} (${gameMetadata.namespace}/${gameMetadata.catalogItemId})")
+            if (namespace.isEmpty() || catalogItemId.isEmpty() || appName.isEmpty()) {
+                return Result.failure(Exception("Game metadata incomplete: namespace=$namespace, catalogItemId=$catalogItemId, appName=$appName"))
+            }
+
+            Timber.tag("Epic").d("Using game metadata: ${game.title} (namespace=$namespace, catalogId=$catalogItemId, appName=$appName)")
 
             // Step 3: Get manifest URLs from Epic launcher API
-            val manifestApiUrl = "https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/public/assets/v2/platform/Windows/namespace/${gameMetadata.namespace}/catalogItem/${gameMetadata.catalogItemId}/app/$appName/label/Live"
+            val manifestApiUrl = "https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/public/assets/v2/platform/Windows/namespace/$namespace/catalogItem/$catalogItemId/app/$appName/label/Live"
 
             val manifestRequest = Request.Builder()
                 .url(manifestApiUrl)
@@ -284,7 +288,9 @@ class EpicDownloadManager @Inject constructor() {
                 return Result.failure(manifestParsed.exceptionOrNull() ?: Exception("Failed to parse manifest"))
             }
 
-            manifestParsed
+            manifestParsed.map { wrapper ->
+                ManifestData(wrapper.baseUrls, wrapper.manifest)
+            }
 
         } catch (e: Exception) {
             Timber.tag("Epic").e(e, "Failed to fetch manifest data")
@@ -294,6 +300,9 @@ class EpicDownloadManager @Inject constructor() {
 
     /**
      * Get game metadata (namespace and catalog ID) from library or API
+     * Searches by appName first, then falls back to catalogItemId
+     *
+     * Note: This is now only used as a fallback. The primary flow uses metadata from the database.
      */
     private suspend fun getGameMetadata(context: Context, appName: String, accessToken: String): GameMetadata? {
         return try {
@@ -315,11 +324,12 @@ class EpicDownloadManager @Inject constructor() {
             val json = JSONObject(response.body!!.string())
             val records = json.getJSONArray("records")
 
+            // First try to match by appName
             for (i in 0 until records.length()) {
                 val record = records.getJSONObject(i)
                 if (record.optString("appName") == appName) {
                     return GameMetadata(
-                        appName = appName,
+                        appName = record.optString("appName", appName),
                         namespace = record.getString("namespace"),
                         catalogItemId = record.getString("catalogItemId"),
                         title = record.optString("productName", appName)
@@ -327,7 +337,21 @@ class EpicDownloadManager @Inject constructor() {
                 }
             }
 
-            Timber.tag("Epic").w("Game not found in library: $appName")
+            // If not found by appName, try to match by catalogItemId
+            // (appName might be the catalog ID as a fallback)
+            for (i in 0 until records.length()) {
+                val record = records.getJSONObject(i)
+                if (record.optString("catalogItemId") == appName) {
+                    return GameMetadata(
+                        appName = record.optString("appName", appName),
+                        namespace = record.getString("namespace"),
+                        catalogItemId = record.getString("catalogItemId"),
+                        title = record.optString("productName", appName)
+                    )
+                }
+            }
+
+            Timber.tag("Epic").w("Game not found in library by appName or catalogItemId: $appName")
             null
         } catch (e: Exception) {
             Timber.tag("Epic").e(e, "Failed to get game metadata")
@@ -338,99 +362,34 @@ class EpicDownloadManager @Inject constructor() {
     /**
      * Parse manifest bytes using Python (still required for complex binary format)
      */
-    private suspend fun parseManifestBytes(context: Context, manifestBytes: ByteArray, baseUrls: List<String>): Result<ManifestData> {
+    private suspend fun parseManifestBytes(context: Context, manifestBytes: ByteArray, baseUrls: List<String>): Result<ManifestDataWrapper> {
         return try {
-            // Save manifest to temporary file
-            val manifestFile = File(context.cacheDir, "temp_manifest_${System.currentTimeMillis()}.manifest")
-            manifestFile.outputStream().use { it.write(manifestBytes) }
-
-            // Use EpicPythonBridge to parse the manifest
-            val parseResult = EpicPythonBridge.parseManifestFile(context, manifestFile.absolutePath)
-
-            // Clean up temp file
-            manifestFile.delete()
-
-            if (parseResult.isFailure) {
-                return Result.failure(
-                    parseResult.exceptionOrNull() ?: Exception("Failed to parse manifest")
-                )
-            }
-
-            val jsonOutput = parseResult.getOrNull() ?: ""
-            val json = JSONObject(jsonOutput)
-
-            if (json.has("error")) {
-                return Result.failure(Exception(json.getString("error")))
-            }
-
-            // Parse manifest data
-            val chunks = json.getJSONArray("chunks").let { arr ->
-                (0 until arr.length()).map { i ->
-                    val chunk = arr.getJSONObject(i)
-                    ChunkData(
-                        guid = chunk.getString("guid"),
-                        hash = chunk.optString("hash", ""),
-                        shaHash = chunk.getString("sha_hash"),
-                        size = chunk.getLong("size"),
-                        windowSize = chunk.getLong("window_size"),
-                        path = chunk.getString("path")
-                    )
-                }
-            }
-
-            val files = json.getJSONArray("files").let { arr ->
-                (0 until arr.length()).map { i ->
-                    val file = arr.getJSONObject(i)
-                    val chunkParts = file.getJSONArray("chunk_parts").let { partsArr ->
-                        (0 until partsArr.length()).map { j ->
-                            val part = partsArr.getJSONObject(j)
-                            ChunkPart(
-                                guid = part.getString("guid"),
-                                offset = part.getLong("offset"),
-                                size = part.getLong("size")
-                            )
-                        }
-                    }
-                    FileManifest(
-                        filename = file.getString("filename"),
-                        fileSize = file.getLong("file_size"),
-                        hash = file.optString("hash", ""),
-                        chunkParts = chunkParts
-                    )
-                }
-            }
-
-            val totalSize = files.sumOf { it.fileSize }
-
-            Result.success(ManifestData(baseUrls, chunks, files, totalSize))
+            // Use native Kotlin parser (no Python needed!)
+            val manifest = EpicManifest.parse(manifestBytes)
+            Result.success(ManifestDataWrapper(manifestBytes, baseUrls, manifest))
         } catch (e: Exception) {
             Timber.tag("Epic").e(e, "Failed to parse manifest")
             Result.failure(e)
         }
     }
 
-    private fun parseManifest(manifestData: ManifestData): ManifestData {
-        // Already parsed in fetchManifestData
-        return manifestData
-    }
-
     /**
      * Download a single chunk from Epic CDN with decompression
      */
     private suspend fun downloadChunk(
-        chunk: ChunkData,
+        chunk: ChunkInfo,
         chunkDir: File,
         baseUrls: List<String>,
         downloadInfo: DownloadInfo
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
-            val chunkFile = File(chunkDir, "${chunk.guid}.chunk")
-            val decompressedFile = File(chunkDir, chunk.guid)
+            val chunkFile = File(chunkDir, "${chunk.guidString}.chunk")
+            val decompressedFile = File(chunkDir, chunk.guidString)
 
             // Skip if already downloaded and decompressed
-            if (decompressedFile.exists() && decompressedFile.length() == chunk.windowSize) {
-                Timber.tag("Epic").d("Chunk ${chunk.guid} already exists, skipping")
-                downloadInfo.updateBytesDownloaded(chunk.size)
+            if (decompressedFile.exists() && decompressedFile.length() == chunk.windowSize.toLong()) {
+                Timber.tag("Epic").d("Chunk ${chunk.guidString} already exists, skipping")
+                downloadInfo.updateBytesDownloaded(chunk.fileSize)
                 return@withContext Result.success(decompressedFile)
             }
 
@@ -439,15 +398,20 @@ class EpicDownloadManager @Inject constructor() {
             for (baseUrl in baseUrls) {
                 try {
                     val url = "$baseUrl/${chunk.path}"
+                    Timber.tag("Epic").d("Chunk GUID: ${chunk.guid.joinToString(",") { it.toString() }}, hash: ${chunk.hash}, groupNum: ${chunk.groupNum}")
+                    Timber.tag("Epic").d("Chunk guidString: ${chunk.guidString}")
+                    Timber.tag("Epic").d("Chunk path: ${chunk.path}")
                     Timber.tag("Epic").d("Downloading chunk from: $url")
 
                     val request = Request.Builder()
                         .url(url)
+                        .header("User-Agent", "UELauncher/11.0.1-14907503+++Portal+Release-Live Windows/10.0.19041.1.256.64bit")
                         .build()
 
                     val response = okHttpClient.newCall(request).execute()
 
                     if (!response.isSuccessful) {
+                        Timber.tag("Epic").w("HTTP ${response.code} from $baseUrl - Response: ${response.message}")
                         lastException = Exception("HTTP ${response.code} downloading chunk from $baseUrl")
                         continue
                     }
@@ -460,13 +424,13 @@ class EpicDownloadManager @Inject constructor() {
                     val decompressedData = readEpicChunk(chunkBytes)
 
                     // Verify size matches expected
-                    if (decompressedData.size.toLong() != chunk.windowSize) {
+                    if (decompressedData.size != chunk.windowSize) {
                         throw Exception("Decompressed size mismatch: expected ${chunk.windowSize}, got ${decompressedData.size}")
                     }
 
                     // Verify SHA hash
                     if (!verifyChunkHashBytes(decompressedData, chunk.shaHash)) {
-                        throw Exception("Chunk hash verification failed for ${chunk.guid}")
+                        throw Exception("Chunk hash verification failed for ${chunk.guidString}")
                     }
 
                     // Write decompressed data
@@ -551,15 +515,17 @@ class EpicDownloadManager @Inject constructor() {
     /**
      * Verify chunk SHA-1 hash from byte array
      */
-    private fun verifyChunkHashBytes(data: ByteArray, expectedHash: String): Boolean {
+    private fun verifyChunkHashBytes(data: ByteArray, expectedHash: ByteArray): Boolean {
         return try {
             val digest = MessageDigest.getInstance("SHA-1")
             digest.update(data)
-            val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
-            val matches = actualHash.equals(expectedHash, ignoreCase = true)
+            val actualHash = digest.digest()
+            val matches = actualHash.contentEquals(expectedHash)
 
             if (!matches) {
-                Timber.tag("Epic").e("Hash mismatch: expected $expectedHash, got $actualHash")
+                val expectedHex = expectedHash.joinToString("") { "%02x".format(it) }
+                val actualHex = actualHash.joinToString("") { "%02x".format(it) }
+                Timber.tag("Epic").e("Hash mismatch: expected $expectedHex, got $actualHex")
             }
 
             matches
@@ -610,18 +576,18 @@ class EpicDownloadManager @Inject constructor() {
 
             outputFile.outputStream().use { output ->
                 for (chunkPart in fileManifest.chunkParts) {
-                    val chunkFile = File(chunkDir, chunkPart.guid)
+                    val chunkFile = File(chunkDir, chunkPart.guidString)
 
                     if (!chunkFile.exists()) {
-                        return@withContext Result.failure(Exception("Chunk file missing: ${chunkPart.guid}"))
+                        return@withContext Result.failure(Exception("Chunk file missing: ${chunkPart.guidString}"))
                     }
 
                     // Read chunk data at specified offset
                     chunkFile.inputStream().use { input ->
-                        input.skip(chunkPart.offset)
+                        input.skip(chunkPart.offset.toLong())
 
                         val buffer = ByteArray(8192)
-                        var remaining = chunkPart.size
+                        var remaining = chunkPart.size.toLong()
 
                         while (remaining > 0) {
                             val toRead = minOf(remaining, buffer.size.toLong()).toInt()
@@ -718,35 +684,22 @@ class EpicDownloadManager @Inject constructor() {
         return dir.listFiles()?.sumOf { countFiles(it) } ?: 0
     }
 
-    // Data classes for manifest representation
+    // Wrapper for manifest data with base URLs
+    private data class ManifestDataWrapper(
+        val manifestBytes: ByteArray,
+        val baseUrls: List<String>,
+        val manifest: EpicManifest
+    )
+
     data class ManifestData(
         val baseUrls: List<String>,
-        val chunks: List<ChunkData>,
-        val files: List<FileManifest>,
-        val totalSize: Long
-    )
-
-    data class ChunkData(
-        val guid: String,
-        val hash: String,
-        val shaHash: String,
-        val size: Long,
-        val windowSize: Long,
-        val path: String
-    )
-
-    data class FileManifest(
-        val filename: String,
-        val fileSize: Long,
-        val hash: String,
-        val chunkParts: List<ChunkPart>
-    )
-
-    data class ChunkPart(
-        val guid: String,
-        val offset: Long,
-        val size: Long
-    )
+        val manifest: EpicManifest
+    ) {
+        val chunks get() = manifest.chunks
+        val files get() = manifest.files
+        val totalSize get() = manifest.totalSize
+        val manifestBytes get() = ByteArray(0) // Not needed after parsing
+    }
 
     /**
      * Game metadata for manifest fetching

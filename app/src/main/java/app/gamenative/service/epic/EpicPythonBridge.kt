@@ -74,6 +74,19 @@ object EpicPythonBridge {
                 val sys = python.getModule("sys")
                 val io = python.getModule("io")
 
+                // Monkey-patch sys._getframe BEFORE any legendary imports
+                // Chaquopy doesn't support frame introspection
+                python.builtins.callAttr("exec", """
+import sys
+def _dummy_getframe(depth=0):
+    class DummyFrame:
+        f_code = type('obj', (object,), {'co_filename': '<unknown>', 'co_name': '<unknown>'})()
+        f_lineno = 0
+        f_back = None
+    return DummyFrame()
+sys._getframe = _dummy_getframe
+""")
+
                 // Capture stdout with a wrapper that supports reconfigure()
                 // StringIO doesn't have reconfigure(), but legendary CLI tries to call it
                 val stdoutCapture = io.callAttr("StringIO")

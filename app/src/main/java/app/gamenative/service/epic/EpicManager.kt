@@ -73,8 +73,9 @@ class EpicManager @Inject constructor(
             }
 
             // Update database using upsert to preserve install status
-            Timber.d("Upserting ${games.size} games to database...")
+            Timber.tag("Epic").d("Upserting ${games.size} games to database...")
             epicGameDao.upsertPreservingInstallStatus(games)
+            Timber.tag("Epic").i("Successfully upserted ${games.size} games to database")
 
             Timber.tag("Epic").i("Successfully refreshed Epic library with ${games.size} games")
             Result.success(games.size)

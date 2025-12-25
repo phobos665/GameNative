@@ -121,28 +121,28 @@ class EpicService : Service() {
         }
 
 
-        fun getDownloadInfo(appName: String): DownloadInfo? {
-            return getInstance()?.activeDownloads?.get(appName)
+        fun getDownloadInfo(catalogId: String): DownloadInfo? {
+            return getInstance()?.activeDownloads?.get(catalogId)
         }
 
 
-        fun cleanupDownload(appName: String) {
-            getInstance()?.activeDownloads?.remove(appName)
+        fun cleanupDownload(catalogId: String) {
+            getInstance()?.activeDownloads?.remove(catalogId)
         }
 
 
-        fun cancelDownload(appName: String): Boolean {
+        fun cancelDownload(catalogId: String): Boolean {
             val instance = getInstance()
-            val downloadInfo = instance?.activeDownloads?.get(appName)
+            val downloadInfo = instance?.activeDownloads?.get(catalogId)
 
             return if (downloadInfo != null) {
-                Timber.i("Cancelling download for Epic game: $appName")
+                Timber.i("Cancelling download for Epic game: $catalogId")
                 downloadInfo.cancel()
-                instance.activeDownloads.remove(appName)
-                Timber.d("Download cancelled for Epic game: $appName")
+                instance.activeDownloads.remove(catalogId)
+                Timber.d("Download cancelled for Epic game: $catalogId")
                 true
             } else {
-                Timber.w("No active download found for Epic game: $appName")
+                Timber.w("No active download found for Epic game: $catalogId")
                 false
             }
         }
@@ -152,9 +152,12 @@ class EpicService : Service() {
         // ==========================================================================
 
 
-        fun getEpicGameOf(appName: String): EpicGame? {
+        fun getEpicGameOf(catalogIdOrAppName: String): EpicGame? {
             return runBlocking {
-                getInstance()?.epicManager?.getGameByAppName(appName)
+                // Try ID first (catalog ID), then fall back to app_name
+                val instance = getInstance() ?: return@runBlocking null
+                instance.epicManager.getGameById(catalogIdOrAppName)
+                    ?: instance.epicManager.getGameByAppName(catalogIdOrAppName)
             }
         }
 
@@ -164,14 +167,14 @@ class EpicService : Service() {
         }
 
 
-        fun isGameInstalled(appName: String): Boolean {
-            val game = getEpicGameOf(appName)
+        fun isGameInstalled(catalogId: String): Boolean {
+            val game = getEpicGameOf(catalogId)
             return game?.isInstalled == true
         }
 
 
-        fun getInstallPath(appName: String): String? {
-            val game = getEpicGameOf(appName)
+        fun getInstallPath(catalogId: String): String? {
+            val game = getEpicGameOf(catalogId)
             return if (game?.isInstalled == true && game.installPath.isNotEmpty()) {
                 game.installPath
             } else {
@@ -299,7 +302,7 @@ class EpicService : Service() {
             return getInstance()?.epicManager?.fetchInstallSize(context, appName) ?: 0L
         }
 
-        fun downloadGame(context: Context, appName: String, installPath: String): Result<DownloadInfo> {
+        fun downloadGame(context: Context, catalogId: String, installPath: String): Result<DownloadInfo> {
             val instance = getInstance()
             if (instance == null) {
                 Timber.tag("Epic").e("Service not running")
@@ -307,23 +310,24 @@ class EpicService : Service() {
             }
 
             // Check if already downloading
-            if (instance.activeDownloads.containsKey(appName)) {
-                Timber.tag("Epic").w("Download already in progress for $appName")
-                return Result.success(instance.activeDownloads[appName]!!)
+            if (instance.activeDownloads.containsKey(catalogId)) {
+                Timber.tag("Epic").w("Download already in progress for $catalogId")
+                return Result.success(instance.activeDownloads[catalogId]!!)
             }
 
             // Start download in background
             instance.scope.launch {
                 try {
-                    val game = instance.epicManager.getGameByAppName(appName)
+                    // Look up game by ID (catalog ID)
+                    val game = instance.epicManager.getGameById(catalogId)
                     if (game == null) {
-                        Timber.tag("Epic").e("Game not found: $appName")
+                        Timber.tag("Epic").e("Game not found in library: $catalogId")
                         return@launch
                     }
 
                     val downloadInfo = DownloadInfo()
                     downloadInfo.setActive(true)
-                    instance.activeDownloads[appName] = downloadInfo
+                    instance.activeDownloads[catalogId] = downloadInfo
 
                     Timber.tag("Epic").i("Starting download for ${game.title}")
 
@@ -370,10 +374,10 @@ class EpicService : Service() {
                     }
 
                 } catch (e: Exception) {
-                    Timber.tag("Epic").e(e, "Download exception for $appName")
+                    Timber.tag("Epic").e(e, "Download exception for $catalogId")
 
                     // Emit event for UI update on exception
-                    val game = instance.epicManager.getGameByAppName(appName)
+                    val game = instance.epicManager.getGameById(catalogId)
                     if (game != null) {
                         val gameId = game.id.toIntOrNull() ?: 0
                         app.gamenative.PluviaApp.events.emitJava(
@@ -381,12 +385,12 @@ class EpicService : Service() {
                         )
                     }
                 } finally {
-                    instance.activeDownloads.remove(appName)
+                    instance.activeDownloads.remove(catalogId)
                 }
             }
 
             // Return the DownloadInfo immediately so caller can track progress
-            return Result.success(instance.activeDownloads[appName]!!)
+            return Result.success(instance.activeDownloads[catalogId]!!)
         }
 
 
@@ -445,12 +449,12 @@ class EpicService : Service() {
 
                 val syncResult = epicManager.startBackgroundSync(applicationContext)
                 if (syncResult.isFailure) {
-                    Timber.tag("Epic").w("[EpicService] Failed to start background sync: ${syncResult.exceptionOrNull()?.message}")
+                    Timber.tag("Epic").e("[EpicService] Background sync failed: ${syncResult.exceptionOrNull()?.message}")
                 } else {
-                    Timber.tag("Epic").i("[EpicService] Background library sync completed successfully")
+                    Timber.tag("Epic").i("[EpicService] ✓ Background library sync completed successfully - games should now appear in library")
                 }
             } catch (e: Exception) {
-                Timber.tag("Epic").e(e, "[EpicService] Exception starting background sync")
+                Timber.tag("Epic").e(e, "[EpicService] Exception during background sync")
             } finally {
                 setSyncInProgress(false)
             }

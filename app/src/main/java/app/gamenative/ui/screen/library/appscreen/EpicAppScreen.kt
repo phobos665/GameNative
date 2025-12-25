@@ -299,22 +299,20 @@ class EpicAppScreen : BaseAppScreen() {
     override fun isDownloading(context: Context, libraryItem: LibraryItem): Boolean {
         Timber.tag(TAG).d("isDownloading: checking appId=${libraryItem.appId}")
         // Check if there's an active download for this Epic game
-        val epicGame = EpicService.getEpicGameOf(libraryItem.gameIdString)
-        val appName = epicGame?.appName ?: return false
-        val downloadInfo = EpicService.getDownloadInfo(appName)
+        val catalogId = libraryItem.gameIdString
+        val downloadInfo = EpicService.getDownloadInfo(catalogId)
         val progress = downloadInfo?.getProgress() ?: 0f
         val isActive = downloadInfo?.isActive() ?: false
         val downloading = downloadInfo != null && isActive && progress < 1f
-        Timber.tag(TAG).d("isDownloading: appId=${libraryItem.appId}, appName=$appName, hasDownloadInfo=${downloadInfo != null}, active=$isActive, progress=$progress, result=$downloading")
+        Timber.tag(TAG).d("isDownloading: appId=${libraryItem.appId}, catalogId=$catalogId, hasDownloadInfo=${downloadInfo != null}, active=$isActive, progress=$progress, result=$downloading")
         return downloading
     }
 
     override fun getDownloadProgress(context: Context, libraryItem: LibraryItem): Float {
-        val epicGame = EpicService.getEpicGameOf(libraryItem.gameIdString)
-        val appName = epicGame?.appName ?: return 0f
-        val downloadInfo = EpicService.getDownloadInfo(appName)
+        val catalogId = libraryItem.gameIdString
+        val downloadInfo = EpicService.getDownloadInfo(catalogId)
         val progress = downloadInfo?.getProgress() ?: 0f
-        Timber.tag(TAG).d("getDownloadProgress: appId=${libraryItem.appId}, appName=$appName, progress=$progress")
+        Timber.tag(TAG).d("getDownloadProgress: appId=${libraryItem.appId}, catalogId=$catalogId, progress=$progress")
         return progress
     }
 
@@ -353,17 +351,19 @@ class EpicAppScreen : BaseAppScreen() {
      * Delegates to EpicService/EpicManager for proper service layer separation
      */
     private fun performDownload(context: Context, libraryItem: LibraryItem, onClickPlay: (Boolean) -> Unit) {
-        val epicGame = EpicService.getEpicGameOf(libraryItem.gameIdString)
-        val appName = epicGame?.appName ?: run {
-            Timber.tag(TAG).e("Cannot download: appName not found for ${libraryItem.appId}")
+        val catalogId = libraryItem.gameIdString
+        val epicGame = EpicService.getEpicGameOf(catalogId)
+        if (epicGame == null) {
+            Timber.tag(TAG).e("Cannot download: game not found in database for catalogId=$catalogId")
             return
         }
 
-        Timber.i("Starting Epic game download: $appName")
+        Timber.i("Starting Epic game download: ${epicGame.title} (catalogId=$catalogId)")
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Get install path
-                val installPath = EpicConstants.getGameInstallPathByAppName(appName)
+                // Get install path - use appName if available, otherwise use catalogId
+                val appNameOrId = epicGame.appName.ifEmpty { catalogId }
+                val installPath = EpicConstants.getGameInstallPathByAppName(appNameOrId)
                 Timber.d("Downloading Epic game to: $installPath")
 
                 // Show starting download toast
@@ -376,13 +376,13 @@ class EpicAppScreen : BaseAppScreen() {
                 }
 
                 // Start download - EpicService will handle monitoring, database updates, verification, and events
-                val result = EpicService.downloadGame(context, appName, installPath)
+                val result = EpicService.downloadGame(context, catalogId, installPath)
 
                 if (result.isSuccess) {
-                    Timber.i("Epic game download started successfully: $appName")
+                    Timber.i("Epic game download started successfully: catalogId=$catalogId")
                     // Success toast will be shown when download completes (monitored by EpicService)
                 } else {
-                    Timber.e("Failed to start Epic game download: $appName - ${result.exceptionOrNull()?.message}")
+                    Timber.e("Failed to start Epic game download: catalogId=$catalogId - ${result.exceptionOrNull()?.message}")
                     withContext(Dispatchers.Main) {
                         android.widget.Toast.makeText(
                             context,
@@ -406,20 +406,24 @@ class EpicAppScreen : BaseAppScreen() {
 
     override fun onPauseResumeClick(context: Context, libraryItem: LibraryItem) {
         Timber.tag(TAG).i("onPauseResumeClick: appId=${libraryItem.appId}")
-        val epicGame = EpicService.getEpicGameOf(libraryItem.appId)
-        val appName = epicGame?.appName ?: return
-        val downloadInfo = EpicService.getDownloadInfo(appName)
+        val catalogId = libraryItem.gameIdString
+        val epicGame = EpicService.getEpicGameOf(catalogId)
+        if (epicGame == null) {
+            Timber.tag(TAG).w("Cannot pause/resume: game not found for catalogId=$catalogId")
+            return
+        }
+        val downloadInfo = EpicService.getDownloadInfo(catalogId)
         val isDownloading = downloadInfo != null && (downloadInfo.getProgress() ?: 0f) < 1f
-        Timber.tag(TAG).d("onPauseResumeClick: appId=${libraryItem.appId}, appName=$appName, isDownloading=$isDownloading")
+        Timber.tag(TAG).d("onPauseResumeClick: appId=${libraryItem.appId}, catalogId=$catalogId, isDownloading=$isDownloading")
 
         if (isDownloading) {
             // Cancel/pause download
-            Timber.tag(TAG).i("Pausing Epic download: $appName")
-            EpicService.cleanupDownload(appName)
+            Timber.tag(TAG).i("Pausing Epic download: catalogId=$catalogId")
+            EpicService.cleanupDownload(catalogId)
             downloadInfo.cancel()
         } else {
             // Resume download (restart from beginning for now)
-            Timber.tag(TAG).i("Resuming Epic download: $appName")
+            Timber.tag(TAG).i("Resuming Epic download: catalogId=$catalogId")
             onDownloadInstallClick(context, libraryItem) {}
         }
     }
