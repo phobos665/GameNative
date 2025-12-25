@@ -536,8 +536,8 @@ object ContainerUtils {
                 // For GOG games, map the specific game directory to A: drive
                 val gameId = extractGameIdFromContainerId(appId)
                 val game = GOGService.getGOGGameOf(gameId.toString())
-                if (game != null) {
-                    val gameInstallPath = GOGConstants.getGameInstallPath(game.title)
+                if (game != null && game.installPath.isNotEmpty()) {
+                    val gameInstallPath = game.installPath
                     val drive: Char = if (defaultDrives.contains("A:")) {
                         Container.getNextAvailableDriveLetter(defaultDrives)
                     } else {
@@ -843,8 +843,8 @@ object ContainerUtils {
             // Ensure GOG games have the specific game directory mapped
             val gameId = extractGameIdFromContainerId(appId)
             val game = runBlocking { GOGService.getGOGGameOf(gameId.toString()) }
-            if (game != null) {
-                val gameInstallPath = GOGConstants.getGameInstallPath(game.title)
+            if (game != null && game.installPath.isNotEmpty()) {
+                val gameInstallPath = game.installPath
                 var hasCorrectDriveMapping = false
 
                 // Check if the specific game directory is already mapped
