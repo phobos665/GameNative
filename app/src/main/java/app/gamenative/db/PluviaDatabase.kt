@@ -43,7 +43,7 @@ const val DATABASE_NAME = "pluvia.db"
         GOGGame::class,
         EpicGame::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = false, // Should export once stable.
 )
 @TypeConverters(
