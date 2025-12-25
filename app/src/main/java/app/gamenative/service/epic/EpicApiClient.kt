@@ -162,7 +162,7 @@ object EpicApiClient {
         }
     }
 
-    suspend fun getCloudSaves(context: Context,
+    suspend fun saveCloudSaves(context: Context,
         appName: String,
         manifests: Boolean = false,
         fileNames: String[],
@@ -198,7 +198,30 @@ object EpicApiClient {
     fun getCloudSaves(context: Context,
         appName: String,
         manifests: Boolean = false) {
-            // TODO: Figure out how to get the accountId. Most likely in the JSON?
+            // Get Credentials and restore them
+            val credentials = EpicAuthManager.getStoredCredentials(context)
+            if (credentials.isFailure) {
+                return@withContext Result.failure(credentials.exceptionOrNull() ?: Exception("No credentials"))
+            }
+
+            val accessToken = credentials.getOrNull()?.accessToken
+            if (accessToken.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("No access token"))
+            }
+            val userId = credentials.userId
+            val url = "https://$DATA_STORAGE_HOST/api/v1/access/egstore/savesync/$userId/$appName"
+
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $accessToken")
+                .header("User-Agent", USER_AGENT)
+                .get()
+                .build()
+    }
+
+    fun deleteCloudSaves(context: Context,
+        appName: String,
+        manifests: Boolean = false) {
             // Get Credentials and restore them
             val credentials = EpicAuthManager.getStoredCredentials(context)
             if (credentials.isFailure) {
@@ -405,3 +428,32 @@ object EpicApiClient {
         )
     }
 }
+
+
+/*
+
+    def list_saves(self, args):
+        if not self.core.login():
+            logger.error('Login failed! Cannot continue with download process.')
+            exit(1)
+        # update game metadata
+        logger.debug('Refreshing games list...')
+        _ = self.core.get_game_and_dlc_list(update_assets=True)
+        # then get the saves
+        logger.info('Getting list of saves...')
+        saves = self.core.get_save_games(self._resolve_aliases(args.app_name))
+        last_app = ''
+        print('Save games:')
+        for save in sorted(saves, key=lambda a: a.app_name + a.manifest_name):
+            if save.app_name != last_app:
+                if game := self.core.get_game(save.app_name):
+                    game_title = game.app_title
+                else:
+                    game_title = 'Unknown'
+
+                last_app = save.app_name
+                print(f'- {game_title} ("{save.app_name}")')
+            print(' +', save.manifest_name)
+
+
+            */

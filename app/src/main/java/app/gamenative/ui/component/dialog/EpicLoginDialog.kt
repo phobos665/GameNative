@@ -61,12 +61,6 @@ fun EpicLoginDialog(
                 )
 
                 Text(
-                    text = "1. Tap 'Open Epic Login' and sign in\n2. After login, you'll see 'redirectUrl' in the browser\n3. Copy the 'authorizationCode' value from the URL\n4. Paste it below",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Text(
                     text = "Example URL:\nhttps://www.epicgames.com/id/api/redirect?clientId=...&authorizationCode=YOUR_CODE_HERE",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
