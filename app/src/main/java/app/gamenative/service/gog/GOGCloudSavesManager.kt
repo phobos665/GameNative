@@ -455,7 +455,21 @@ class GOGCloudSavesManager(
 
             val url = "$CLOUD_STORAGE_BASE_URL/v1/$userId/$clientId/$dirname/${file.relativePath}"
 
-            val requestBody = localFile.readBytes().toRequestBody("application/octet-stream".toMediaType())
+            // Create streaming request body to avoid loading entire file into memory
+            val requestBody = object : okhttp3.RequestBody() {
+                override fun contentType() = "application/octet-stream".toMediaType()
+                override fun contentLength() = fileSize
+
+                override fun writeTo(sink: okio.BufferedSink) {
+                    FileInputStream(localFile).use { fis ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        while (fis.read(buffer).also { bytesRead = it } != -1) {
+                            sink.write(buffer, 0, bytesRead)
+                        }
+                    }
+                }
+            }
 
             val requestBuilder = Request.Builder()
                 .url(url)
@@ -518,16 +532,23 @@ class GOGCloudSavesManager(
                     return@withContext
                 }
 
-                val bytes = response.body?.bytes() ?: return@withContext
-                Timber.tag("GOG-CloudSaves").d("Downloaded ${bytes.size} bytes for ${file.relativePath}")
+                val inputStream = response.body?.byteStream() ?: return@withContext
 
-                // Save to local file
+                // Save to local file by streaming (avoids loading entire file into memory)
                 val localFile = File(syncDir, file.relativePath)
                 localFile.parentFile?.mkdirs()
 
+                var totalBytes = 0L
                 FileOutputStream(localFile).use { fos ->
-                    fos.write(bytes)
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        fos.write(buffer, 0, bytesRead)
+                        totalBytes += bytesRead
+                    }
                 }
+
+                Timber.tag("GOG-CloudSaves").d("Downloaded $totalBytes bytes for ${file.relativePath}")
 
                 // Preserve timestamp if available
                 file.updateTimestamp?.let { timestamp ->
