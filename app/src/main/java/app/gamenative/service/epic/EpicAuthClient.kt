@@ -12,8 +12,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import timber.log.Timber
 
-// * Example Request:  https://www.epicgames.com/id/login?redirectUrl=https://www.epicgames.com/id/api/redirect%3FclientId%3D34a02cf8f4414e29b15921876da36f9a%26responseType%3Dcode
-
 data class EpicAuthResponse(
     val accessToken: String,
     val refreshToken: String,
@@ -27,9 +25,7 @@ data class EpicAuthResponse(
  * Native Epic OAuth authentication client
  *
  * Handles authentication, token refresh, and token verification
- * without requiring Python/legendary
  */
-
 object EpicAuthClient {
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -39,10 +35,6 @@ object EpicAuthClient {
 
     /**
      * Authenticate with Epic using authorization code
-     *
-     * POST https://account-public-service-prod03.ol.epicgames.com/account/api/oauth/token
-     * Body: grant_type=authorization_code&code=<code>&token_type=eg1
-     * Auth: Basic (CLIENT_ID:CLIENT_SECRET)
      */
     suspend fun authenticateWithCode(authorizationCode: String): Result<EpicAuthResponse> = withContext(Dispatchers.IO) {
         try {
@@ -96,9 +88,6 @@ object EpicAuthClient {
 
     /**
      * Refresh access token using refresh token
-     *
-     * POST https://account-public-service-prod03.ol.epicgames.com/account/api/oauth/token
-     * Body: grant_type=refresh_token&refresh_token=<token>&token_type=eg1
      */
     suspend fun refreshAccessToken(refreshToken: String): Result<EpicAuthResponse> = withContext(Dispatchers.IO) {
         try {
@@ -152,7 +141,6 @@ object EpicAuthClient {
 
     private fun parseExpiresAt(json: JSONObject): Long {
         return try {
-            // Try to get as long first (epoch milliseconds)
             json.getLong("expires_at")
         } catch (e: Exception) {
             try {
