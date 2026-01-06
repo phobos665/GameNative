@@ -22,8 +22,7 @@ import org.json.JSONObject
 import timber.log.Timber
 
 /**
- * EpicDownloadManager handles downloading Epic games using Kotlin/OkHttp
- * instead of Legendary's Python downloader.
+ * EpicDownloadManager handles downloading Epic games
  *
  * Epic's CDN structure:
  * 1. Fetch manifest from CDN (contains list of chunks and files)
@@ -31,7 +30,7 @@ import timber.log.Timber
  * 3. Decompress and assemble chunks into files
  * 4. Verify file hashes
  *
- * Manifest structure (from legendary.models.manifest):
+ * Manifest structure
  * - meta: App metadata (app_name, build_version, etc.)
  * - chunk_data_list: List of chunks to download
  * - file_manifest_list: List of files and their chunk composition
@@ -225,22 +224,11 @@ class EpicDownloadManager @Inject constructor(
                     // Note: chunks are downloaded without auth tokens (tokens are only for manifests)
                     // Build full URL: baseUrl + cloudDir + chunkPath
                     val url = "${cdnUrl.baseUrl}${cdnUrl.cloudDir}/$chunkPath"
-                    // Timber.tag("Epic").d("Downloading chunk from: $url")
 
-                    // TODO: Check whether or not we should provide the user agent.
                     val request = Request.Builder()
                         .url(url)
                         .header("User-Agent", "UELauncher/11.0.1-14907503+++Portal+Release-Live Windows/10.0.19041.1.256.64bit")
                         .build()
-
-                    // Timber.tag("Epic").d(
-                    //     """
-                    //     |NATIVE Chunk download request:
-                    //     |  URL: ${request.url}
-                    //     |  Method: ${request.method}
-                    //     |  Headers: ${request.headers}
-                    //     """.trimMargin(),
-                    // )
 
                     val response = okHttpClient.newCall(request).execute()
 

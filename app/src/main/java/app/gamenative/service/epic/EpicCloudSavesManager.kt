@@ -26,18 +26,6 @@ import org.json.JSONObject
 import timber.log.Timber
 
 /**
- * The Cloud Saves for Epic is much simpler than GOG:
- * Authenticate
- * use the account_id and access_token from the JSON credentials file
- * use the appName in the function
- * Go to: https://datastorage-public-service-liveegs.live.use1a.on.epicgames.com/api/v1/access/egstore/savesync/{{ _.accountId }}/{{ _.appName }}
- * If downloading and size is 0, just log out there are no cloud saves.
- * use the readLink for the Downloading if size is > 0
- * use the writeLink if we want to upload files.
- * Writing will be the awkward part, no idea how we do binary stuff.
-*/
-
-/**
  * Manages Epic Cloud Saves - downloading and uploading save files
  *
  * Epic uses a manifest-based chunked format (similar to game downloads):
@@ -685,7 +673,7 @@ object EpicCloudSavesManager {
                 Timber.tag("Epic").e("[Cloud Saves] Failed to package save files")
                 return@withContext false
             }
-            
+
             // Validate packaged files are not empty
             val emptyFiles = packagedFiles.filter { it.value.isEmpty() }
             if (emptyFiles.isNotEmpty()) {
@@ -710,7 +698,7 @@ object EpicCloudSavesManager {
                         Timber.tag("Epic").e("[Cloud Saves] Skipping empty chunk: $fileName")
                         return@forEach
                     }
-                    
+
                     val writeLink = writeLinks[fileName]
                     if (writeLink != null) {
                         Timber.tag("Epic").d("[Cloud Saves] Uploading chunk: $fileName (${fileData.size} bytes)")
@@ -733,7 +721,7 @@ object EpicCloudSavesManager {
                     Timber.tag("Epic").e("[Cloud Saves] Manifest is empty, cannot upload: ${manifestEntry.key}")
                     return@withContext false
                 }
-                
+
                 val writeLink = writeLinks[manifestEntry.key]
                 if (writeLink != null) {
                     Timber.tag("Epic").d("[Cloud Saves] Uploading manifest: ${manifestEntry.key} (${manifestEntry.value.size} bytes)")
@@ -898,13 +886,13 @@ object EpicCloudSavesManager {
             files.forEach { file ->
                 try {
                     val relativePath = file.relativeTo(saveDir).path.replace("\\", "/")
-                    
+
                     // Skip empty files
                     if (file.length() == 0L) {
                         Timber.tag("Epic").w("[Cloud Saves] Skipping empty file: $relativePath")
                         return@forEach
                     }
-                    
+
                     Timber.tag("Epic").d("[Cloud Saves] Processing file: $relativePath (${file.length()} bytes)")
 
                     val fileManifest = app.gamenative.service.epic.manifest.FileManifest()
