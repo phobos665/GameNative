@@ -17,27 +17,8 @@ import org.json.JSONObject
 import timber.log.Timber
 
 /**
- *
- * TODO:
- * Launching games using the different execution params that we store.
- * DLC Support (Use DLC manager when its ready)
- * Finish off Cloud Saves
- * Deal with how we should work with 3rd party games such as Ubisoft/EA.
- *
- */
-
-/**
  * EpicManager handles Epic Games library management
  *
- * Responsibilities:
- * - Fetch game library from Epic via Legendary CLI
- * - Parse game metadata from JSON
- * - Update Room database
- * - Detect existing installations
- *
- * Uses legendary CLI commands:
- * - `legendary list --third-party --json` - Full library with metadata
- * - `legendary info <app_name> --json` - Detailed game info
  */
 @Singleton
 class EpicManager @Inject constructor(
@@ -768,10 +749,6 @@ class EpicManager @Inject constructor(
             }
 
             Timber.tag("Epic").i("Starting Epic library background sync...")
-
-            // TODO: Remove once finished testing.
-            Timber.tag("Epic").i("Starting Epic library background sync...")
-            Result.success(Unit)
 
              val result = refreshLibrary(context)
 
