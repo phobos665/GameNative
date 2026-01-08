@@ -201,6 +201,12 @@ data class EnvVarInfo(
                     "unaligned_store", "log_skip_gmem_ops", "dynamic", "bos", "3d_load", "fdm", "noconform", "rd",
                 ),
             ),
+            "DXVK_HDR" to EnvVarInfo(
+                identifier = "DXVK_HDR",
+                selectionType = EnvVarSelectionType.TOGGLE,
+                possibleValues = listOf("0", "1"),
+                ),
+            ),
             "DXVK_HUD" to EnvVarInfo(
                 identifier = "DXVK_HUD",
                 selectionType = EnvVarSelectionType.MULTI_SELECT,

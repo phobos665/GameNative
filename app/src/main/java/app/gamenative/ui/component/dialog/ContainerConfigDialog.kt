@@ -140,6 +140,9 @@ fun ContainerConfigDialog(
             mutableStateOf(initialConfig)
         }
 
+        var dxvkHdrEnabled by rememberSaveable { mutableStateOf(
+            EnvVars(config.envVars).get("DXVK_HDR") == "0"
+        ) }
         val screenSizes = stringArrayResource(R.array.screen_size_entries).toList()
         val baseGraphicsDrivers = stringArrayResource(R.array.graphics_driver_entries).toList()
         var graphicsDrivers by remember { mutableStateOf(baseGraphicsDrivers.toMutableList()) }
@@ -1283,6 +1286,23 @@ fun ContainerConfigDialog(
                                                 cfg.put("maxDeviceMemory", memValues[idx])
                                                 config = config.copy(graphicsDriverConfig = cfg.toString())
                                             },
+                                        )
+                                    }
+                                    if(StringUtils.parseIdentifier(dxWrappers[dxWrapperIndex]) == "dxvk") {
+                                        SettingsSwitch(
+                                            title = { Text("Enable HDR (DXVK 2.0+)") },
+                                            state = dxvkHdrEnabled,
+                                            onCheckedChange = { enabled ->
+                                                dxvkHdrEnabled = enabled
+                                                val envSet = EnvVars(config.envVars)
+                                                if (enabled) {
+                                                    envSet.put("DXVK_HDR", "1")
+                                                } else {
+                                                    envSet.remove("DXVK_HDR")
+                                                }
+                                                config = config.copy(envVars = envSet.toString())
+                                            },
+                                            colors = settingsTileColorsAlt(),
                                         )
                                     }
                                     // Bionic: Use Adrenotools Turnip
