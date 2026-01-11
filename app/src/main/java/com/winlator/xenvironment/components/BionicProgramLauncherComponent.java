@@ -313,6 +313,22 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         if (this.envVars != null) {
             envVars.putAll(this.envVars);
         }
+        
+        // Auto-detect Proton 10.0 x86_64 and set correct WINEDLLPATH
+        // Proton 10 has hardcoded build paths, so we need to override with WINEDLLPATH
+        if (wineInfo != null && wineInfo.path != null) {
+            String winePath = wineInfo.path.toLowerCase();
+            // Match both proton-10.0-x86_64 and proton-10-x86_64 patterns
+            if (winePath.contains("proton-10") && winePath.contains("x86_64")) {
+                String protonLibPath = wineInfo.path + "/lib/wine";
+                // Only set if not already overridden by user
+                if (!envVars.has("WINEDLLPATH")) {
+                    envVars.put("WINEDLLPATH", protonLibPath);
+                    Log.d("BionicProgramLauncherComponent", "Auto-detected Proton 10.0 x86_64, setting WINEDLLPATH=" + protonLibPath);
+                }
+            }
+        }
+        
         Log.d("BionicProgramLauncherComponent", "env vars are " + envVars.toString());
 
         String emulator = container.getEmulator();
@@ -479,6 +495,19 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
 
         String emulator = container.getEmulator();
         if (this.envVars != null) envVars.putAll(this.envVars);
+        
+        // Auto-detect Proton 10.0 x86_64 and set correct WINEDLLPATH for shell commands
+        if (wineInfo != null && wineInfo.path != null) {
+            String winePathLower = wineInfo.path.toLowerCase();
+            if (winePathLower.contains("proton-10") && winePathLower.contains("x86_64")) {
+                String protonLibPath = wineInfo.path + "/lib/wine";
+                if (!envVars.has("WINEDLLPATH")) {
+                    envVars.put("WINEDLLPATH", protonLibPath);
+                    Log.d("BionicProgramLauncherComponent", "Auto-detected Proton 10.0 x86_64 (shell), setting WINEDLLPATH=" + protonLibPath);
+                }
+            }
+        }
+        
         String finalCommand = getFinalCommand(winePath, emulator, envVars, imageFs.getBinDir(), command);
 
         File box64File = new File(rootDir, "/usr/bin/box64");
