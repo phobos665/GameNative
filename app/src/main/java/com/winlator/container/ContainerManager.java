@@ -62,12 +62,12 @@ public class ContainerManager {
                         try {
                             File configFile = container.getConfigFile();
                             String configContent = FileUtils.readString(configFile);
-                            
+
                             if (configContent == null || configContent.trim().isEmpty()) {
                                 Log.w("ContainerManager", "Container config file is null or empty, skipping: " + containerId);
                                 continue;
                             }
-                            
+
                             JSONObject data = new JSONObject(configContent);
                             container.loadData(data);
                             containers.add(container);
@@ -111,6 +111,7 @@ public class ContainerManager {
         String wincomponents = Container.DEFAULT_WINCOMPONENTS;
         String drives = "";
         Boolean showFPS = false;
+        Integer performanceOverlay = 1;
         String cpuList = Container.getFallbackCPUList();
         String cpuListWoW64 = Container.getFallbackCPUListWoW64();
         Boolean wow64Mode = WineInfo.isMainWineVersion(wineInfo.identifier());
@@ -134,6 +135,7 @@ public class ContainerManager {
             data.put("wincomponents", wincomponents);
             data.put("drives", drives);
             data.put("showFPS", showFPS);
+            data.put("performanceOverlay", performanceOverlay);
             data.put("wow64Mode", wow64Mode);
             data.put("startupSelection", startupSelection);
             data.put("box86Preset", box86Preset);
@@ -220,6 +222,7 @@ public class ContainerManager {
         dstContainer.setWinComponents(srcContainer.getWinComponents());
         dstContainer.setDrives(srcContainer.getDrives());
         dstContainer.setShowFPS(srcContainer.isShowFPS());
+        dstContainer.setPerformanceOverlay(srcContainer.performanceOverlay());
         dstContainer.setWoW64Mode(srcContainer.isWoW64Mode());
         dstContainer.setStartupSelection(srcContainer.getStartupSelection());
         dstContainer.setBox86Preset(srcContainer.getBox86Preset());

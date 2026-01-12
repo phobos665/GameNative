@@ -70,6 +70,7 @@ public class Container {
     private String drives = DEFAULT_DRIVES;
     private String wineVersion = WineInfo.MAIN_WINE_VERSION.identifier();
     private boolean showFPS;
+    private int performanceOverlay;
     private boolean launchRealSteam;
     private boolean allowSteamUpdates;
     private boolean wow64Mode = true;
@@ -279,6 +280,14 @@ public class Container {
 
     public boolean isShowFPS() {
         return showFPS;
+    }
+
+    public int performanceOverlay(){
+        return performanceOverlay;
+    }
+
+    public void setPerformanceOverlay(int performanceOverlay) {
+        this.performanceOverlay = performanceOverlay;
     }
 
     public void setShowFPS(boolean showFPS) {
@@ -619,6 +628,7 @@ public class Container {
             data.put("wincomponents", wincomponents);
             data.put("drives", drives);
             data.put("showFPS", showFPS);
+            data.put("performanceOverlay", performanceOverlay);
             data.put("launchRealSteam", launchRealSteam);
             data.put("allowSteamUpdates", allowSteamUpdates);
             data.put("inputType", inputType);

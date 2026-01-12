@@ -88,6 +88,7 @@ object ContainerUtils {
             drives = PrefManager.drives,
             execArgs = PrefManager.execArgs,
             showFPS = PrefManager.showFps,
+            performanceOverlay = PrefManager.performanceOverlay,
             launchRealSteam = PrefManager.launchRealSteam,
             cpuList = PrefManager.cpuList,
             cpuListWoW64 = PrefManager.cpuListWoW64,
@@ -238,6 +239,7 @@ object ContainerUtils {
             execArgs = container.execArgs,
             executablePath = container.executablePath,
             showFPS = container.isShowFPS,
+            performanceOverlay = container.performanceOverlay(),
             launchRealSteam = container.isLaunchRealSteam,
             allowSteamUpdates = container.isAllowSteamUpdates,
             steamType = container.getSteamType(),
@@ -363,6 +365,7 @@ object ContainerUtils {
         }
         container.executablePath = containerData.executablePath
         container.isShowFPS = containerData.showFPS
+        container.setPerformanceOverlay(containerData.performanceOverlay)
         container.isLaunchRealSteam = containerData.launchRealSteam
         container.isAllowSteamUpdates = containerData.allowSteamUpdates
         container.setSteamType(containerData.steamType)

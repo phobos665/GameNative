@@ -1156,6 +1156,18 @@ fun ContainerConfigDialog(
                                     },
                                 )
 
+                                // Performance Overlay dropdown
+                                val overlayOptions = listOf("None", "FPS", "Device Metrics", "Full")
+                                SettingsListDropdown(
+                                    colors = settingsTileColors(),
+                                    title = { Text(text = stringResource(R.string.performance_overlay)) },
+                                    value = config.performanceOverlay,
+                                    items = overlayOptions,
+                                    onItemSelected = { idx ->
+                                        config = config.copy(performanceOverlay = idx)
+                                    },
+                                )
+
                                 SettingsSwitch(
                                     colors = settingsTileColorsAlt(),
                                     title = { Text(text = stringResource(R.string.force_dlc)) },
@@ -1956,6 +1968,7 @@ private fun Preview_ContainerConfigDialog() {
             executablePath = "",
             installPath = "",
             showFPS = false,
+            performanceOverlay = 1,
             launchRealSteam = false,
             allowSteamUpdates = false,
             steamType = "normal",

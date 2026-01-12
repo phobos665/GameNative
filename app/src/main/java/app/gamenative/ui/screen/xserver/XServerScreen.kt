@@ -1423,7 +1423,11 @@ private fun setupXEnvironment(
     envVars.put("MESA_DEBUG", "silent")
     envVars.put("MESA_NO_ERROR", "1")
     envVars.put("WINEPREFIX", imageFs.wineprefix)
-    if (container.isShowFPS){
+    // Performance Overlay
+    envVars.put("MANGOHUD_CONFIGFILE", "/data/data/${context.packageName}/files/mangohud/prefs.conf")
+    envVars.put("MANGOHUD_CONFIG", "preset=" + container.performanceOverlay())
+
+    if (container.isShowFPS) {
         envVars.put("DXVK_HUD", "fps,frametimes")
         envVars.put("VK_INSTANCE_LAYERS", "VK_LAYER_MESA_overlay")
         envVars.put("MESA_OVERLAY_SHOW_FPS", 1)

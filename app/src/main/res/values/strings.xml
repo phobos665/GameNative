@@ -464,6 +464,7 @@
     <string name="height">Height</string>
     <string name="audio_driver">Audio Driver</string>
     <string name="show_fps">Show FPS</string>
+    <string name="performance_overlay">Performance Overlay Level</string>
     <string name="remove_driver_confirmation">Are you sure you want to remove driver "%s"? This cannot be undone</string>
 
     <!-- Container Configuration: Steam Integration -->

@@ -196,6 +196,7 @@ object IntentLaunchManager {
             executablePath = if (json.has("executablePath")) json.getString("executablePath") else "",
             installPath = if (json.has("installPath")) json.getString("installPath") else "",
             showFPS = if (json.has("showFPS")) json.getBoolean("showFPS") else false,
+            performanceOverlay = if (json.has("performanceOverlay")) json.getInt("performanceOverlay") else 0,
             launchRealSteam = if (json.has("launchRealSteam")) json.getBoolean("launchRealSteam") else false,
             cpuList = if (json.has("cpuList")) json.getString("cpuList") else Container.getFallbackCPUList(),
             cpuListWoW64 = if (json.has("cpuListWoW64")) json.getString("cpuListWoW64") else Container.getFallbackCPUListWoW64(),
@@ -273,6 +274,7 @@ object IntentLaunchManager {
             installPath = override.installPath.ifEmpty { base.installPath },
             // Boolean fields: only override if different from parsing defaults
             showFPS = if (override.showFPS != false) override.showFPS else base.showFPS,
+            performanceOverlay = if (override.performanceOverlay != 0) override.performanceOverlay else base.performanceOverlay,
             launchRealSteam = if (override.launchRealSteam != false) override.launchRealSteam else base.launchRealSteam,
             cpuList = if (override.cpuList != Container.getFallbackCPUList()) override.cpuList else base.cpuList,
             cpuListWoW64 = if (override.cpuListWoW64 != Container.getFallbackCPUListWoW64()) {

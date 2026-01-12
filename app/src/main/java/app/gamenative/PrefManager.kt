@@ -268,6 +268,12 @@ object PrefManager {
             setPref(SHOW_FPS, value)
         }
 
+    private val PERFORMANCE_OVERLAY = intPreferencesKey("performance_overlay")
+    var performanceOverlay: Int
+        get() = getPref(PERFORMANCE_OVERLAY, 1)
+        set(value){
+            setPref(PERFORMANCE_OVERLAY, value)
+        }
     private val LAUNCH_REAL_STEAM = booleanPreferencesKey("launch_real_steam")
     var launchRealSteam: Boolean
         get() = getPref(LAUNCH_REAL_STEAM, false)
