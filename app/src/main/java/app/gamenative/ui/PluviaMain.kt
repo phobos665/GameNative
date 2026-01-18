@@ -90,6 +90,7 @@ import java.io.File
 import java.util.Date
 import java.util.EnumSet
 import kotlin.reflect.KFunction2
+import app.gamenative.service.gog.GOGService
 
 @Composable
 fun PluviaMain(
@@ -180,7 +181,7 @@ fun PluviaMain(
                 }
 
                 MainViewModel.MainUiEvent.OnBackPressed -> {
-                    if (SteamService.isGameRunning){
+                    if (SteamService.isGameRunning || GOGService.isGameRunning){
                         gameBackAction?.invoke() ?: run { navController.popBackStack() }
                     } else if (hasBack) {
                         // TODO: check if back leads to log out and present confidence modal
@@ -404,15 +405,14 @@ fun PluviaMain(
             }
 
             // Start GOGService if user has GOG
-            if (app.gamenative.service.gog.GOGService.hasStoredCredentials(context) &&
-                !app.gamenative.service.gog.GOGService.isRunning) {
+            if (GOGService.hasStoredCredentials(context)) {
                 Timber.tag("GOG").d("[PluviaMain]: Starting GOGService for logged-in user")
-                app.gamenative.service.gog.GOGService.start(context)
+                GOGService.start(context)
             } else {
-                Timber.tag("GOG").d("GOG SERVICE Not going to start: ${app.gamenative.service.gog.GOGService.isRunning}")
+                Timber.tag("GOG").d("GOG SERVICE Not going to start: ${GOGService.isRunning}")
             }
 
-            if (SteamService.isLoggedIn && !SteamService.isGameRunning && state.currentScreen == PluviaScreen.LoginUser) {
+            if (SteamService.isLoggedIn && !SteamService.isGameRunning && !GOGService.isGameRunning && state.currentScreen == PluviaScreen.LoginUser) {
                 navController.navigate(PluviaScreen.Home.route)
             }
         }

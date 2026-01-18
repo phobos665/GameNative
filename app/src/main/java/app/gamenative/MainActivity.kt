@@ -252,7 +252,7 @@ class MainActivity : ComponentActivity() {
             SteamService.stop()
         }
 
-        if(GOGService.isRunning) {
+        if(GOGService.isRunning && !GOGService.isGameRunning) {
             Timber.i("Stopping GOG Service")
             GOGService.stop()
         }
@@ -264,13 +264,13 @@ class MainActivity : ComponentActivity() {
         SteamService.autoStopWhenIdle = false
 
         // Resume game if it was running
-        if (SteamService.isGameRunning) {
+        if (SteamService.isGameRunning || GOGService.isGameRunning) {
             PluviaApp.xEnvironment?.onResume()
             Timber.d("Game resumed")
         }
 
         // Restart GOG service if it went down
-        if (GOGService.hasStoredCredentials(this) && !GOGService.isRunning) {
+        if (GOGService.hasStoredCredentials(this)) {
             Timber.i("GOG service was down on resume - restarting")
             GOGService.start(this)
         }
@@ -279,7 +279,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onPause() {
-        if (SteamService.isGameRunning) {
+        if (SteamService.isGameRunning || GOGService.isGameRunning) {
             PluviaApp.xEnvironment?.onPause()
             Timber.d("Game paused due to app backgrounded")
         }

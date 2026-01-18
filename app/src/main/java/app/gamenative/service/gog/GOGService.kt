@@ -44,6 +44,10 @@ class GOGService : Service() {
 
         private var instance: GOGService? = null
 
+        @JvmStatic
+        @Volatile
+        var isGameRunning: Boolean = false
+
         // Sync tracking variables
         private var syncInProgress: Boolean = false
         private var backgroundSyncJob: Job? = null
