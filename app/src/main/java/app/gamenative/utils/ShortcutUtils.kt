@@ -19,6 +19,7 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import app.gamenative.data.GameSource
 import java.util.Arrays
 
 private fun createAdaptiveIconBitmap(context: Context, src: Bitmap): Bitmap {
@@ -84,13 +85,14 @@ private fun createAdaptiveIconBitmap(context: Context, src: Bitmap): Bitmap {
     return outBmp
 }
 
-internal suspend fun createPinnedShortcut(context: Context, gameId: Int, label: String, iconUrl: String?) {
+internal suspend fun createPinnedShortcut(context: Context, gameId: Int, label: String, gameSource: GameSource, iconUrl: String?) {
     val appContext = context.applicationContext
     val shortcutManager = appContext.getSystemService(ShortcutManager::class.java)
 
     val intent = Intent("app.gamenative.LAUNCH_GAME").apply {
         setClass(appContext, MainActivity::class.java)
         putExtra("app_id", gameId)
+        putExtra("game_source", gameSource.name)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
 

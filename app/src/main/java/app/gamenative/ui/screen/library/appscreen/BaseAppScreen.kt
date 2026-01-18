@@ -41,6 +41,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import app.gamenative.data.GameSource
 
 /**
  * Abstract base class for AppScreen implementations.
@@ -155,6 +156,9 @@ abstract class BaseAppScreen {
         return libraryItem.gameId
     }
 
+    protected fun getGameSource(libraryItem: LibraryItem): GameSource {
+        return libraryItem.gameSource
+    }
     /**
      * Get the icon URL for shortcuts (can be null)
      */
@@ -252,6 +256,7 @@ abstract class BaseAppScreen {
         context: Context,
         libraryItem: LibraryItem
     ): AppMenuOption? {
+        val gameSource = getGameSource(libraryItem)
         val gameId = getGameId(libraryItem)
         val gameName = getGameName(context, libraryItem)
         val iconUrl = getIconUrl(context, libraryItem)
@@ -262,6 +267,7 @@ abstract class BaseAppScreen {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         createPinnedShortcut(
+                            gameSource = gameSource,
                             context = context,
                             gameId = gameId,
                             label = gameName,

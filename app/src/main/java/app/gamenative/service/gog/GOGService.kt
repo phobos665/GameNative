@@ -8,6 +8,7 @@ import app.gamenative.data.DownloadInfo
 import app.gamenative.data.GOGCredentials
 import app.gamenative.data.GOGGame
 import app.gamenative.data.LaunchInfo
+import app.gamenative.PrefManager
 import app.gamenative.data.LibraryItem
 import app.gamenative.service.NotificationHelper
 import app.gamenative.utils.ContainerUtils
@@ -283,7 +284,6 @@ class GOGService : Service() {
 
         fun downloadGame(context: Context, gameId: String, installPath: String): Result<DownloadInfo?> {
             val instance = getInstance() ?: return Result.failure(Exception("Service not available"))
-
             // Create DownloadInfo for progress tracking
             val downloadInfo = DownloadInfo(jobCount = 1, gameId = 0, downloadingAppIds = CopyOnWriteArrayList<Int>())
 

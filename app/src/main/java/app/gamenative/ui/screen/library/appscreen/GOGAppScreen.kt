@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import app.gamenative.R
 import app.gamenative.data.GOGGame
+import app.gamenative.data.GameSource
 import app.gamenative.data.LibraryItem
 import app.gamenative.service.gog.GOGConstants
 import app.gamenative.service.gog.GOGService
@@ -76,6 +77,8 @@ class GOGAppScreen : BaseAppScreen() {
             }
         }
     }
+
+    override fun getExportFileExtension(): String = ".gog"
 
     @Composable
     override fun getGameDisplayInfo(
@@ -391,12 +394,6 @@ class GOGAppScreen : BaseAppScreen() {
         // TODO: Implement update for GOG games
         // Check GOG for newer version and download if available
         Timber.tag(TAG).d("Update clicked for GOG game: ${libraryItem.appId}")
-    }
-
-    override fun getExportFileExtension(): String {
-        Timber.tag(TAG).d("getExportFileExtension: returning 'tzst'")
-        // GOG containers use the same export format as other Wine containers
-        return "tzst"
     }
 
     override fun getInstallPath(context: Context, libraryItem: LibraryItem): String? {
