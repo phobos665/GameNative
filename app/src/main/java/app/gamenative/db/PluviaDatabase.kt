@@ -1,5 +1,6 @@
 package app.gamenative.db
 
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
@@ -9,6 +10,7 @@ import app.gamenative.data.FileChangeLists
 import app.gamenative.data.SteamApp
 import app.gamenative.data.SteamLicense
 import app.gamenative.data.CachedLicense
+import app.gamenative.data.DownloadingAppInfo
 import app.gamenative.data.EncryptedAppTicket
 import app.gamenative.data.GOGGame
 import app.gamenative.data.EpicGame
@@ -25,6 +27,7 @@ import app.gamenative.db.dao.SteamAppDao
 import app.gamenative.db.dao.SteamLicenseDao
 import app.gamenative.db.dao.AppInfoDao
 import app.gamenative.db.dao.CachedLicenseDao
+import app.gamenative.db.dao.DownloadingAppInfoDao
 import app.gamenative.db.dao.EncryptedAppTicketDao
 import app.gamenative.db.dao.GOGGameDao
 import app.gamenative.db.dao.EpicGameDao
@@ -41,10 +44,19 @@ const val DATABASE_NAME = "pluvia.db"
         SteamApp::class,
         SteamLicense::class,
         GOGGame::class,
+        DownloadingAppInfo::class,
         EpicGame::class,
     ],
-    version = 10,
-    exportSchema = false, // Should export once stable.
+    version = 12,
+    // For db migration, visit https://developer.android.com/training/data-storage/room/migrating-db-versions for more information
+    exportSchema = true, // It is better to handle db changes carefully, as GN is getting much more users.
+    autoMigrations = [
+        // For every version change, if it is automatic, please add a new migration here.
+        AutoMigration(from = 8, to = 9),
+        AutoMigration(from = 9, to = 10),
+        AutoMigration(from = 10, to = 11)
+        AutoMigration(from = 10, to = 12)
+    ]
 )
 @TypeConverters(
     AppConverter::class,
@@ -72,5 +84,8 @@ abstract class PluviaDatabase : RoomDatabase() {
     abstract fun encryptedAppTicketDao(): EncryptedAppTicketDao
 
     abstract fun gogGameDao(): GOGGameDao
+
     abstract fun epicGameDao(): EpicGameDao
+
+    abstract fun downloadingAppInfoDao(): DownloadingAppInfoDao
 }
