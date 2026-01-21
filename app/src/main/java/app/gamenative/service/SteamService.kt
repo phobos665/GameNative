@@ -2345,7 +2345,7 @@ class SteamService : Service(), IChallengeUrlChanged {
         }
 
         val notification = notificationHelper.createForegroundNotification("Starting up...")
-        startForeground(1, notification)
+        startForeground(NotificationHelper.STEAM_NOTIFICATION_ID, notification)
 
         return START_STICKY
     }

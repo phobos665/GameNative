@@ -316,9 +316,11 @@ class MainActivity : ComponentActivity() {
             SteamService.stop()
         }
 
-        if (GOGService.isRunning) {
-            Timber.i("Stopping GOG Service")
+        if (GOGService.isRunning && !GOGService.hasActiveOperations()) {
+            Timber.i("Stopping GOG Service - no active operations")
             GOGService.stop()
+        } else if (GOGService.isRunning) {
+            Timber.d("GOG Service has active operations, keeping alive")
         }
     }
 

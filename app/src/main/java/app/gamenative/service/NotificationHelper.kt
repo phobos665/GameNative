@@ -13,12 +13,16 @@ import app.gamenative.MainActivity
 import app.gamenative.PrefManager
 import app.gamenative.R
 
-class NotificationHelper(private val context: Context) {
+class NotificationHelper(
+    private val context: Context,
+    private val notificationId: Int = 1
+) {
 
     companion object {
         private const val CHANNEL_ID = "pluvia_foreground_service"
         private const val CHANNEL_NAME = "GameNative Foreground Service"
-        private const val NOTIFICATION_ID = 1
+        const val STEAM_NOTIFICATION_ID = 1
+        const val GOG_NOTIFICATION_ID = 2
 
         const val ACTION_EXIT = "com.oxgames.pluvia.EXIT"
     }
@@ -45,11 +49,11 @@ class NotificationHelper(private val context: Context) {
 
     fun notify(content: String) {
         val notification = createForegroundNotification(content)
-        notificationManager.notify(NOTIFICATION_ID, notification)
+        notificationManager.notify(notificationId, notification)
     }
 
     fun cancel() {
-        notificationManager.cancel(NOTIFICATION_ID)
+        notificationManager.cancel(notificationId)
     }
 
     fun createForegroundNotification(content: String): Notification {

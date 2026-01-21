@@ -164,7 +164,9 @@ class GOGService : Service() {
         // ==========================================================================
 
         fun hasActiveOperations(): Boolean {
-            return syncInProgress || backgroundSyncJob?.isActive == true
+            return syncInProgress ||
+                   backgroundSyncJob?.isActive == true ||
+                   hasActiveDownload()
         }
 
         private fun setSyncInProgress(inProgress: Boolean) {
@@ -556,16 +558,16 @@ class GOGService : Service() {
         super.onCreate()
         instance = this
 
-        // Initialize notification helper for foreground service
-        notificationHelper = NotificationHelper(applicationContext)
+        // Initialize notification helper
+        notificationHelper = NotificationHelper(applicationContext, NotificationHelper.GOG_NOTIFICATION_ID)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Timber.d("[GOGService] onStartCommand() - action: ${intent?.action}")
 
         // Start as foreground service
-        val notification = notificationHelper.createForegroundNotification("Connected")
-        startForeground(1, notification) // Use different ID than SteamService (which uses 1)
+        val notification = notificationHelper.createForegroundNotification("GOG Connected")
+        startForeground(NotificationHelper.GOG_NOTIFICATION_ID, notification)
 
         // Determine if we should sync based on the action
         val shouldSync = when (intent?.action) {
