@@ -7,6 +7,7 @@ import android.os.IBinder
 import app.gamenative.data.DownloadInfo
 import app.gamenative.data.EpicCredentials
 import app.gamenative.data.EpicGame
+import app.gamenative.data.EpicGameToken
 import app.gamenative.data.LaunchInfo
 import app.gamenative.data.LibraryItem
 import app.gamenative.utils.MarkerUtils
@@ -25,16 +26,6 @@ import timber.log.Timber
  * Epic Games Service - thin coordinator that delegates to other Epic managers.
  */
 
- /**
-  * For Follow-up:
-  * TODO: Pausing and Cancelling Downloads
-  * TODO: DLC Support
- */
- // checklist:
- // Syncing Library
- // Authentication
- // Pull games correctly
- // TODO: Check Installing works
 @AndroidEntryPoint
 class EpicService : Service() {
 
@@ -115,6 +106,78 @@ class EpicService : Service() {
 
         suspend fun getStoredCredentials(context: Context): Result<EpicCredentials> {
             return EpicAuthManager.getStoredCredentials(context)
+        }
+
+        // ==========================================================================
+        // GAME LAUNCH - Delegate to EpicAuthManager and EpicGameLauncher
+        // ==========================================================================
+
+        /**
+         * Get game launch token for Epic Games Services authentication
+         * Call this immediately before launching a game
+         *
+         * @param context Android context
+         * @param namespace Game namespace
+         * @param catalogItemId Game catalog item ID
+         * @param requiresOwnershipToken Whether game requires ownership verification (DRM)
+         * @return GameToken with exchange code and optional ownership token
+         */
+        suspend fun getGameLaunchToken(
+            context: Context,
+            namespace: String? = null,
+            catalogItemId: String? = null,
+            requiresOwnershipToken: Boolean = false
+        ): Result<EpicGameToken> {
+            return EpicAuthManager.getGameLaunchToken(context, namespace, catalogItemId, requiresOwnershipToken)
+        }
+
+        /**
+         * Build complete launch parameters for an Epic game
+         * Includes all Epic Games Services authentication arguments
+         *
+         * @param context Android context
+         * @param game Epic game to launch
+         * @param offline Whether to launch in offline mode
+         * @param userDisplayName Override for display name (optional)
+         * @param languageCode Language code (e.g., "en-US")
+         * @return List of command-line parameters to pass to game
+         */
+        suspend fun buildLaunchParameters(
+            context: Context,
+            game: EpicGame,
+            offline: Boolean = false,
+            userDisplayName: String? = null,
+            languageCode: String = "en-US"
+        ): Result<List<String>> {
+            return EpicGameLauncher.buildLaunchParameters(context, game, offline, userDisplayName, languageCode)
+        }
+
+        /**
+         * Check if game should be launched offline
+         *
+         * @param game Epic game to check
+         * @param forceOffline User preference to force offline
+         * @return true if should launch offline
+         */
+        fun shouldLaunchOffline(game: EpicGame, forceOffline: Boolean): Boolean {
+            return EpicGameLauncher.shouldLaunchOffline(game, forceOffline)
+        }
+
+        /**
+         * Get warning message if game may not work offline
+         *
+         * @param game Epic game to check
+         * @return Warning message or null
+         */
+        fun getOfflineLaunchWarning(game: EpicGame): String? {
+            return EpicGameLauncher.getOfflineLaunchWarning(game)
+        }
+
+        /**
+         * Clean up temporary ownership token files after game exits
+         */
+        fun cleanupLaunchTokens(context: Context) {
+            EpicGameLauncher.cleanupOwnershipTokens(context)
         }
 
         /**

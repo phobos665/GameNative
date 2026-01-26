@@ -144,6 +144,113 @@ object EpicAuthClient {
         }
     }
 
+    /**
+     * Get game exchange token (exchange code) for game launch authentication
+     * This is the short-lived token passed as -AUTH_PASSWORD parameter to the game
+     *
+     * Based on Legendary's implementation:
+     * - Endpoint: /account/api/oauth/exchange
+     * - Returns a code that's valid for a short time
+     * - Must be called immediately before launching the game
+     *
+     * @param accessToken Valid Epic access token from authenticated session
+     * @return Exchange code to pass to game launcher
+     */
+    suspend fun getGameExchangeToken(accessToken: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://${EpicConstants.OAUTH_HOST}/account/api/oauth/exchange"
+
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $accessToken")
+                .header("User-Agent", EpicConstants.USER_AGENT)
+                .get()
+                .build()
+
+            val response = httpClient.newCall(request).execute()
+            val body = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                Timber.e("Failed to get game exchange token: ${response.code} - $body")
+                return@withContext Result.failure(Exception("HTTP ${response.code}: $body"))
+            }
+
+            val json = JSONObject(body)
+
+            if (json.has("errorCode")) {
+                val errorCode = json.getString("errorCode")
+                val errorMessage = json.optString("errorMessage", "Failed to get exchange token")
+                Timber.e("Exchange token error: $errorCode - $errorMessage")
+                return@withContext Result.failure(Exception("$errorCode: $errorMessage"))
+            }
+
+            val code = json.getString("code")
+            Timber.d("Successfully obtained game exchange token")
+            Result.success(code)
+        } catch (e: Exception) {
+            Timber.e(e, "Exception getting game exchange token")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Get ownership verification token for DRM-protected games
+     * This is required for games that have `requires_ot = true` (typically Denuvo DRM)
+     *
+     * Based on Legendary's implementation:
+     * - Endpoint: /ecommerceintegration/api/public/platforms/EPIC/identities/{userId}/ownershipToken
+     * - POST with nsCatalogItemId={namespace}:{catalogItemId}
+     * - Returns binary token data
+     *
+     * @param accessToken Valid Epic access token
+     * @param accountId User's Epic account ID
+     * @param namespace Game namespace
+     * @param catalogItemId Game catalog item ID
+     * @return Binary ownership token data
+     */
+    suspend fun getOwnershipToken(
+        accessToken: String,
+        accountId: String,
+        namespace: String,
+        catalogItemId: String
+    ): Result<ByteArray> = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://${EpicConstants.ECOMMERCE_HOST}/ecommerceintegration/api/public/" +
+                "platforms/EPIC/identities/$accountId/ownershipToken"
+
+            val nsCatalogItemId = "$namespace:$catalogItemId"
+            val requestBody = FormBody.Builder()
+                .add("nsCatalogItemId", nsCatalogItemId)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $accessToken")
+                .header("User-Agent", EpicConstants.USER_AGENT)
+                .post(requestBody)
+                .build()
+
+            val response = httpClient.newCall(request).execute()
+
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string() ?: "Unknown error"
+                Timber.e("Failed to get ownership token: ${response.code} - $errorBody")
+                return@withContext Result.failure(Exception("HTTP ${response.code}: $errorBody"))
+            }
+
+            val tokenBytes = response.body?.bytes()
+            if (tokenBytes == null || tokenBytes.isEmpty()) {
+                return@withContext Result.failure(Exception("Empty ownership token response"))
+            }
+
+            Timber.d("Successfully obtained ownership token (${tokenBytes.size} bytes)")
+            Result.success(tokenBytes)
+        } catch (e: Exception) {
+            Timber.e(e, "Exception getting ownership token")
+            Result.failure(e)
+        }
+    }
+
     private fun parseExpiresAt(json: JSONObject): Long {
         return try {
             // Try to get as long first (epoch milliseconds)

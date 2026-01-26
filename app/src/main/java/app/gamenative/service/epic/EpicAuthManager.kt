@@ -2,6 +2,7 @@ package app.gamenative.service.epic
 
 import android.content.Context
 import app.gamenative.data.EpicCredentials
+import app.gamenative.data.EpicGameToken
 import org.json.JSONObject
 import timber.log.Timber
 import java.io.File
@@ -183,6 +184,84 @@ object EpicAuthManager {
         file.writeText(json.toString())
 
         Timber.d("Credentials saved to ${file.absolutePath}")
+    }
+
+    /**
+     * Get game launch token for authenticating with Epic Games Services
+     * This should be called immediately before launching a game that requires online authentication
+     *
+     * Based on Legendary's implementation:
+     * - Gets fresh exchange code via /account/api/oauth/exchange endpoint
+     * - Optionally gets ownership token for DRM-protected games
+     * - Returns token data to be passed as command-line parameters to game
+     *
+     * @param context Android context
+     * @param namespace Game namespace (required for ownership token)
+     * @param catalogItemId Game catalog item ID (required for ownership token)
+     * @param requiresOwnershipToken Whether game requires ownership verification (DRM)
+     * @return GameToken containing exchange code and optional ownership token
+     */
+    suspend fun getGameLaunchToken(
+        context: Context,
+        namespace: String? = null,
+        catalogItemId: String? = null,
+        requiresOwnershipToken: Boolean = false
+    ): Result<EpicGameToken> {
+        return try {
+            // Get current valid credentials (will refresh if expired)
+            val credentialsResult = getStoredCredentials(context)
+            if (credentialsResult.isFailure) {
+                return Result.failure(credentialsResult.exceptionOrNull() ?: Exception("Not authenticated"))
+            }
+
+            val credentials = credentialsResult.getOrNull()!!
+
+            // Get game exchange token (required for all games)
+            Timber.d("Getting game exchange token for launch...")
+            val exchangeTokenResult = EpicAuthClient.getGameExchangeToken(credentials.accessToken)
+            if (exchangeTokenResult.isFailure) {
+                return Result.failure(exchangeTokenResult.exceptionOrNull() ?: Exception("Failed to get exchange token"))
+            }
+            val exchangeCode = exchangeTokenResult.getOrNull()!!
+
+            // Get ownership token if required (for DRM-protected games)
+            var ownershipTokenHex: String? = null
+            if (requiresOwnershipToken) {
+                if (namespace.isNullOrEmpty() || catalogItemId.isNullOrEmpty()) {
+                    return Result.failure(Exception("Namespace and catalogItemId required for ownership token"))
+                }
+
+                Timber.d("Getting ownership token for $namespace:$catalogItemId...")
+                val ownershipResult = EpicAuthClient.getOwnershipToken(
+                    accessToken = credentials.accessToken,
+                    accountId = credentials.accountId,
+                    namespace = namespace,
+                    catalogItemId = catalogItemId
+                )
+
+                if (ownershipResult.isFailure) {
+                    Timber.w("Failed to get ownership token: ${ownershipResult.exceptionOrNull()?.message}")
+                    // Continue without ownership token - game might still work
+                } else {
+                    // Convert binary token to hex string for easier handling
+                    val tokenBytes = ownershipResult.getOrNull()!!
+                    ownershipTokenHex = tokenBytes.joinToString("") { "%02x".format(it) }
+                    Timber.d("Ownership token obtained (${tokenBytes.size} bytes)")
+                }
+            }
+
+            val gameToken = EpicGameToken(
+                authCode = exchangeCode,
+                accountId = credentials.accountId,
+                ownershipToken = ownershipTokenHex
+            )
+
+            Timber.i("Successfully obtained game launch token")
+            Result.success(gameToken)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get game launch token")
+            Result.failure(e)
+        }
     }
 
     private fun loadCredentials(context: Context): EpicCredentials? {
