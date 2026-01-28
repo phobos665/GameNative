@@ -334,7 +334,10 @@ public class ContentsManager {
                             ? wineJSONObject.getString(ContentProfile.MARK_WINE_LIBPATH)
                             : "lib";
 
-                    profile.winePrefixPack = wineJSONObject.getString(ContentProfile.MARK_WINE_PREFIX_PACK);
+                    // Parse winePrefixPack (optional)
+                    profile.winePrefixPack = wineJSONObject.has(ContentProfile.MARK_WINE_PREFIX_PACK)
+                            ? wineJSONObject.getString(ContentProfile.MARK_WINE_PREFIX_PACK)
+                            : null;
 
                     // Parse wineDllPath with fallback to wineLibPath + "/wine" if not specified
                     if (wineJSONObject.has(ContentProfile.MARK_WINE_DLLPATH)) {
