@@ -11,6 +11,7 @@ import android.util.Log;
 import app.gamenative.R;
 import com.winlator.box86_64.Box86_64Preset;
 import com.winlator.contents.ContentsManager;
+import com.winlator.contents.ContentProfile;
 import com.winlator.core.Callback;
 import com.winlator.core.FileUtils;
 import com.winlator.core.OnExtractFileListener;
@@ -29,6 +30,7 @@ import org.json.JSONObject;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
@@ -283,29 +285,84 @@ public class ContainerManager {
 
     /**
      * Extracts the Wine prefix pack from a custom Wine installation.
-     * Checks for prefixPack.tzst or prefixPack.txz and uses the appropriate decompression algorithm.
+     * Uses winePrefixPack path from profile with auto-detection of compression format (.tzst/.zst or .txz/.xz).
+     * Falls back to legacy hardcoded filenames (prefixPack.tzst/prefixPack.txz) for backward compatibility.
      *
      * @param wineInstallPath Path to the Wine installation root directory
      * @param destinationDir Directory where the prefix should be extracted
+     * @param prefixPackPath Optional path to prefix pack from profile.json (can be null for legacy profiles)
      * @return true if extraction succeeded, false otherwise
      */
-    private static boolean extractPrefixPack(String wineInstallPath, File destinationDir) {
+    private static boolean extractPrefixPack(String wineInstallPath, File destinationDir, String prefixPackPath) {
         if (wineInstallPath == null || wineInstallPath.isEmpty()) {
             return false;
         }
 
+        // Try profile-specified path first
+        if (prefixPackPath != null && !prefixPackPath.isEmpty()) {
+            File prefixFile = new File(wineInstallPath, prefixPackPath);
+            if (prefixFile.exists()) {
+                // Auto-detect compression format from extension
+                TarCompressorUtils.Type compressionType = FileUtils.detectCompressionType(prefixPackPath);
+                
+                Log.d("ContainerManager", "Extracting prefix pack from profile path: " + prefixPackPath + " (" + compressionType + ")");
+                return TarCompressorUtils.extract(compressionType, prefixFile, destinationDir);
+            } else {
+                Log.w("ContainerManager", "Profile-specified prefix pack not found: " + prefixPackPath);
+            }
+        }
+
+        // Fallback to legacy hardcoded filenames for backward compatibility
         File tzstFile = new File(wineInstallPath, "prefixPack.tzst");
         if (tzstFile.exists()) {
+            Log.d("ContainerManager", "Using legacy prefixPack.tzst");
             return TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, tzstFile, destinationDir);
         }
 
         File txzFile = new File(wineInstallPath, "prefixPack.txz");
         if (txzFile.exists()) {
+            Log.d("ContainerManager", "Using legacy prefixPack.txz");
             return TarCompressorUtils.extract(TarCompressorUtils.Type.XZ, txzFile, destinationDir);
         }
 
         Log.d("ContainerManager", "No prefixPack found, returning false");
         return false;
+    }
+
+    /**
+     * Helper method to get ContentProfile for a given WineInfo.
+     * Returns null if not found or if it's the main Wine version.
+     */
+    private static ContentProfile getWineProfileForVersion(Context context, WineInfo wineInfo) {
+        if (wineInfo == null || wineInfo.equals(WineInfo.MAIN_WINE_VERSION)) {
+            return null;
+        }
+
+        ContentsManager contentsManager = new ContentsManager(context);
+        contentsManager.syncContents();
+        
+        // Check both Wine and Proton lists
+        List<ContentProfile> wineProfiles = contentsManager.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_WINE);
+        if (wineProfiles != null) {
+            for (ContentProfile profile : wineProfiles) {
+                File installDir = ContentsManager.getInstallDir(context, profile);
+                if (installDir.getAbsolutePath().equals(wineInfo.path)) {
+                    return profile;
+                }
+            }
+        }
+        
+        List<ContentProfile> protonProfiles = contentsManager.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_PROTON);
+        if (protonProfiles != null) {
+            for (ContentProfile profile : protonProfiles) {
+                File installDir = ContentsManager.getInstallDir(context, profile);
+                if (installDir.getAbsolutePath().equals(wineInfo.path)) {
+                    return profile;
+                }
+            }
+        }
+        
+        return null;
     }
 
     private void deleteCommonDlls(String dstName,
@@ -347,14 +404,18 @@ public class ContainerManager {
 
     private void extractCommonDlls(WineInfo wineInfo, String srcName, String dstName, File containerDir, OnExtractFileListener onExtractFileListener) throws JSONException {
         Log.d("Extraction", "extracting common dlls for bionic: " + srcName);
-        File srcDir = new File(wineInfo.path + "/lib/wine/" + srcName);
+        // Use flexible DLL path from WineInfo
+        String wineDllPath = (wineInfo.getFullWineDllPath() != null) 
+            ? wineInfo.getFullWineDllPath() 
+            : (wineInfo.path + "/lib/wine");
+        File srcDir = new File(wineDllPath + "/" + srcName);
 
         File[] srcfiles = srcDir.listFiles(file -> file.isFile());
 
         for (File file : srcfiles) {
             String dllName = file.getName();
             if (dllName.equals("iexplore.exe") && wineInfo.isArm64EC() && srcName.equals("aarch64-windows"))
-                file = new File(wineInfo.path + "/lib/wine/" + "i386-windows/iexplore.exe");
+                file = new File(wineDllPath + "/i386-windows/iexplore.exe");
             File dstFile = new File(containerDir, ".wine/drive_c/windows/" + dstName + "/" + dllName);
             if (dstFile.exists()) continue;
             if (onExtractFileListener != null ) {
@@ -399,7 +460,13 @@ public class ContainerManager {
             Log.d("Extraction", "exctracting " + containerPattern);
             boolean result = TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context, containerPattern, containerDir, onExtractFileListener);
             if (!result) {
-                result = extractPrefixPack(wineInfo.path, containerDir);
+                // Get prefixPack path from WineInfo (will be null for MAIN_WINE_VERSION)
+                String prefixPackPath = null;
+                ContentProfile profile = getWineProfileForVersion(context, wineInfo);
+                if (profile != null) {
+                    prefixPackPath = profile.winePrefixPack;
+                }
+                result = extractPrefixPack(wineInfo.path, containerDir, prefixPackPath);
             }
 
             if (result) {

@@ -245,7 +245,10 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         envVars.put("TMPDIR", rootDir.getPath() + "/usr/tmp");
         envVars.put("DISPLAY", ":0");
 
-        String winePath = imageFs.getWinePath() + "/bin";
+        // Use flexible bin path from WineInfo
+        String winePath = (wineInfo != null && wineInfo.getFullBinPath() != null) 
+            ? wineInfo.getFullBinPath() 
+            : (imageFs.getWinePath() + "/bin");
 
         Log.d("BionicProgramLauncherComponent", "WinePath is " + winePath);
 
@@ -458,7 +461,10 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         envVars.put("TMPDIR", imageFs.getRootDir().getPath() + "/tmp");
         envVars.put("DISPLAY", ":0");
 
-        String winePath = imageFs.getWinePath() + "/bin";
+        // Use flexible bin path from WineInfo
+        String winePath = (wineInfo != null && wineInfo.getFullBinPath() != null) 
+            ? wineInfo.getFullBinPath() 
+            : (imageFs.getWinePath() + "/bin");
 
         Log.d("BionicProgramLauncherComponent", "WinePath is " + winePath);
 

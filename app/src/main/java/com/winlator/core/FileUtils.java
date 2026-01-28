@@ -484,4 +484,33 @@ public abstract class FileUtils {
             return false;
         }
     }
+
+    /**
+     * Detects the compression type of a tar archive based on its file extension.
+     * Supports ZSTD (.tzst, .zst, .tar.zst) and XZ (.txz, .xz, .tar.xz) formats.
+     *
+     * @param filePath Path to the archive file (can be relative or absolute)
+     * @return TarCompressorUtils.Type.ZSTD or TarCompressorUtils.Type.XZ, defaults to ZSTD for unknown extensions
+     */
+    public static TarCompressorUtils.Type detectCompressionType(String filePath) {
+        if (filePath == null || filePath.isEmpty()) {
+            return TarCompressorUtils.Type.ZSTD; // Default fallback
+        }
+
+        String lowerPath = filePath.toLowerCase();
+        
+        // Check for ZSTD compression
+        if (lowerPath.endsWith(".tzst") || lowerPath.endsWith(".zst") || lowerPath.endsWith(".tar.zst")) {
+            return TarCompressorUtils.Type.ZSTD;
+        }
+        
+        // Check for XZ compression
+        if (lowerPath.endsWith(".txz") || lowerPath.endsWith(".xz") || lowerPath.endsWith(".tar.xz")) {
+            return TarCompressorUtils.Type.XZ;
+        }
+        
+        // Default to ZSTD for unknown extensions
+        Log.w("FileUtils", "Unknown compression format for: " + filePath + ", defaulting to ZSTD");
+        return TarCompressorUtils.Type.ZSTD;
+    }
 }

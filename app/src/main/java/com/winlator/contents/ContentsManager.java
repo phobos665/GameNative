@@ -24,19 +24,23 @@ import java.util.Map;
 public class ContentsManager {
     public static final String PROFILE_NAME = "profile.json";
     public static final String REMOTE_PROFILES_URL = "https://raw.githubusercontent.com/longjunyu2/winlator/main/content/metadata.json";
-    public static final String[] TURNIP_TRUST_FILES = {"${libdir}/libvulkan_freedreno.so", "${libdir}/libvulkan.so.1",
-            "${sharedir}/vulkan/icd.d/freedreno_icd.aarch64.json", "${libdir}/libGL.so.1", "${libdir}/libglapi.so.0"};
-    public static final String[] VORTEK_TRUST_FILES = {"${libdir}/libvulkan_vortek.so", "${libdir}/libvulkan_freedreno.so",
-            "${sharedir}/vulkan/icd.d/vortek_icd.aarch64.json"};
-    public static final String[] VIRGL_TRUST_FILES = {"${libdir}/libGL.so.1", "${libdir}/libglapi.so.0"};
-    public static final String[] DXVK_TRUST_FILES = {"${system32}/d3d8.dll", "${system32}/d3d9.dll", "${system32}/d3d10.dll", "${system32}/d3d10_1.dll",
-            "${system32}/d3d10core.dll", "${system32}/d3d11.dll", "${system32}/dxgi.dll", "${syswow64}/d3d8.dll", "${syswow64}/d3d9.dll", "${syswow64}/d3d10.dll",
-            "${syswow64}/d3d10_1.dll", "${syswow64}/d3d10core.dll", "${syswow64}/d3d11.dll", "${syswow64}/dxgi.dll"};
-    public static final String[] VKD3D_TRUST_FILES = {"${system32}/d3d12core.dll", "${system32}/d3d12.dll",
-            "${syswow64}/d3d12core.dll", "${syswow64}/d3d12.dll"};
-    public static final String[] BOX64_TRUST_FILES = {"${localbin}/box64", "${bindir}/box64"};
-    public static final String[] WOWBOX64_TRUST_FILES = {"${system32}/wowbox64.dll"};
-    public static final String[] FEXCORE_TRUST_FILES = {"${system32}/libwow64fex.dll", "${system32}/libarm64ecfex.dll"};
+    public static final String[] TURNIP_TRUST_FILES = { "${libdir}/libvulkan_freedreno.so", "${libdir}/libvulkan.so.1",
+            "${sharedir}/vulkan/icd.d/freedreno_icd.aarch64.json", "${libdir}/libGL.so.1", "${libdir}/libglapi.so.0" };
+    public static final String[] VORTEK_TRUST_FILES = { "${libdir}/libvulkan_vortek.so",
+            "${libdir}/libvulkan_freedreno.so",
+            "${sharedir}/vulkan/icd.d/vortek_icd.aarch64.json" };
+    public static final String[] VIRGL_TRUST_FILES = { "${libdir}/libGL.so.1", "${libdir}/libglapi.so.0" };
+    public static final String[] DXVK_TRUST_FILES = { "${system32}/d3d8.dll", "${system32}/d3d9.dll",
+            "${system32}/d3d10.dll", "${system32}/d3d10_1.dll",
+            "${system32}/d3d10core.dll", "${system32}/d3d11.dll", "${system32}/dxgi.dll", "${syswow64}/d3d8.dll",
+            "${syswow64}/d3d9.dll", "${syswow64}/d3d10.dll",
+            "${syswow64}/d3d10_1.dll", "${syswow64}/d3d10core.dll", "${syswow64}/d3d11.dll", "${syswow64}/dxgi.dll" };
+    public static final String[] VKD3D_TRUST_FILES = { "${system32}/d3d12core.dll", "${system32}/d3d12.dll",
+            "${syswow64}/d3d12core.dll", "${syswow64}/d3d12.dll" };
+    public static final String[] BOX64_TRUST_FILES = { "${localbin}/box64", "${bindir}/box64" };
+    public static final String[] WOWBOX64_TRUST_FILES = { "${system32}/wowbox64.dll" };
+    public static final String[] FEXCORE_TRUST_FILES = { "${system32}/libwow64fex.dll",
+            "${system32}/libarm64ecfex.dll" };
     private Map<String, String> dirTemplateMap;
     private Map<ContentProfile.ContentType, List<String>> trustedFilesMap;
 
@@ -125,10 +129,14 @@ public class ContentsManager {
                     File proFile = new File(file, PROFILE_NAME);
                     if (proFile.exists() && proFile.isFile()) {
                         ContentProfile profile = readProfile(proFile);
-                        // Wine and Proton are functionally equivalent - accept both when scanning either type
+                        // Wine and Proton are functionally equivalent - accept both when scanning
+                        // either type
                         boolean isWineProtonMatch = (profile != null && profile.type == type) ||
-                                (profile != null && type == ContentProfile.ContentType.CONTENT_TYPE_WINE && profile.type == ContentProfile.ContentType.CONTENT_TYPE_PROTON) ||
-                                (profile != null && type == ContentProfile.ContentType.CONTENT_TYPE_PROTON && profile.type == ContentProfile.ContentType.CONTENT_TYPE_WINE);
+                                (profile != null && type == ContentProfile.ContentType.CONTENT_TYPE_WINE
+                                        && profile.type == ContentProfile.ContentType.CONTENT_TYPE_PROTON)
+                                ||
+                                (profile != null && type == ContentProfile.ContentType.CONTENT_TYPE_PROTON
+                                        && profile.type == ContentProfile.ContentType.CONTENT_TYPE_WINE);
                         if (isWineProtonMatch) {
                             profiles.add(profile);
                         }
@@ -143,7 +151,8 @@ public class ContentsManager {
                     if (remote.type == type) {
                         boolean exists = false;
                         for (ContentProfile profile : profiles) {
-                            if ((profile.verName.compareTo(remote.verName) == 0) && (profile.verCode == remote.verCode)) {
+                            if ((profile.verName.compareTo(remote.verName) == 0)
+                                    && (profile.verCode == remote.verCode)) {
                                 exists = true;
                                 break;
                             }
@@ -189,24 +198,46 @@ public class ContentsManager {
         String imagefsPath = context.getFilesDir().getAbsolutePath() + "/imagefs";
         for (ContentProfile.ContentFile contentFile : profile.fileList) {
             File tmpFile = new File(file, contentFile.source);
-            if (!tmpFile.exists() || !tmpFile.isFile() || !isSubPath(file.getAbsolutePath(), tmpFile.getAbsolutePath())) {
+            if (!tmpFile.exists() || !tmpFile.isFile()
+                    || !isSubPath(file.getAbsolutePath(), tmpFile.getAbsolutePath())) {
                 callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
                 return;
             }
 
             String realPath = getPathFromTemplate(contentFile.target);
-            if (!isSubPath(imagefsPath, realPath) || isSubPath(ContentsManager.getContentDir(context).getAbsolutePath(), realPath) || realPath.contains("dosdevices")) {
+            if (!isSubPath(imagefsPath, realPath)
+                    || isSubPath(ContentsManager.getContentDir(context).getAbsolutePath(), realPath)
+                    || realPath.contains("dosdevices")) {
                 callback.onFailed(InstallFailedReason.ERROR_UNTRUSTPROFILE, null);
                 return;
             }
         }
 
-        if (profile.type == ContentProfile.ContentType.CONTENT_TYPE_WINE || profile.type == ContentProfile.ContentType.CONTENT_TYPE_PROTON) {
+        if (profile.type == ContentProfile.ContentType.CONTENT_TYPE_WINE
+                || profile.type == ContentProfile.ContentType.CONTENT_TYPE_PROTON) {
             File bin = new File(file, profile.wineBinPath);
             File lib = new File(file, profile.wineLibPath);
             File cp = new File(file, profile.winePrefixPack);
+            File dllPath = new File(file, profile.wineDllPath);
 
-            if (!bin.exists() || !bin.isDirectory() || !lib.exists() || !lib.isDirectory() || !cp.exists() || !cp.isFile()) {
+            // Validate all required paths exist
+            if (!bin.exists() || !bin.isDirectory()) {
+                Log.e("ContentsManager", "Wine bin directory not found: " + profile.wineBinPath);
+                callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
+                return;
+            }
+            if (!lib.exists() || !lib.isDirectory()) {
+                Log.e("ContentsManager", "Wine lib directory not found: " + profile.wineLibPath);
+                callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
+                return;
+            }
+            if (!cp.exists() || !cp.isFile()) {
+                Log.e("ContentsManager", "Wine prefix pack not found: " + profile.winePrefixPack);
+                callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
+                return;
+            }
+            if (!dllPath.exists() || !dllPath.isDirectory()) {
+                Log.e("ContentsManager", "Wine DLL directory not found: " + profile.wineDllPath);
                 callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
                 return;
             }
@@ -216,7 +247,8 @@ public class ContentsManager {
     }
 
     public void finishInstallContent(ContentProfile profile, OnInstallFinishedCallback callback) {
-        // Reject if a version with this name already exists (no version code incrementation)
+        // Reject if a version with this name already exists (no version code
+        // incrementation)
         File installPath = getInstallDir(context, profile);
         if (installPath.exists()) {
             callback.onFailed(InstallFailedReason.ERROR_EXIST, null);
@@ -240,7 +272,8 @@ public class ContentsManager {
 
             File binDir = new File(installPath, profile.wineBinPath);
             if (binDir.exists() && binDir.isDirectory()) {
-                Log.d("ContentsManager", "Setting executable permissions for Wine/Proton binaries in: " + binDir.getPath());
+                Log.d("ContentsManager",
+                        "Setting executable permissions for Wine/Proton binaries in: " + binDir.getPath());
                 setExecutablePermissionsRecursive(binDir);
             }
         }
@@ -278,9 +311,24 @@ public class ContentsManager {
                 }
 
                 if (wineJSONObject != null) {
-                    profile.wineLibPath = wineJSONObject.getString(ContentProfile.MARK_WINE_LIBPATH);
-                    profile.wineBinPath = wineJSONObject.getString(ContentProfile.MARK_WINE_BINPATH);
+                    // Parse paths with fallbacks to standard Wine directory structure
+                    profile.wineBinPath = wineJSONObject.has(ContentProfile.MARK_WINE_BINPATH)
+                            ? wineJSONObject.getString(ContentProfile.MARK_WINE_BINPATH)
+                            : "bin";
+
+                    profile.wineLibPath = wineJSONObject.has(ContentProfile.MARK_WINE_LIBPATH)
+                            ? wineJSONObject.getString(ContentProfile.MARK_WINE_LIBPATH)
+                            : "lib";
+
                     profile.winePrefixPack = wineJSONObject.getString(ContentProfile.MARK_WINE_PREFIX_PACK);
+
+                    // Parse wineDllPath with fallback to wineLibPath + "/wine" if not specified
+                    if (wineJSONObject.has(ContentProfile.MARK_WINE_DLLPATH)) {
+                        profile.wineDllPath = wineJSONObject.getString(ContentProfile.MARK_WINE_DLLPATH);
+                    } else {
+                        // Default: assume DLLs are in lib/wine subdirectory
+                        profile.wineDllPath = profile.wineLibPath + "/wine";
+                    }
                 }
             }
 
@@ -320,7 +368,8 @@ public class ContentsManager {
     }
 
     public static File getContentTypeDir(Context context, ContentProfile.ContentType type) {
-        // Wine/Proton must be installed inside imagefs/opt/ to run inside proot environment
+        // Wine/Proton must be installed inside imagefs/opt/ to run inside proot
+        // environment
         // This is required for ARM64EC Wine to handle mmap(PROT_EXEC) calls properly
         if (type == ContentProfile.ContentType.CONTENT_TYPE_WINE
                 || type == ContentProfile.ContentType.CONTENT_TYPE_PROTON) {
@@ -351,10 +400,10 @@ public class ContentsManager {
      * Expected structure after normalization:
      * - bin/ (executables)
      * - lib/ (shared libraries)
-     *   └── wine/ (Wine DLLs by architecture)
-     *       ├── i386-windows/
-     *       ├── x86_64-windows/
-     *       └── aarch64-windows/ (for arm64ec)
+     * └── wine/ (Wine DLLs by architecture)
+     * ├── i386-windows/
+     * ├── x86_64-windows/
+     * └── aarch64-windows/ (for arm64ec)
      */
     private void normalizeWineLibraryStructure(File installPath, ContentProfile profile) {
         String libPath = profile.wineLibPath != null ? profile.wineLibPath : "lib";
@@ -416,19 +465,17 @@ public class ContentsManager {
             }
 
             // Check if wine architecture directories exist directly in lib/
-            File[] archDirs = actualLibDir.listFiles(file ->
-                file.isDirectory() && (
-                    file.getName().equals("i386-windows") ||
-                    file.getName().equals("x86_64-windows") ||
-                    file.getName().equals("aarch64-windows") ||
-                    file.getName().equals("i386-unix") ||
-                    file.getName().equals("x86_64-unix") ||
-                    file.getName().equals("aarch64-unix")
-                )
-            );
+            File[] archDirs = actualLibDir
+                    .listFiles(file -> file.isDirectory() && (file.getName().equals("i386-windows") ||
+                            file.getName().equals("x86_64-windows") ||
+                            file.getName().equals("aarch64-windows") ||
+                            file.getName().equals("i386-unix") ||
+                            file.getName().equals("x86_64-unix") ||
+                            file.getName().equals("aarch64-unix")));
 
             if (archDirs != null && archDirs.length > 0) {
-                Log.d("ContentsManager", "Found " + archDirs.length + " architecture directories in lib/, moving to lib/wine/");
+                Log.d("ContentsManager",
+                        "Found " + archDirs.length + " architecture directories in lib/, moving to lib/wine/");
 
                 // Create lib/wine subdirectory
                 if (!expectedWineLibDir.exists() && !expectedWineLibDir.mkdirs()) {
@@ -446,7 +493,8 @@ public class ContentsManager {
                     }
                 }
             } else {
-                Log.d("ContentsManager", "No architecture directories found in lib/, structure already normalized or using different layout");
+                Log.d("ContentsManager",
+                        "No architecture directories found in lib/, structure already normalized or using different layout");
             }
         }
 
@@ -574,7 +622,8 @@ public class ContentsManager {
             syncContents();
         }
 
-        // Try to determine type from the entry name (supports prefixed builds like "GE-Proton")
+        // Try to determine type from the entry name (supports prefixed builds like
+        // "GE-Proton")
         ContentProfile.ContentType type = null;
         String lowerVersionName = entryName.toLowerCase();
         if (lowerVersionName.contains("proton")) {
@@ -595,34 +644,33 @@ public class ContentsManager {
         if (type != null && profilesMap.get(type) != null) {
             List<ContentProfile> profiles = profilesMap.get(type);
             Log.d("ContentsManager", "   Found " + profiles.size() + " profiles of type " + type);
-    
+
             String keyLower = lowerVersionName;
-    
+
             for (ContentProfile profile : profiles) {
                 String verName = (profile.verName != null) ? profile.verName : "";
                 String verLower = verName.toLowerCase();
-    
+
                 String typeAndVer = profile.type.toString() + "-" + verName;
                 String typeAndVerLower = typeAndVer.toLowerCase();
-    
+
                 String fullEntry = ContentsManager.getEntryName(profile);
                 String fullEntryLower = fullEntry.toLowerCase();
-    
+
                 Log.d(
-                    "ContentsManager",
-                    "   Checking profile: verName='" + profile.verName +
-                            "', typeAndVer='" + typeAndVer +
-                            "', fullEntry='" + fullEntry + "'"
-                );
-    
+                        "ContentsManager",
+                        "   Checking profile: verName='" + profile.verName +
+                                "', typeAndVer='" + typeAndVer +
+                                "', fullEntry='" + fullEntry + "'");
+
                 if (keyLower.equals(verLower) ||
-                    keyLower.equals(typeAndVerLower) ||
-                    keyLower.equals(fullEntryLower)) {
+                        keyLower.equals(typeAndVerLower) ||
+                        keyLower.equals(fullEntryLower)) {
                     Log.d("ContentsManager", "   ✅ MATCH FOUND!");
                     return profile;
                 }
             }
-    
+
             Log.d("ContentsManager", "   ❌ No matching profile found in primary lookup");
         } else {
             Log.d("ContentsManager", "   ❌ Type is null or no profiles for this type");
@@ -662,7 +710,8 @@ public class ContentsManager {
     }
 
     public boolean applyContent(ContentProfile profile) {
-        if (profile.type != ContentProfile.ContentType.CONTENT_TYPE_WINE && profile.type != ContentProfile.ContentType.CONTENT_TYPE_PROTON) {
+        if (profile.type != ContentProfile.ContentType.CONTENT_TYPE_WINE
+                && profile.type != ContentProfile.ContentType.CONTENT_TYPE_PROTON) {
             Log.d("ContentsManager", "if condition");
             for (ContentProfile.ContentFile contentFile : profile.fileList) {
                 File targetFile = new File(getPathFromTemplate(contentFile.target));

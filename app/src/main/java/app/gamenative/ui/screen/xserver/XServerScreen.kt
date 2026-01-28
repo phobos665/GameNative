@@ -2568,7 +2568,11 @@ private fun extractArm64ecInputDLLs(context: Context, container: Container) {
 
     // Check if the wineVersion string is not null and contains "arm64ec"
     if (wineVersion != null && wineVersion.contains("proton-9.0-arm64ec")) {
-        val wineFolder: File = File(imageFs.getWinePath() + "/lib/wine/")
+        // Get WineInfo for flexible DLL paths
+        val contentsManager = ContentsManager(context)
+        val wineInfo = WineInfo.fromIdentifier(context, contentsManager, wineVersion)
+        val wineDllPath = wineInfo.getFullWineDllPath() ?: (imageFs.getWinePath() + "/lib/wine")
+        val wineFolder: File = File(wineDllPath)
         Log.d("XServerDisplayActivity", "Wine version contains arm64ec. Extracting input dlls to " + wineFolder.getPath())
         val success: Boolean = TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context.assets, inputAsset, wineFolder)
         if (!success) {
@@ -2586,7 +2590,11 @@ private fun extractx86_64InputDlls(context: Context, container: Container) {
     val wineVersion: String? = container.getWineVersion()
     Log.d("XServerDisplayActivity", "x86_64 Input DLL Extraction Verification: Container Wine version: " + wineVersion)
     if ("proton-9.0-x86_64" == wineVersion) {
-        val wineFolder: File = File(imageFs.getWinePath() + "/lib/wine/")
+        // Get WineInfo for flexible DLL paths
+        val contentsManager = ContentsManager(context)
+        val wineInfo = WineInfo.fromIdentifier(context, contentsManager, wineVersion)
+        val wineDllPath = wineInfo.getFullWineDllPath() ?: (imageFs.getWinePath() + "/lib/wine")
+        val wineFolder: File = File(wineDllPath)
         Log.d("XServerDisplayActivity", "Extracting input dlls to " + wineFolder.getPath())
     } else Log.d("XServerDisplayActivity", "Wine version is not proton-9.0-x86_64, skipping input dlls extraction")
 }
@@ -2659,7 +2667,7 @@ private fun setupWineSystemFiles(
     // val wincomponents = if (shortcut != null) shortcut.getExtra("wincomponents", container.winComponents) else container.winComponents
     val wincomponents = container.winComponents
     if (!wincomponents.equals(container.getExtra("wincomponents"))) {
-        extractWinComponentFiles(context, firstTimeBoot, imageFs, container, containerManager, onExtractFileListener)
+        extractWinComponentFiles(context, firstTimeBoot, imageFs, container, containerManager, contentsManager, onExtractFileListener)
         container.putExtra("wincomponents", wincomponents)
         containerDataChanged = true
     }
@@ -2761,10 +2769,10 @@ private fun extractDXWrapperFiles(
 
     when (splitDxWrapper) {
         "wined3d" -> {
-            restoreOriginalDllFiles(context, container, containerManager, imageFs, *dlls)
+            restoreOriginalDllFiles(context, container, containerManager, imageFs, contentsManager, *dlls)
         }
         "cnc-ddraw" -> {
-            restoreOriginalDllFiles(context, container, containerManager, imageFs, *dlls)
+            restoreOriginalDllFiles(context, container, containerManager, imageFs, contentsManager, *dlls)
             val assetDir = "dxwrapper/cnc-ddraw-" + DefaultVersion.CNC_DDRAW
             val configFile = File(rootDir, ImageFs.WINEPREFIX + "/drive_c/ProgramData/cnc-ddraw/ddraw.ini")
             if (!configFile.isFile) FileUtils.copy(context, "$assetDir/ddraw.ini", configFile)
@@ -2807,7 +2815,7 @@ private fun extractDXWrapperFiles(
             val profile: ContentProfile? = contentsManager.getProfileByEntryName(dxwrapper)
             // This block handles dxvk-VERSION strings
             Timber.i("Extracting DXVK/D8VK DLLs for dxwrapper: $dxwrapper")
-            restoreOriginalDllFiles(context, container, containerManager, imageFs, "d3d12.dll", "d3d12core.dll", "ddraw.dll")
+            restoreOriginalDllFiles(context, container, containerManager, imageFs, contentsManager, "d3d12.dll", "d3d12core.dll", "ddraw.dll")
             if (profile != null) {
                 Timber.d("Applying user-defined DXVK content profile: " + dxwrapper)
                 contentsManager.applyContent(profile);
@@ -2846,6 +2854,7 @@ private fun restoreOriginalDllFiles(
     container: Container,
     containerManager: ContainerManager,
     imageFs: ImageFs,
+    contentsManager: ContentsManager,
     vararg dlls: String,
 ) {
     val rootDir = imageFs.rootDir
@@ -2891,10 +2900,14 @@ private fun restoreOriginalDllFiles(
         var system32dlls: File? = null
         var syswow64dlls: File? = null
 
-        if (container.wineVersion.contains("arm64ec")) system32dlls = File(imageFs.getWinePath() + "/lib/wine/aarch64-windows")
-        else system32dlls = File(imageFs.getWinePath() + "/lib/wine/x86_64-windows")
+        // Get WineInfo for flexible DLL paths
+        val wineInfo = WineInfo.fromIdentifier(context, contentsManager, container.wineVersion)
+        val wineDllPath = wineInfo.getFullWineDllPath() ?: (imageFs.getWinePath() + "/lib/wine")
 
-        syswow64dlls = File(imageFs.getWinePath() + "/lib/wine/i386-windows")
+        if (container.wineVersion.contains("arm64ec")) system32dlls = File(wineDllPath + "/aarch64-windows")
+        else system32dlls = File(wineDllPath + "/x86_64-windows")
+
+        syswow64dlls = File(wineDllPath + "/i386-windows")
 
 
         for (dll in dlls) {
@@ -2913,6 +2926,7 @@ private fun extractWinComponentFiles(
     imageFs: ImageFs,
     container: Container,
     containerManager: ContainerManager,
+    contentsManager: ContentsManager,
     // shortcut: Shortcut?,
     onExtractFileListener: OnExtractFileListener?,
 ) {
@@ -2968,7 +2982,7 @@ private fun extractWinComponentFiles(
             WineUtils.setWinComponentRegistryKeys(systemRegFile, identifier, useNative)
         }
 
-        if (!dlls.isEmpty()) restoreOriginalDllFiles(context, container, containerManager, imageFs, *dlls.toTypedArray())
+        if (!dlls.isEmpty()) restoreOriginalDllFiles(context, container, containerManager, imageFs, contentsManager, *dlls.toTypedArray())
     } catch (e: JSONException) {
         Timber.e("Failed to read JSON: $e")
     }
