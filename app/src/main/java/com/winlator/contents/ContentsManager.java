@@ -217,7 +217,6 @@ public class ContentsManager {
                 || profile.type == ContentProfile.ContentType.CONTENT_TYPE_PROTON) {
             File bin = new File(file, profile.wineBinPath);
             File lib = new File(file, profile.wineLibPath);
-            File cp = new File(file, profile.winePrefixPack);
             File dllPath = new File(file, profile.wineDllPath);
 
             // Validate all required paths exist
@@ -231,11 +230,17 @@ public class ContentsManager {
                 callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
                 return;
             }
-            if (!cp.exists() || !cp.isFile()) {
-                Log.e("ContentsManager", "Wine prefix pack not found: " + profile.winePrefixPack);
-                callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
-                return;
+            
+            // Prefix pack is optional - only validate if specified in profile
+            if (profile.winePrefixPack != null && !profile.winePrefixPack.isEmpty()) {
+                File cp = new File(file, profile.winePrefixPack);
+                if (!cp.exists() || !cp.isFile()) {
+                    Log.e("ContentsManager", "Wine prefix pack not found: " + profile.winePrefixPack);
+                    callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
+                    return;
+                }
             }
+            
             if (!dllPath.exists() || !dllPath.isDirectory()) {
                 Log.e("ContentsManager", "Wine DLL directory not found: " + profile.wineDllPath);
                 callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
