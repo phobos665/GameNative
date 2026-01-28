@@ -177,21 +177,21 @@ public class ContentsManager {
         if (!ret)
             ret = TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context, uri, file);
         if (!ret) {
-            callback.onFailed(InstallFailedReason.ERROR_BADTAR, null);
+            callback.onFailed(InstallFailedReason.ERROR_BADTAR, new Exception("Failed to extract archive"));
             return;
         }
 
         File proFile = new File(file, PROFILE_NAME);
         if (!proFile.exists()) {
             Log.e("ContentsManager", "profile.json not found");
-            callback.onFailed(InstallFailedReason.ERROR_NOPROFILE, null);
+            callback.onFailed(InstallFailedReason.ERROR_NOPROFILE, new Exception("profile.json not found"));
             return;
         }
 
         ContentProfile profile = readProfile(proFile);
         if (profile == null) {
             Log.e("ContentsManager", "Failed to parse profile.json");
-            callback.onFailed(InstallFailedReason.ERROR_BADPROFILE, null);
+            callback.onFailed(InstallFailedReason.ERROR_BADPROFILE, new Exception("Failed to parse profile.json"));
             return;
         }
 
@@ -200,7 +200,8 @@ public class ContentsManager {
             File tmpFile = new File(file, contentFile.source);
             if (!tmpFile.exists() || !tmpFile.isFile()
                     || !isSubPath(file.getAbsolutePath(), tmpFile.getAbsolutePath())) {
-                callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
+                callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES,
+                        new Exception("Missing or invalid file: " + contentFile.source));
                 return;
             }
 
@@ -208,7 +209,8 @@ public class ContentsManager {
             if (!isSubPath(imagefsPath, realPath)
                     || isSubPath(ContentsManager.getContentDir(context).getAbsolutePath(), realPath)
                     || realPath.contains("dosdevices")) {
-                callback.onFailed(InstallFailedReason.ERROR_UNTRUSTPROFILE, null);
+                callback.onFailed(InstallFailedReason.ERROR_UNTRUSTPROFILE,
+                        new Exception("Untrusted file path: " + contentFile.target));
                 return;
             }
         }
@@ -222,28 +224,32 @@ public class ContentsManager {
             // Validate all required paths exist
             if (!bin.exists() || !bin.isDirectory()) {
                 Log.e("ContentsManager", "Wine bin directory not found: " + profile.wineBinPath);
-                callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
+                callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES,
+                        new Exception("Wine bin directory not found: " + profile.wineBinPath));
                 return;
             }
             if (!lib.exists() || !lib.isDirectory()) {
                 Log.e("ContentsManager", "Wine lib directory not found: " + profile.wineLibPath);
-                callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
+                callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES,
+                        new Exception("Wine lib directory not found: " + profile.wineLibPath));
                 return;
             }
-            
+
             // Prefix pack is optional - only validate if specified in profile
             if (profile.winePrefixPack != null && !profile.winePrefixPack.isEmpty()) {
                 File cp = new File(file, profile.winePrefixPack);
                 if (!cp.exists() || !cp.isFile()) {
                     Log.e("ContentsManager", "Wine prefix pack not found: " + profile.winePrefixPack);
-                    callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
+                    callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES,
+                            new Exception("Wine prefix pack not found: " + profile.winePrefixPack));
                     return;
                 }
             }
-            
+
             if (!dllPath.exists() || !dllPath.isDirectory()) {
                 Log.e("ContentsManager", "Wine DLL directory not found: " + profile.wineDllPath);
-                callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES, null);
+                callback.onFailed(InstallFailedReason.ERROR_MISSINGFILES,
+                        new Exception("Wine DLL directory not found: " + profile.wineDllPath));
                 return;
             }
         }
@@ -256,17 +262,20 @@ public class ContentsManager {
         // incrementation)
         File installPath = getInstallDir(context, profile);
         if (installPath.exists()) {
-            callback.onFailed(InstallFailedReason.ERROR_EXIST, null);
+            callback.onFailed(InstallFailedReason.ERROR_EXIST,
+                    new Exception("Installation already exists: " + profile.verName));
             return;
         }
 
         if (!installPath.mkdirs()) {
-            callback.onFailed(InstallFailedReason.ERROR_UNKNOWN, null);
+            callback.onFailed(InstallFailedReason.ERROR_UNKNOWN,
+                    new Exception("Failed to create installation directory"));
             return;
         }
 
         if (!getTmpDir(context).renameTo(installPath)) {
-            callback.onFailed(InstallFailedReason.ERROR_UNKNOWN, null);
+            callback.onFailed(InstallFailedReason.ERROR_UNKNOWN,
+                    new Exception("Failed to move files to installation directory"));
             return;
         }
         // For Wine/Proton, normalize directory structure and set executable permissions
