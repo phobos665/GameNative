@@ -14,6 +14,7 @@ import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 import kotlin.io.path.name
 import timber.log.Timber
+import java.util.Locale
 
 object FileUtils {
 
@@ -203,5 +204,14 @@ object FileUtils {
             // Timber.e(e)
             false
         }
+    }
+
+    fun normalizeProcessName(name: String): String {
+        val trimmed = name.trim().trim('"')
+        val base = trimmed.substringAfterLast('/').substringAfterLast('\\')
+        val lower = base.lowercase(Locale.getDefault())
+        val noExe = if (lower.endsWith(".exe")) lower.removeSuffix(".exe") else lower
+        // Escape spaces for Linux compatibility
+        return noExe.replace(" ", "\\ ")
     }
 }
