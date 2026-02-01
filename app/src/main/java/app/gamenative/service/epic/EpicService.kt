@@ -303,6 +303,10 @@ class EpicService : Service() {
                 ?: EpicManager.ManifestSizes(installSize = 0L, downloadSize = 0L)
         }
 
+        suspend fun getLaunchParams(context: Context, game: EpicGame): String? {
+            return getInstance()?.epicManager?.getLaunchParams(context, game)
+        }
+
         fun downloadGame(context: Context, appId: Int, dlcGameIds: List<Int>, installPath: String): Result<DownloadInfo> {
             val instance = getInstance() ?: return Result.failure(Exception("Service not available"))
 

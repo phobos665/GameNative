@@ -144,6 +144,87 @@ object EpicAuthClient {
         }
     }
 
+    // Grabs temporary game token needed for game authentication (to get OVT)
+    suspend fun getGameToken(accessToken: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://${EpicConstants.OAUTH_HOST}/account/api/oauth/exchange"
+            
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $accessToken")
+                .header("User-Agent", EpicConstants.USER_AGENT)
+                .get()
+                .build()
+            
+            val response = httpClient.newCall(request).execute()
+            val body = response.body?.string() ?: ""
+            
+            if (!response.isSuccessful) {
+                Timber.e("Get game token failed: ${response.code} - $body")
+                return@withContext Result.failure(Exception("HTTP ${response.code}: $body"))
+            }
+            
+            val json = JSONObject(body)
+            
+            if (json.has("errorCode")) {
+                val errorCode = json.getString("errorCode")
+                val errorMessage = json.optString("errorMessage", "Failed to get game token")
+                Timber.e("Epic game token error: $errorCode - $errorMessage")
+                return@withContext Result.failure(Exception("$errorCode: $errorMessage"))
+            }
+            
+            val code = json.getString("code")
+            
+            Timber.i("Successfully obtained game token")
+            Result.success(code)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get game token")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getOwnershipToken(
+    accessToken: String,
+    accountId: String,
+    namespace: String,
+    catalogItemId: String
+): Result<ByteArray> = withContext(Dispatchers.IO) {
+    try {
+        val url = "https://${EpicConstants.ECOMMERCE_HOST}/ecommerceintegration/api/public/" +
+                  "platforms/EPIC/identities/$accountId/ownershipToken"
+        
+        val requestBody = FormBody.Builder()
+            .add("nsCatalogItemId", "$namespace:$catalogItemId")
+            .build()
+        
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $accessToken")
+            .header("User-Agent", EpicConstants.USER_AGENT)
+            .post(requestBody)
+            .build()
+        
+        val response = httpClient.newCall(request).execute()
+        
+        if (!response.isSuccessful) {
+            Timber.e("Get ownership token failed: ${response.code}")
+            return@withContext Result.failure(Exception("HTTP ${response.code}"))
+        }
+        
+        val ovtBytes = response.body?.bytes() ?: byteArrayOf()
+        
+        if (ovtBytes.isEmpty()) {
+            return@withContext Result.failure(Exception("Empty ownership token response"))
+        }
+        
+        Timber.i("Successfully obtained ownership token (${ovtBytes.size} bytes)")
+        Result.success(ovtBytes)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to get ownership token")
+        Result.failure(e)
+    }
+}
+
     private fun parseExpiresAt(json: JSONObject): Long {
         return try {
             // Try to get as long first (epoch milliseconds)

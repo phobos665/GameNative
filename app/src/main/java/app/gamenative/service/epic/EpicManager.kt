@@ -178,6 +178,44 @@ class EpicManager @Inject constructor(
         val mainGameItem: EpicMainGameItem?,
     )
 
+
+    suspend fun getLaunchParams(context: Context, game: EpicGame, language: String = "en-US"): String {
+        // Check game is offline.
+        if(game.canRunOffline && !game.requiresOT) {
+            return "";
+        }
+        
+        val gameToken = EpicAuthManager.getGameToken(context)
+            ?: return ""
+        
+        if(!gameToken){
+            throw Exception("Failed to get game token for launch params")
+        }
+
+        val ownershipToken = EpicAuthManager.getOwnershipToken(context, game.appName)
+
+        if(!ownershipToken){
+            throw Exception("Failed to get ownership token for launch params")
+        }
+    
+        // TODO:
+        // Get Game Token if offline is false.
+        // Get ownership Vertification Token (OVT) if offline is false
+        // Launch game with parameters. (We should look to get these when doing wineCommand)
+
+        return "-Auth_LOGIN=unused " +
+            "-AUTH_PASSWORD=${gameToken.authCode} " + // The exchange code
+            "-AUTH_TYPE=exchangecode " +
+            "-epicapp=${game.appName} " +
+            "-epicenv=Prod " +
+            "-EpicPortal " +
+            "-epicusername=${gameToken.displayName} " +
+            "-epicuserid=${gameToken.accountId} " +
+            "-epiclocale=$language " + // TODO: Get system language code
+            "-epicsandboxid=${game.namespace} " +
+            "-epicovt=$ownershipToken "
+    }
+
     /**
      * Refresh the entire library (called manually by user or after login)
      * Fetches all games from Epic via Legendary and updates the database
