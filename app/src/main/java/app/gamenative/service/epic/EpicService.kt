@@ -146,10 +146,9 @@ class EpicService : Service() {
             context: Context,
             game: EpicGame,
             offline: Boolean = false,
-            userDisplayName: String? = null,
             languageCode: String = "en-US"
         ): Result<List<String>> {
-            return EpicGameLauncher.buildLaunchParameters(context, game, offline, userDisplayName, languageCode)
+            return EpicGameLauncher.buildLaunchParameters(context, game, offline, languageCode)
         }
 
         /**

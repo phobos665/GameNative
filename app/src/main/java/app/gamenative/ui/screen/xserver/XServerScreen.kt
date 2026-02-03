@@ -1694,7 +1694,7 @@ private fun setupXEnvironment(
         guestProgramLauncherComponent.setContainer(container);
         guestProgramLauncherComponent.setWineInfo(xServerState.value.wineInfo);
         val guestExecutable = "wine explorer /desktop=shell," + xServer.screenInfo + " " +
-            getWineStartCommand(appId, container, bootToContainer, testGraphics, appLaunchInfo, envVars, guestProgramLauncherComponent) +
+            getWineStartCommand(context, appId, container, bootToContainer, testGraphics, appLaunchInfo, envVars, guestProgramLauncherComponent) +
             (if (container.execArgs.isNotEmpty()) " " + container.execArgs else "")
         guestProgramLauncherComponent.isWoW64Mode = wow64Mode
         guestProgramLauncherComponent.guestExecutable = guestExecutable
@@ -1866,6 +1866,7 @@ private fun setupXEnvironment(
     return environment
 }
 private fun getWineStartCommand(
+    context: Context,
     appId: String,
     container: Container,
     bootToContainer: Boolean,
@@ -1960,8 +1961,15 @@ private fun getWineStartCommand(
         // The container setup in ContainerUtils maps the game install path to A: drive
         val epicCommand = "A:\\$relativePath".replace("/", "\\")
 
-        Timber.tag("XServerScreen").i("Epic launch command: $epicCommand")
-        return "winhandler.exe $epicCommand"
+        // TODO: check offline??
+        val runArguments: List<String> = runBlocking {
+            EpicService.buildLaunchParameters(context, game, false).getOrNull() ?: listOf()
+        }
+
+        val launchCommand = "winhandler.exe $epicCommand " + runArguments.joinToString(" ")
+        Timber.tag("XServerScreen").i("Epic launch command: $launchCommand")
+
+        return launchCommand
     } else if (isCustomGame) {
         // For Custom Games, we can launch even without appLaunchInfo
         // Use the executable path from container config. If missing, try to auto-detect

@@ -2,7 +2,7 @@ package app.gamenative.service.epic
 
 import android.content.Context
 import app.gamenative.data.EpicGame
-import app.gamenative.data.EpicEpicEpicGameToken
+import app.gamenative.data.EpicGameToken
 import timber.log.Timber
 import java.io.File
 
@@ -34,54 +34,52 @@ object EpicGameLauncher {
         context: Context,
         game: EpicGame,
         offline: Boolean = false,
-        userDisplayName: String? = null,
         languageCode: String = "en-US"
     ): Result<List<String>> {
         return try {
             val params = mutableListOf<String>()
 
             // Check if game can run offline
-            if (offline && !game.canRunOffline) {
-                Timber.w("Game ${game.appName} is not marked for offline use (may still work)")
+            if (game.canRunOffline) {
+                Timber.tag("EPIC").i("${game.appName} can run offline, using offline launch...")
+                return Result.success(params)
             }
 
-            // Get authentication tokens if online mode
-            val gameToken: EpicEpicGameToken?
-            val ownershipTokenPath: String?
+            // Check if game can run offline
+            if (offline) {
+                Timber.tag("EPIC").i("Device is offline. Launching ${game.appName} in offline mode...")
+                return Result.success(params)
+            }
 
-            if (!offline) {
-                Timber.d("Getting game launch token for ${game.appName}...")
+            Timber.tag("EPIC").d("${game.appName} requires online launch, Getting game launch token for ${game.appName}...")
 
-                val tokenResult = EpicAuthManager.getGameLaunchToken(
-                    context = context,
-                    namespace = game.namespace,
-                    catalogItemId = game.catalogId,
-                    requiresOwnershipToken = game.requiresOT
-                )
+            val tokenResult = EpicAuthManager.getGameLaunchToken(
+                context = context,
+                namespace = game.namespace,
+                catalogItemId = game.catalogId,
+                requiresOwnershipToken = game.requiresOT
+            )
 
-                if (tokenResult.isFailure) {
-                    return Result.failure(tokenResult.exceptionOrNull() ?: Exception("Failed to get launch token"))
-                }
+            if (tokenResult.isFailure) {
+                return Result.failure(tokenResult.exceptionOrNull() ?: Exception("Failed to get launch token"))
+            }
 
-                gameToken = tokenResult.getOrNull()!!
+            val gameToken:EpicGameToken? = tokenResult.getOrNull()!!
 
-                // Save ownership token to temp file if present
-                ownershipTokenPath = if (gameToken.ownershipToken != null) {
-                    saveOwnershipTokenToFile(context, game.namespace, game.catalogId, gameToken.ownershipToken)
-                } else {
-                    null
-                }
-
-                Timber.i("Game launch token obtained for ${game.appName}")
+            if(gameToken == null){
+                Timber.tag("EPIC").d("Game Token is blank for ${game.appName}")
             } else {
-                // Offline mode - use dummy token
-                gameToken = null
-                ownershipTokenPath = null
-                Timber.i("Launching ${game.appName} in offline mode")
+                Timber.tag("EPIC").d("Got Game Token for ${game.appName}")
             }
 
-            // Build Epic Games Services parameters
-            // Based on Legendary's implementation in get_launch_parameters()
+            // Save ownership token to temp file if present
+            val ownershipTokenPath = if (gameToken?.ownershipToken != null) {
+                saveOwnershipTokenToFile(context, game.namespace, game.catalogId, gameToken.ownershipToken!!)
+            } else {
+                null
+            }
+
+            Timber.tag("EPIC").i("Game launch token obtained for ${game.appName}")
 
             // Authentication parameters
             params.add("-AUTH_LOGIN=unused")
@@ -94,7 +92,8 @@ object EpicGameLauncher {
             params.add("-EpicPortal")
 
             // User information parameters
-            val displayName = userDisplayName ?: gameToken?.accountId ?: "GameNativeUser"
+            // TODO: Update and check this.
+            val displayName = "GameNativeUser"
             val accountId = gameToken?.accountId ?: "0"
 
             params.add("-epicusername=$displayName")
@@ -105,14 +104,14 @@ object EpicGameLauncher {
             // Ownership token for DRM-protected games
             if (ownershipTokenPath != null) {
                 params.add("-epicovt=$ownershipTokenPath")
-                Timber.d("Added ownership token path: $ownershipTokenPath")
+                Timber.tag("EPIC").d("Added ownership token path: $ownershipTokenPath")
             }
 
             // Additional command-line parameters from game metadata
-            // This would come from game.metadata.customAttributes.AdditionalCommandLine
+            // This would come from game.metadata.customAttributes.AdditionalCommandLine -- We should take this into account if need be
             // TODO: Parse and add additional parameters if available in metadata
 
-            Timber.d("Built ${params.size} launch parameters for ${game.appName}")
+            Timber.tag("EPIC").d("Built ${params.size} launch parameters for ${game.appName}")
             Result.success(params)
         } catch (e: Exception) {
             Timber.e(e, "Failed to build launch parameters")
@@ -146,7 +145,7 @@ object EpicGameLauncher {
 
         tokenFile.writeBytes(tokenBytes)
 
-        Timber.d("Ownership token saved to: ${tokenFile.absolutePath}")
+        Timber.tag("EPIC").d("Ownership token saved to: ${tokenFile.absolutePath}")
         return tokenFile.absolutePath
     }
 
@@ -161,7 +160,7 @@ object EpicGameLauncher {
                 tempDir.listFiles()?.forEach { file ->
                     if (file.extension == "ovt") {
                         file.delete()
-                        Timber.d("Deleted ownership token file: ${file.name}")
+                        Timber.tag("EPIC").d("Deleted ownership token file: ${file.name}")
                     }
                 }
             }
@@ -185,7 +184,7 @@ object EpicGameLauncher {
 
         // If game requires ownership token, must be online
         if (game.requiresOT) {
-            Timber.d("Game ${game.appName} requires ownership token - must launch online")
+            Timber.tag("EPIC").d("Game ${game.appName} requires ownership token - must launch online")
             return false
         }
 
@@ -242,7 +241,7 @@ object EpicGameLauncher {
         // User-provided additional arguments
         command.addAll(additionalArgs)
 
-        Timber.d("Launch command: ${command.joinToString(" ")}")
+        Timber.tag("EPIC").d("Launch command: ${command.joinToString(" ")}")
         return command
     }
 }
