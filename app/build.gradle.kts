@@ -56,8 +56,8 @@ android {
         minSdk = 26
         targetSdk = 28
 
-        versionCode = 9
-        versionName = "0.7.0"
+        versionCode = 10
+        versionName = "0.7.1"
 
         buildConfigField("boolean", "GOLD", "false")
         fun secret(name: String) =
@@ -84,6 +84,7 @@ android {
         // Localization support - specify which languages to include
         resourceConfigurations += listOf(
             "en",      // English (default)
+            "es",      // Spanish
             "da",      // Danish
             "pt-rBR",  // Portuguese (Brazilian)
             "zh-rTW",  // Traditional Chinese
