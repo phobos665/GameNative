@@ -1793,7 +1793,6 @@ private fun setupXEnvironment(
         val graphicsDriverConfig = KeyValueSet(container.getGraphicsDriverConfig())
         if (graphicsDriverConfig.get("version").lowercase(Locale.getDefault()).contains("gen8")) {
             var tuDebug = envVars.get("TU_DEBUG")
-            if (!tuDebug.contains("deck_emu")) tuDebug = (if (!tuDebug.isEmpty()) "$tuDebug," else "") + "deck_emu"
             if (!tuDebug.contains("nolrz")) tuDebug = (if (!tuDebug.isEmpty()) "$tuDebug," else "") + "nolrz"
             envVars.put("TU_DEBUG", tuDebug)
         }
@@ -2282,35 +2281,6 @@ private fun installVcRedist(context: RedistContext) {
         }
 }
 
-private fun installDotNetFramework(context: RedistContext) {
-    val dotnetDirs = listOf("dotNetFx", "dotnet", "DotNet")
-
-    for (dirName in dotnetDirs) {
-        val dotnetDir = File(context.commonRedistDir, dirName)
-        if (!dotnetDir.exists() || !dotnetDir.isDirectory()) continue
-
-        dotnetDir.walkTopDown()
-            .filter { it.isFile &&
-                (it.name.startsWith("dotNetFx", ignoreCase = true) ||
-                 it.name.contains(".NET Framework", ignoreCase = true) ||
-                 it.name.startsWith("NDP", ignoreCase = true)) &&
-                it.name.endsWith(".exe", ignoreCase = true) }
-            .forEach { exeFile ->
-                try {
-                    val relativePath = exeFile.relativeTo(context.commonRedistDir).path.replace('/', '\\')
-                    val winePath = "${context.driveLetter}:\\_CommonRedist\\$relativePath"
-                    PluviaApp.events.emit(AndroidEvent.SetBootingSplashText("Installing .NET Framework..."))
-                    Timber.i("Installing .NET Framework: $winePath")
-                    val cmd = "wine $winePath /q /norestart && wineserver -k"
-                    val output = context.guestProgramLauncherComponent.execShellCommand(cmd)
-                    Timber.i(".NET Framework installation output: $output")
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to install .NET Framework ${exeFile.name}")
-                }
-            }
-    }
-}
-
 /**
  * Installs OpenAL redistributables (oalinst.exe) (https://www.openal.org/)
  * Helps with 3D audio implementations between 2001-2010
@@ -2422,7 +2392,6 @@ private fun installRedistributables(
         }
 
         installVcRedist(redistContext)
-        installDotNetFramework(redistContext)
         installOpenAL(redistContext)
         installPhysX(redistContext)
         installXNAFramework(redistContext)

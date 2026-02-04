@@ -19,6 +19,8 @@ This is a fork of [Pluvia](https://github.com/oxters168/Pluvia), a Steam client 
 ## Support
 To report issues or receive support, join the [Discord server](https://discord.gg/2hKv4VfZfE)
 
+Do not create issues on GitHub as they will be automatically closed!
+
 You can support GameNative on Ko-fi at https://ko-fi.com/gamenative
 
 ## Building

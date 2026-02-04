@@ -937,30 +937,14 @@
     <string name="wine_proton_containers_in_use">Contenedores que usan esta versión:</string>
     <string name="wine_proton_no_containers_warning">Ningún contenedor está usando actualmente esta versión.</string>
     <string name="wine_proton_containers_will_break">Estos contenedores dejarán de funcionar si continúas:</string>
+    <string name="auth_webview_title">Autorización</string>
 
-    <!-- GOG Settings -->
+    <!-- GOG Integration -->
     <string name="gog_integration_title">Integración de GOG (Alpha)</string>
-    <string name="gog_settings_login_title">Inicio de sesión en GOG</string>
+    <string name="gog_settings_login_title">Iniciar sesión</string>
     <string name="gog_settings_login_subtitle">Inicia sesión en tu cuenta de GOG</string>
-    <string name="gog_settings_sync_subtitle_syncing">Sincronizando…</string>
-    <string name="gog_settings_sync_subtitle_error">Error: %1$s</string>
-    <string name="gog_settings_sync_subtitle_success">✓ Sincronizados %1$d juegos</string>
-    <string name="gog_settings_sync_subtitle_default">Obtén tu biblioteca de juegos de GOG</string>
     <string name="gog_login_success_title">Inicio de sesión correcto</string>
-    <string name="gog_login_success_message">Has iniciado sesión en GOG.\nAhora sincronizaremos tu biblioteca en segundo plano.</string>
-
-    <!-- GOG Login Dialog -->
-    <string name="gog_login_title">Iniciar sesión en GOG</string>
-    <string name="gog_login_auto_auth_info">Pulsa \'Abrir inicio de sesión de GOG\' e inicia sesión. Una vez conectado, copia la URL y pégala abajo</string>
-    <string name="gog_login_auth_example">Ejemplo: https://embed.gog.com/on_login_success?origin=client&amp;code=aaa</string>
-    <string name="gog_login_open_button">Abrir inicio de sesión de GOG</string>
-    <string name="gog_login_auth_code_label">Código de autorización o URL de inicio de sesión con éxito</string>
-    <string name="gog_login_auth_code_placeholder">Pega el código o la URL aquí</string>
-    <string name="gog_login_button">Entrar</string>
     <string name="gog_login_cancel">Cancelar</string>
-    <string name="gog_login_browser_error">No se pudo abrir el navegador</string>
-
-    <!-- GOG Logout -->
     <string name="gog_settings_logout_title">Cerrar sesión</string>
     <string name="gog_settings_logout_subtitle">Cierra la sesión de tu cuenta de GOG</string>
     <string name="gog_logout_confirm_title">Cerrar sesión de GOG</string>
