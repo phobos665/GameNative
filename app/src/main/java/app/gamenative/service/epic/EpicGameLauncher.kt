@@ -7,8 +7,7 @@ import timber.log.Timber
 import java.io.File
 
 /**
- * Helper for launching Epic Games with proper authentication parameters
- * Based on Legendary's game launch implementation
+ * Helper functionality for launching Epic Games with correct execution params for online verification
  *
  * Handles:
  * - Getting authentication tokens before launch
@@ -90,8 +89,7 @@ object EpicGameLauncher {
             params.add("-EpicPortal")
 
             // User information parameters
-            // TODO: Update and check this.
-            val displayName = "GameNativeUser"
+            val displayName = "GameNativeUser" //! We should adjust this later and use the user's real displayName
             val accountId = gameToken?.accountId ?: "0"
 
             params.add("-epicusername=$displayName")
@@ -118,7 +116,7 @@ object EpicGameLauncher {
     }
 
     /**
-     * Save ownership token bytes to temporary file
+     * Save ownership token bytes to temp file
      * File path format: {temp_dir}/{namespace}{catalogItemId}.ovt
      *
      * @return Absolute path to the saved token file
@@ -149,7 +147,6 @@ object EpicGameLauncher {
 
     /**
      * Clean up temporary ownership token files after game exits
-     * Call this after the game process terminates
      */
     fun cleanupOwnershipTokens(context: Context) {
         try {
