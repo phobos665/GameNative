@@ -39,19 +39,17 @@ object EpicGameLauncher {
         return try {
             val params = mutableListOf<String>()
 
-            // Check if game can run offline
-            if (game.canRunOffline) {
-                Timber.tag("EPIC").i("${game.appName} can run offline, using offline launch...")
-                return Result.success(params)
-            }
-
-            // Check if game can run offline
+            // Do offline play if offline.
             if (offline) {
-                Timber.tag("EPIC").i("Device is offline. Launching ${game.appName} in offline mode...")
-                return Result.success(params)
+                if (game.canRunOffline) {
+                    Timber.tag("EPIC").i("Launching ${game.appName} in offline mode (no authentication)")
+                    return Result.success(params)
+                } else {
+                    Timber.tag("EPIC").w("${game.appName} cannot run offline, will attempt online launch")
+                }
             }
 
-            Timber.tag("EPIC").d("${game.appName} requires online launch, Getting game launch token for ${game.appName}...")
+            Timber.tag("EPIC").d("Launching ${game.appName} online, getting game launch token...")
 
             val tokenResult = EpicAuthManager.getGameLaunchToken(
                 context = context,
@@ -166,50 +164,6 @@ object EpicGameLauncher {
             }
         } catch (e: Exception) {
             Timber.e(e, "Failed to cleanup ownership token files")
-        }
-    }
-
-    /**
-     * Check if a game should be launched online or offline
-     *
-     * @param game Epic game to check
-     * @param forceOffline User preference to force offline
-     * @return true if should launch offline, false if should launch online
-     */
-    fun shouldLaunchOffline(game: EpicGame, forceOffline: Boolean): Boolean {
-        // If user forces offline, respect that
-        if (forceOffline) {
-            return true
-        }
-
-        // If game requires ownership token, must be online
-        if (game.requiresOT) {
-            Timber.tag("EPIC").d("Game ${game.appName} requires ownership token - must launch online")
-            return false
-        }
-
-        // Otherwise use game's offline capability setting
-        return game.canRunOffline
-    }
-
-    /**
-     * Get warning message if launching a game that may not work offline
-     *
-     * @param game Epic game to check
-     * @return Warning message, or null if no warning needed
-     */
-    fun getOfflineLaunchWarning(game: EpicGame): String? {
-        return when {
-            game.requiresOT && !game.canRunOffline ->
-                "This game requires an ownership verification token and cannot run offline. Online authentication is required."
-
-            game.requiresOT ->
-                "This game requires an ownership verification token and likely uses Denuvo DRM. It must be launched online."
-
-            !game.canRunOffline ->
-                "This game is not marked for offline use and may not work correctly without online authentication."
-
-            else -> null
         }
     }
 

@@ -2054,12 +2054,25 @@ private fun getWineStartCommand(
         // The container setup in ContainerUtils maps the game install path to A: drive
         val epicCommand = "A:\\$relativePath".replace("/", "\\")
 
-        // TODO: check offline??
+        // Get Epic launch parameters
+        Timber.tag("XServerScreen").d("Building Epic launch parameters for ${game.appName}...")
         val runArguments: List<String> = runBlocking {
-            EpicService.buildLaunchParameters(context, game, false).getOrNull() ?: listOf()
+            val result = EpicService.buildLaunchParameters(context, game, false)
+            if (result.isFailure) {
+                Timber.tag("XServerScreen").e(result.exceptionOrNull(), "Failed to build Epic launch parameters")
+            }
+            val params = result.getOrNull() ?: listOf()
+            Timber.tag("XServerScreen").i("Got ${params.size} Epic launch parameters")
+            params
         }
 
-        val launchCommand = "winhandler.exe $epicCommand " + runArguments.joinToString(" ")
+        val launchCommand = if (runArguments.isNotEmpty()) {
+            "winhandler.exe $epicCommand " + runArguments.joinToString(" ")
+        } else {
+            Timber.tag("XServerScreen").w("No Epic launch parameters available, launching without authentication")
+            "winhandler.exe $epicCommand"
+        }
+        
         Timber.tag("XServerScreen").i("Epic launch command: $launchCommand")
 
         return launchCommand
