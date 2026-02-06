@@ -14,3 +14,11 @@ internal val ROOM_MIGRATION_V7_to_V8 = object : Migration(7, 8) {
         connection.execSQL(DROP_TABLE + "steam_friend")
     }
 }
+
+internal val ROOM_MIGRATION_V10_to_V11 = object : Migration(10, 11) {
+    override fun migrate(connection: SQLiteConnection) {
+        // Add exclude column to gog_games table if not present
+        // This explicit migration ensures the column exists even if AutoMigration fails
+        connection.execSQL("ALTER TABLE gog_games ADD COLUMN exclude INTEGER NOT NULL DEFAULT 0")
+    }
+}
