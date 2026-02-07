@@ -50,7 +50,6 @@ import app.gamenative.service.SteamService
 import app.gamenative.ui.component.ConnectionStatusBanner
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGService
-import app.gamenative.ui.component.ConnectingServersScreen
 import app.gamenative.ui.component.dialog.GameFeedbackDialog
 import app.gamenative.ui.component.dialog.LoadingDialog
 import app.gamenative.ui.component.dialog.MessageDialog
@@ -340,44 +339,26 @@ fun PluviaMain(
                                         Timber.tag("IntentLaunch").i("Applied container config override for app ${launchRequest.appId}")
                                     }
 
+                                    // Navigate to Home if not already there (for pending launch requests)
                                     if (navController.currentDestination?.route != PluviaScreen.Home.route) {
                                         navController.navigate(PluviaScreen.Home.route) {
                                             popUpTo(navController.graph.startDestinationId) {
                                                 saveState = false
                                             }
-
-                                            if (updatedLaunchRequest.containerConfig != null) {
-                                                IntentLaunchManager.applyTemporaryConfigOverride(
-                                                    context,
-                                                    updatedLaunchRequest.appId,
-                                                    updatedLaunchRequest.containerConfig,
-                                                )
-                                                Timber.tag("IntentLaunch")
-                                                    .i("Applied container config override for app ${updatedLaunchRequest.appId}")
-                                            }
-
-                                            // Navigate to Home if not already there (for pending launch requests)
-                                            if (navController.currentDestination?.route != PluviaScreen.Home.route) {
-                                                navController.navigate(PluviaScreen.Home.route) {
-                                                    popUpTo(navController.graph.startDestinationId) {
-                                                        saveState = false
-                                                    }
-                                                }
-                                            }
-
-                                            viewModel.setLaunchedAppId(updatedLaunchRequest.appId)
-                                            viewModel.setBootToContainer(false)
-                                            preLaunchApp(
-                                                context = context,
-                                                appId = updatedLaunchRequest.appId,
-                                                setLoadingDialogVisible = viewModel::setLoadingDialogVisible,
-                                                setLoadingProgress = viewModel::setLoadingDialogProgress,
-                                                setLoadingMessage = viewModel::setLoadingDialogMessage,
-                                                setMessageDialogState = setMessageDialogState,
-                                                onSuccess = viewModel::launchApp,
-                                            )
                                         }
                                     }
+
+                                    viewModel.setLaunchedAppId(launchRequest.appId)
+                                    viewModel.setBootToContainer(false)
+                                    preLaunchApp(
+                                        context = context,
+                                        appId = launchRequest.appId,
+                                        setLoadingDialogVisible = viewModel::setLoadingDialogVisible,
+                                        setLoadingProgress = viewModel::setLoadingDialogProgress,
+                                        setLoadingMessage = viewModel::setLoadingDialogMessage,
+                                        setMessageDialogState = setMessageDialogState,
+                                        onSuccess = viewModel::launchApp,
+                                    )
                                 }
                             } else if (PluviaApp.xEnvironment == null) {
                                 // Only navigate if currently on LoginUser screen
@@ -530,9 +511,9 @@ fun PluviaMain(
 
             // Handle navigation when already logged in (e.g., app resumed with active session)
             // Only navigate if currently on LoginUser screen to avoid disrupting user's current view
-            if (SteamService.isLoggedIn && !SteamService.isGameRunning) {
+            if (SteamService.isLoggedIn && !SteamService.keepAlive) {
                 val targetRoute = viewModel.getPersistedRoute() ?: PluviaScreen.Home.route
-                navController.navigateFromLoginIfNeeded(targetRoute, "ResumeSession")]
+                navController.navigateFromLoginIfNeeded(targetRoute, "ResumeSession")
             }
         }
     }

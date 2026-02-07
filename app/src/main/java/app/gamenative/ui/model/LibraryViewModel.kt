@@ -15,7 +15,6 @@ import app.gamenative.data.LibraryItem
 import app.gamenative.data.SteamApp
 import app.gamenative.data.GOGGame
 import app.gamenative.data.EpicGame
-import app.gamenative.data.GameSource
 import app.gamenative.db.dao.SteamAppDao
 import app.gamenative.db.dao.GOGGameDao
 import app.gamenative.db.dao.EpicGameDao
@@ -38,6 +37,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -484,7 +484,7 @@ class LibraryViewModel @Inject constructor(
                 currentTab.showSteam
             }
             val includeGog = if (currentTab == app.gamenative.ui.enums.LibraryTab.ALL) {
-                _state.value.showGogInLibrary
+                _state.value.showGOGInLibrary
             } else {
                 currentTab.showSteam
             }
@@ -525,7 +525,7 @@ class LibraryViewModel @Inject constructor(
             val combined = buildList {
                 if (includeSteam) addAll(steamEntries)
                 if (includeOpen) addAll(customEntries)
-                if (includeGOG) addAll(gogEntries)
+                if (includeGog) addAll(gogEntries)
                 if (includeEpic) addAll(epicEntries)
             }.sortedWith(sortComparator).mapIndexed { idx, entry ->
                 entry.item.copy(index = idx, isInstalled = entry.isInstalled)

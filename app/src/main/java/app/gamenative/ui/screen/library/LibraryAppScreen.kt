@@ -90,6 +90,8 @@ import app.gamenative.ui.data.GameDisplayInfo
 import app.gamenative.ui.enums.AppOptionMenuType
 import app.gamenative.ui.internal.fakeAppInfo
 import app.gamenative.ui.screen.library.appscreen.CustomGameAppScreen
+import app.gamenative.ui.screen.library.appscreen.EpicAppScreen
+import app.gamenative.ui.screen.library.appscreen.GOGAppScreen
 import app.gamenative.ui.screen.library.appscreen.SteamAppScreen
 import app.gamenative.ui.screen.library.components.GameOptionsPanel
 import app.gamenative.ui.theme.PluviaTheme
@@ -98,13 +100,8 @@ import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil.CoilImage
 import app.gamenative.utils.SteamUtils
 import com.winlator.container.ContainerData
-import com.winlator.xenvironment.ImageFsInstaller
 import com.winlator.fexcore.FEXCoreManager
-import app.gamenative.ui.screen.library.appscreen.SteamAppScreen
-import app.gamenative.ui.screen.library.appscreen.CustomGameAppScreen
-import app.gamenative.ui.screen.library.appscreen.GOGAppScreen
-import app.gamenative.ui.screen.library.appscreen.EpicAppScreen
-import app.gamenative.ui.data.GameDisplayInfo
+import com.winlator.xenvironment.ImageFsInstaller
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

@@ -96,6 +96,16 @@ class MainViewModel @Inject constructor(
         _state.update { it.copy(isSteamConnected = false) }
     }
 
+    private val onRemotelyDisconnected: (SteamEvent.RemotelyDisconnected) -> Unit = {
+        Timber.tag("MainViewModel").i("Received remotely disconnected from Steam")
+        _state.update {
+            it.copy(
+                isSteamConnected = false,
+                connectionState = ConnectionState.DISCONNECTED,
+            )
+        }
+    }
+
     private val onLoggingIn: (SteamEvent.LogonStarted) -> Unit = {
         Timber.tag("MainViewModel").i("Received logon started")
     }
@@ -106,7 +116,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    private val onLogonEnded: (SteamEvent.LogonEnded) -> Unit = {
+    private val onLogonEnded: (SteamEvent.LogonEnded) -> Unit = { event ->
         Timber.tag("MainViewModel").i("Received logon ended")
         viewModelScope.launch {
             _uiEvent.send(MainUiEvent.OnLogonEnded(event.loginResult))

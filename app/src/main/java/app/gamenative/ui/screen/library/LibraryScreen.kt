@@ -235,15 +235,15 @@ private fun LibraryScreenContent(
         } else {
             WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         }
+        Modifier.padding(top = topPadding)
     } else {
         Modifier
     }
 
     Box(
-        Modifier
+        safePaddingModifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .then(safePaddingModifier)
             .onPreviewKeyEvent { keyEvent ->
                 // TODO: consider abstracting this
                 // Handle gamepad buttons

@@ -108,7 +108,6 @@ class UserLoginViewModel : ViewModel() {
         _loginState.update { currentState ->
             currentState.copy(
                 isLoggingIn = it.isAutoLoggingIn,
-                isSteamConnected = true,
             )
         }
     }
@@ -116,13 +115,13 @@ class UserLoginViewModel : ViewModel() {
     private val onSteamDisconnected: (SteamEvent.Disconnected) -> Unit = {
         Timber.tag("UserLoginViewModel").i("Received disconnected from Steam")
         _loginState.update { currentState ->
-            currentState.copy(isSteamConnected = false)
+            currentState.copy()
         }
     }
 
     private val onRemoteDisconnected: (SteamEvent.RemotelyDisconnected) -> Unit = {
         Timber.tag("UserLoginViewModel").i("Disconnected from steam remotely")
-        _loginState.update { it.copy(isSteamConnected = false) }
+        _loginState.update { it.copy() }
     }
 
     private val onLogonStarted: (SteamEvent.LogonStarted) -> Unit = {
@@ -314,13 +313,12 @@ class UserLoginViewModel : ViewModel() {
         }
     }
 
-    fun retryConnection(context: Context) {
+    fun retryConnection(context: android.content.Context) {
         // Reset error/login state if needed
         _loginState.update { currentState ->
             currentState.copy(
                 isLoggingIn = false,
                 loginResult = LoginResult.Failed,
-                isSteamConnected = false,
                 isQrFailed = false,
                 qrCode = null
             )
@@ -329,7 +327,7 @@ class UserLoginViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val intent = android.content.Intent(context, app.gamenative.service.SteamService::class.java)
-                context.startForegroundService(intent)
+                androidx.core.content.ContextCompat.startForegroundService(context, intent)
             } catch (e: Exception) {
                 Timber.tag("UserLoginViewModel").e(e, "Failed to restart SteamService in retryConnection")
                 showSnack("Failed to restart Steam connection: ${e.localizedMessage}")

@@ -27,8 +27,10 @@ import app.gamenative.events.AndroidEvent
 import app.gamenative.service.DownloadService
 import app.gamenative.service.SteamService
 import app.gamenative.service.SteamService.Companion.getAppDirPath
-import app.gamenative.ui.component.dialog.MessageDialog
+import app.gamenative.ui.component.dialog.GameManagerDialog
 import app.gamenative.ui.component.dialog.LoadingDialog
+import app.gamenative.ui.component.dialog.MessageDialog
+import app.gamenative.ui.component.dialog.state.GameManagerDialogState
 import app.gamenative.ui.component.dialog.state.MessageDialogState
 import app.gamenative.ui.data.AppMenuOption
 import app.gamenative.ui.data.GameDisplayInfo
@@ -57,11 +59,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
-import app.gamenative.ui.component.dialog.GameManagerDialog
-import app.gamenative.ui.component.dialog.state.GameManagerDialogState
-import com.winlator.core.GPUInformation
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import org.json.JSONObject
