@@ -10,13 +10,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.gamenative.data.AchievementInfo
 import app.gamenative.data.AchievementSchema
 import app.gamenative.service.SteamService
-import coil.compose.AsyncImage
+import com.skydoves.landscapist.ImageOptions
+import com.skydoves.landscapist.coil.CoilImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -165,10 +167,10 @@ private fun AchievementItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Achievement icon
-            AsyncImage(
-                model = if (isUnlocked) achievement.icon else achievement.iconGray,
-                contentDescription = achievement.displayName,
-                modifier = Modifier.size(48.dp)
+            CoilImage(
+                modifier = Modifier.size(48.dp),
+                imageModel = { if (isUnlocked) achievement.icon else achievement.iconGray },
+                imageOptions = ImageOptions(contentScale = ContentScale.Fit),
             )
 
             // Achievement info
