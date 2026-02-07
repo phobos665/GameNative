@@ -3389,7 +3389,7 @@ class SteamService : Service(), IChallengeUrlChanged {
                 return@withContext null
             }
 
-            // Request achievement data from Steam
+            // Request achievement data from Steam (following JavaSteam SampleAchievements pattern)
             val job = userStats.getUserStats(appId, steamId)
             val callback = job.await()
 
@@ -3398,19 +3398,86 @@ class SteamService : Service(), IChallengeUrlChanged {
                 return@withContext null
             }
 
-            // Get expanded achievements with metadata from schema
-            val expandedAchievements = callback.getExpandedAchievements("english")
-            val achievements = expandedAchievements.map { ach ->
+            Timber.d("========== ACHIEVEMENT RESPONSE DEBUG START ==========")
+            Timber.d("App ID: $appId")
+            Timber.d("Result: ${callback.result}")
+            Timber.d("Game ID: ${callback.gameId}")
+            Timber.d("CRC Stats: ${callback.crcStats}")
+            Timber.d("Schema size: ${callback.schema.size()}")
+            Timber.d("Schema KeyValues empty: ${callback.schemaKeyValues.children.isEmpty()}")
+            if (callback.schemaKeyValues.children.isNotEmpty()) {
+                Timber.d("Schema has stats section: ${callback.schemaKeyValues["stats"] != null}")
+                val statsKv = callback.schemaKeyValues["stats"]
+                if (statsKv != null) {
+                    Timber.d("Stats children count: ${statsKv.children.size}")
+                }
+            }
+            Timber.d("Stats count: ${callback.stats.size}")
+
+            // Get the raw achievement blocks (base game + DLCs) - following JavaSteam sample
+            val blocks = callback.achievementBlocks
+            Timber.d("Raw Achievement Blocks for app $appId: ${blocks.size}")
+            if (blocks.isEmpty()) {
+                Timber.w("No raw achievement blocks received from Steam for app $appId")
+                Timber.w("This could mean: no achievements, game not owned, or schema not available")
+                Timber.d("========== ACHIEVEMENT RESPONSE DEBUG END ==========")
+                return@withContext null
+            }
+            
+            blocks.forEachIndexed { i, block ->
+                val unlocked = block.unlockTime.count { it > 0 }
+                Timber.d("  RAW Block ${i + 1}:")
+                Timber.d("    Achievement ID: ${block.achievementId}")
+                Timber.d("    Total unlock entries: ${block.unlockTime.size}")
+                Timber.d("    Unlocked count: $unlocked")
+                Timber.d("    All unlock times: ${block.unlockTime}")
+                Timber.d("    Block metadata: name=${block.name}, displayName=${block.displayName}, desc=${block.description}")
+            }
+
+            // Get expanded individual achievements (following JavaSteam sample)
+            // NOTE: JavaSteam's getExpandedAchievements() has a bug where unlockTimestamp is always 0
+            // But the unlock times are in the raw block's unlockTime array at the same index
+            Timber.d("Getting expanded achievements...")
+            val expandedAchievements = callback.getExpandedAchievements()
+            
+            // Get the first raw block's unlock times (most games only have one block)
+            val rawUnlockTimes = if (blocks.isNotEmpty()) blocks[0].unlockTime else emptyList()
+            Timber.d("Expanded achievements: ${expandedAchievements.size}, Raw unlock times: ${rawUnlockTimes.size}")
+            
+            // Debug first few achievements
+            expandedAchievements.take(3).forEachIndexed { i, ach ->
+                val correctTime = rawUnlockTimes.getOrNull(i) ?: 0
+                Timber.d("  Achievement [$i]: ${ach.displayName}, buggy_time=${ach.unlockTimestamp}, correct_time=$correctTime")
+            }
+            Timber.d("========== ACHIEVEMENT RESPONSE DEBUG END ==========")
+
+            val achievements = expandedAchievements.mapIndexed { index, ach ->
+                // Use index to get correct unlock time from raw block (fixes JavaSteam bug)
+                val correctUnlockTime = rawUnlockTimes.getOrNull(index) ?: 0
+                val isUnlocked = correctUnlockTime > 0
+                
+                // Construct icon URLs following JavaSteam pattern:
+                // https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/{appId}/{iconHash}
+                val iconUrl = if (ach.icon?.isNotEmpty() == true) {
+                    "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/$appId/${ach.icon}"
+                } else ""
+
+                val iconGrayUrl = if (ach.iconGray?.isNotEmpty() == true) {
+                    "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/$appId/${ach.iconGray}"
+                } else ""
+
                 AchievementInfo(
                     apiName = ach.name ?: "",
-                    displayName = ach.displayName ?: "",
+                    displayName = ach.displayName ?: (ach.name ?: "Achievement #${ach.achievementId}"),
                     description = ach.description ?: "",
                     hidden = ach.hidden,
-                    icon = ach.icon ?: "",
-                    iconGray = ach.iconGray ?: "",
-                    defaultValue = if (ach.isUnlocked) 1 else 0,
+                    icon = iconUrl,
+                    iconGray = iconGrayUrl,
+                    isUnlocked = isUnlocked,
+                    unlockTimestamp = correctUnlockTime.toLong(), // Use correct timestamp from raw block
+                    defaultValue = if (isUnlocked) 1 else 0,
                 )
-            }
+            }.sortedByDescending { it.unlockTimestamp } // Sort by unlock time (most recent first, locked last)
 
             // Parse stats from callback (basic support)
             val stats = callback.stats.map { stat ->

@@ -10,6 +10,8 @@ data class AchievementInfo(
     val hidden: Boolean = false,
     val icon: String = "",
     val iconGray: String = "",
+    val isUnlocked: Boolean = false,
+    val unlockTimestamp: Long = 0, // Unix timestamp in seconds (multiply by 1000 for milliseconds)
     val defaultValue: Int = 0,
     val statName: String = "",
 )

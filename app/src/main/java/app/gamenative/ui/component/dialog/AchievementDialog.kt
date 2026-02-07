@@ -23,13 +23,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import java.io.File
 import java.nio.file.Path
-import java.nio.file.Paths
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Achievement viewer dialog that displays achievements for a game.
- * Shows achievement name, description, icon, and unlock status.
+ * Shows achievement name, description, icon, unlock status, and unlock timestamp.
+ * Follows JavaSteam UserStatsCallback parsing pattern.
  */
 @Composable
 fun AchievementDialog(
@@ -39,19 +41,18 @@ fun AchievementDialog(
     onDismiss: () -> Unit,
 ) {
     var schema by remember { mutableStateOf<AchievementSchema?>(null) }
-    var achievementStates by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    // Load achievement data
+    // Load achievement data from Steam (following JavaSteam pattern)
     LaunchedEffect(appId) {
         scope.launch {
             try {
                 isLoading = true
                 errorMessage = null
 
-                // Fetch schema
+                // Fetch schema and user stats from Steam
                 val fetchedSchema = withContext(Dispatchers.IO) {
                     SteamService.instance?.getAchievementSchema(appId)
                 }
@@ -63,13 +64,6 @@ fun AchievementDialog(
                 }
 
                 schema = fetchedSchema
-
-                // Load achievement states from achievements.ini
-                val states = withContext(Dispatchers.IO) {
-                    loadAchievementStates(settingsDir)
-                }
-                achievementStates = states
-
                 isLoading = false
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load achievements for app $appId")
@@ -102,19 +96,33 @@ fun AchievementDialog(
                         )
                     }
                     schema != null -> {
-                        AchievementList(
-                            achievements = schema!!.achievements,
-                            achievementStates = achievementStates,
-                            onToggleAchievement = { apiName ->
-                                scope.launch {
-                                    val newState = !(achievementStates[apiName] ?: false)
-                                    achievementStates = achievementStates + (apiName to newState)
-                                    withContext(Dispatchers.IO) {
-                                        saveAchievementState(settingsDir, apiName, newState)
-                                    }
+                        val achievements = schema!!.achievements
+                        val unlockedCount = achievements.count { it.isUnlocked }
+                        
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // Achievement stats header
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = "Progress: $unlockedCount / ${achievements.size}",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Text(
+                                        text = String.format("%.1f%% Complete", 
+                                            unlockedCount * 100.0 / achievements.size),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
                                 }
                             }
-                        )
+                            
+                            AchievementList(achievements = achievements)
+                        }
                     }
                 }
             }
@@ -131,19 +139,13 @@ fun AchievementDialog(
 @Composable
 private fun AchievementList(
     achievements: List<AchievementInfo>,
-    achievementStates: Map<String, Boolean>,
-    onToggleAchievement: (String) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(achievements) { achievement ->
-            AchievementItem(
-                achievement = achievement,
-                isUnlocked = achievementStates[achievement.apiName] ?: false,
-                onToggle = { onToggleAchievement(achievement.apiName) }
-            )
+            AchievementItem(achievement = achievement)
         }
     }
 }
@@ -152,12 +154,11 @@ private fun AchievementList(
 @Composable
 private fun AchievementItem(
     achievement: AchievementInfo,
-    isUnlocked: Boolean,
-    onToggle: () -> Unit,
 ) {
+    val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()) }
+    
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onToggle
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
@@ -166,10 +167,10 @@ private fun AchievementItem(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Achievement icon
+            // Achievement icon (following JavaSteam pattern - show colored icon if unlocked, gray if locked)
             CoilImage(
                 modifier = Modifier.size(48.dp),
-                imageModel = { if (isUnlocked) achievement.icon else achievement.iconGray },
+                imageModel = { if (achievement.isUnlocked) achievement.icon else achievement.iconGray },
                 imageOptions = ImageOptions(contentScale = ContentScale.Fit),
             )
 
@@ -183,9 +184,11 @@ private fun AchievementItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                
+                // Description or "Hidden achievement" text
                 if (achievement.description.isNotEmpty()) {
                     Text(
-                        text = if (achievement.hidden && !isUnlocked) {
+                        text = if (achievement.hidden && !achievement.isUnlocked) {
                             "Hidden achievement"
                         } else {
                             achievement.description
@@ -196,79 +199,29 @@ private fun AchievementItem(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+                
+                // Show unlock timestamp if unlocked (following JavaSteam pattern)
+                if (achievement.isUnlocked && achievement.unlockTimestamp > 0) {
+                    val unlockDate = dateFormat.format(Date(achievement.unlockTimestamp * 1000L))
+                    Text(
+                        text = "Unlocked: $unlockDate",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                    )
+                }
             }
 
             // Unlock status icon
             Icon(
-                imageVector = if (isUnlocked) Icons.Default.CheckCircle else Icons.Default.Lock,
-                contentDescription = if (isUnlocked) "Unlocked" else "Locked",
-                tint = if (isUnlocked) {
+                imageVector = if (achievement.isUnlocked) Icons.Default.CheckCircle else Icons.Default.Lock,
+                contentDescription = if (achievement.isUnlocked) "✓ UNLOCKED" else "✗ LOCKED",
+                tint = if (achievement.isUnlocked) {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 }
             )
         }
-    }
-}
-
-/**
- * Load achievement states from achievements.ini file
- * Format: [ACHIEVEMENTS]
- *         achievement_name=0/1
- */
-private fun loadAchievementStates(settingsDir: Path): Map<String, Boolean> {
-    val achievementsFile = settingsDir.resolve("achievements.ini").toFile()
-    if (!achievementsFile.exists()) {
-        return emptyMap()
-    }
-
-    val states = mutableMapOf<String, Boolean>()
-    try {
-        achievementsFile.readLines().forEach { line ->
-            val trimmed = line.trim()
-            if (trimmed.startsWith('[') || trimmed.isEmpty()) return@forEach
-
-            val parts = trimmed.split('=', limit = 2)
-            if (parts.size == 2) {
-                val apiName = parts[0].trim()
-                val value = parts[1].trim()
-                states[apiName] = value == "1"
-            }
-        }
-    } catch (e: Exception) {
-        Timber.e(e, "Failed to load achievement states")
-    }
-
-    return states
-}
-
-/**
- * Save achievement state to achievements.ini file
- */
-private fun saveAchievementState(settingsDir: Path, apiName: String, isUnlocked: Boolean) {
-    val achievementsFile = settingsDir.resolve("achievements.ini").toFile()
-    if (!achievementsFile.exists()) {
-        return
-    }
-
-    try {
-        val lines = achievementsFile.readLines().toMutableList()
-        var updated = false
-
-        for (i in lines.indices) {
-            val line = lines[i].trim()
-            if (line.startsWith(apiName + "=")) {
-                lines[i] = "$apiName=${if (isUnlocked) 1 else 0}"
-                updated = true
-                break
-            }
-        }
-
-        if (updated) {
-            achievementsFile.writeText(lines.joinToString("\n"))
-        }
-    } catch (e: Exception) {
-        Timber.e(e, "Failed to save achievement state for $apiName")
     }
 }
