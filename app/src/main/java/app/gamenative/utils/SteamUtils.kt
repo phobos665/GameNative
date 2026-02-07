@@ -30,6 +30,7 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.name
+import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 import okhttp3.*
 import org.json.JSONObject
@@ -990,6 +991,50 @@ object SteamUtils {
             "vietnamese",
         )
         supportedLanguagesFile.toFile().writeText(supportedLanguages.joinToString("\n"))
+
+        // Generate achievements and stats files
+        generateAchievementConfig(settingsDir, steamAppId)
+    }
+
+    /**
+     * Generates achievements.ini and stats.ini files in the steam_settings directory
+     * for SmartSteamEmu (SSE) to enable achievement tracking.
+     */
+    private fun generateAchievementConfig(settingsDir: Path, appId: Int) {
+        runCatching {
+            // Fetch achievement schema from Steam API
+            val schema = runBlocking { SteamService.instance?.getAchievementSchema(appId) }
+                ?: return
+
+            // Generate achievements.ini with all achievements unlocked by default
+            if (schema.achievements.isNotEmpty()) {
+                val achievementsFile = settingsDir.resolve("achievements.ini")
+                val achievementsContent = buildString {
+                    appendLine("[ACHIEVEMENTS]")
+                    schema.achievements.forEach { achievement ->
+                        // Default to 0 (not achieved), users can toggle in-game or through UI
+                        appendLine("${achievement.apiName}=${achievement.defaultValue}")
+                    }
+                }
+                achievementsFile.toFile().writeText(achievementsContent)
+                Timber.d("Generated achievements.ini for app $appId with ${schema.achievements.size} achievements")
+            }
+
+            // Generate stats.ini with default stat values
+            if (schema.stats.isNotEmpty()) {
+                val statsFile = settingsDir.resolve("stats.ini")
+                val statsContent = buildString {
+                    appendLine("[STATS]")
+                    schema.stats.forEach { stat ->
+                        appendLine("${stat.name}=${stat.defaultValue}")
+                    }
+                }
+                statsFile.toFile().writeText(statsContent)
+                Timber.d("Generated stats.ini for app $appId with ${schema.stats.size} stats")
+            }
+        }.onFailure { error ->
+            Timber.w(error, "Failed to generate achievement config for app $appId")
+        }
     }
 
     /**

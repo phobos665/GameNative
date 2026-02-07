@@ -25,6 +25,7 @@ import app.gamenative.PluviaApp
 import app.gamenative.service.DownloadService
 import app.gamenative.service.SteamService
 import app.gamenative.service.SteamService.Companion.getAppDirPath
+import app.gamenative.ui.component.dialog.AchievementDialog
 import app.gamenative.ui.component.dialog.MessageDialog
 import app.gamenative.ui.component.dialog.LoadingDialog
 import app.gamenative.ui.component.dialog.state.MessageDialogState
@@ -339,6 +340,21 @@ class SteamAppScreen : BaseAppScreen() {
 
         fun getGameManagerDialogState(gameId: Int): GameManagerDialogState? {
             return gameManagerDialogStates[gameId]
+        }
+
+        // Shared state for achievement dialog - set of gameIds that should show achievements
+        private val achievementDialogGameIds = mutableStateSetOf<Int>()
+
+        fun showAchievementDialog(gameId: Int) {
+            achievementDialogGameIds.add(gameId)
+        }
+
+        fun hideAchievementDialog(gameId: Int) {
+            achievementDialogGameIds.remove(gameId)
+        }
+
+        fun shouldShowAchievementDialog(gameId: Int): Boolean {
+            return achievementDialogGameIds.contains(gameId)
         }
 
         // Shared state for update/verify operation - map of gameId to AppOptionMenuType
@@ -835,6 +851,12 @@ class SteamAppScreen : BaseAppScreen() {
                 }
             ),
             AppMenuOption(
+                AppOptionMenuType.ViewAchievements,
+                onClick = {
+                    showAchievementDialog(gameId)
+                }
+            ),
+            AppMenuOption(
                 AppOptionMenuType.VerifyFiles,
                 onClick = {
                     // Show confirmation dialog before verifying
@@ -1080,6 +1102,17 @@ class SteamAppScreen : BaseAppScreen() {
             snapshotFlow { getGameManagerDialogState(gameId) }
                 .collect { state ->
                     gameManagerDialogState = state ?: GameManagerDialogState(false)
+                }
+        }
+
+        var showAchievementDialog by remember(gameId) {
+            mutableStateOf(shouldShowAchievementDialog(gameId))
+        }
+
+        LaunchedEffect(gameId) {
+            snapshotFlow { shouldShowAchievementDialog(gameId) }
+                .collect { shouldShow ->
+                    showAchievementDialog = shouldShow
                 }
         }
 
@@ -1575,6 +1608,19 @@ class SteamAppScreen : BaseAppScreen() {
                 },
                 onDismissRequest = {
                     hideGameManagerDialog(gameId)
+                }
+            )
+        }
+
+        if (showAchievementDialog) {
+            val appIdPath = getAppDirPath(gameId)
+            val settingsDir = Paths.get(appIdPath, "steam_settings")
+            AchievementDialog(
+                appId = gameId,
+                appName = appInfo?.name ?: "Game",
+                settingsDir = settingsDir,
+                onDismiss = {
+                    hideAchievementDialog(gameId)
                 }
             )
         }

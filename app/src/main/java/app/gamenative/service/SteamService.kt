@@ -14,6 +14,8 @@ import app.gamenative.BuildConfig
 import app.gamenative.R
 import app.gamenative.PluviaApp
 import app.gamenative.PrefManager
+import app.gamenative.data.AchievementInfo
+import app.gamenative.data.AchievementSchema
 import app.gamenative.data.DepotInfo
 import app.gamenative.data.DownloadInfo
 import app.gamenative.data.GameProcessInfo
@@ -24,6 +26,8 @@ import app.gamenative.data.SteamApp
 import app.gamenative.data.SteamControllerConfigDetail
 import app.gamenative.data.SteamFriend
 import app.gamenative.data.SteamLicense
+import app.gamenative.data.StatInfo
+import app.gamenative.data.StatType
 import app.gamenative.data.UserFileInfo
 import app.gamenative.data.EncryptedAppTicket
 import app.gamenative.db.PluviaDatabase
@@ -83,6 +87,7 @@ import `in`.dragonbra.javasteam.steam.handlers.steamuser.SteamUser
 import `in`.dragonbra.javasteam.steam.handlers.steamuser.callback.LoggedOffCallback
 import `in`.dragonbra.javasteam.steam.handlers.steamuser.callback.LoggedOnCallback
 import `in`.dragonbra.javasteam.steam.handlers.steamuserstats.SteamUserStats
+import `in`.dragonbra.javasteam.steam.handlers.steamuserstats.callback.UserStatsCallback
 import `in`.dragonbra.javasteam.steam.handlers.steamworkshop.SteamWorkshop
 import `in`.dragonbra.javasteam.steam.steamclient.SteamClient
 import `in`.dragonbra.javasteam.steam.steamclient.callbackmgr.CallbackManager
@@ -211,6 +216,7 @@ class SteamService : Service(), IChallengeUrlChanged {
     private var _steamApps: SteamApps? = null
     private var _steamFriends: SteamFriends? = null
     private var _steamCloud: SteamCloud? = null
+    private var _steamUserStats: SteamUserStats? = null
     private var _steamFamilyGroups: FamilyGroups? = null
 
     private var _loginResult: LoginResult = LoginResult.Failed
@@ -2618,7 +2624,6 @@ class SteamService : Service(), IChallengeUrlChanged {
                 removeHandler(SteamMasterServer::class.java)
                 removeHandler(SteamWorkshop::class.java)
                 removeHandler(SteamScreenshots::class.java)
-                removeHandler(SteamUserStats::class.java)
             }
 
             // create the callback manager which will route callbacks to function calls
@@ -2629,6 +2634,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             _steamApps = steamClient!!.getHandler(SteamApps::class.java)
             _steamFriends = steamClient!!.getHandler(SteamFriends::class.java)
             _steamCloud = steamClient!!.getHandler(SteamCloud::class.java)
+            _steamUserStats = steamClient!!.getHandler(SteamUserStats::class.java)
 
             _unifiedFriends = SteamUnifiedFriends(this)
             _steamFamilyGroups = steamClient!!.getHandler<SteamUnifiedMessages>()!!.createService<FamilyGroups>()
@@ -3365,5 +3371,61 @@ class SteamService : Service(), IChallengeUrlChanged {
     suspend fun getEncryptedAppTicketBase64(appId: Int): String? {
         val ticket = getEncryptedAppTicket(appId) ?: return null
         return Base64.encodeToString(ticket, Base64.NO_WRAP)
+    }
+
+    /**
+     * Fetch achievement schema and user stats for a game using JavaSteam's SteamUserStats handler.
+     * Returns achievement schema with user's unlock status, or null if unavailable.
+     */
+    suspend fun getAchievementSchema(appId: Int): AchievementSchema? = withContext(Dispatchers.IO) {
+        try {
+            val userStats = _steamUserStats ?: run {
+                Timber.w("SteamUserStats handler not available")
+                return@withContext null
+            }
+
+            val steamId = userSteamId ?: run {
+                Timber.w("User not logged in, cannot fetch achievement schema")
+                return@withContext null
+            }
+
+            // Request achievement data from Steam
+            val job = userStats.getUserStats(appId, steamId)
+            val callback = job.await()
+
+            if (callback.result != EResult.OK) {
+                Timber.w("Failed to get achievement schema for app $appId: ${callback.result}")
+                return@withContext null
+            }
+
+            // Get expanded achievements with metadata from schema
+            val expandedAchievements = callback.getExpandedAchievements("english")
+            val achievements = expandedAchievements.map { ach ->
+                AchievementInfo(
+                    apiName = ach.name ?: "",
+                    displayName = ach.displayName ?: "",
+                    description = ach.description ?: "",
+                    hidden = ach.hidden,
+                    icon = ach.icon ?: "",
+                    iconGray = ach.iconGray ?: "",
+                    defaultValue = if (ach.isUnlocked) 1 else 0,
+                )
+            }
+
+            // Parse stats from callback (basic support)
+            val stats = callback.stats.map { stat ->
+                StatInfo(
+                    name = "stat_${stat.statId}",
+                    type = StatType.INT,
+                    defaultValue = stat.statValue.toString(),
+                    displayName = "",
+                )
+            }
+
+            AchievementSchema(achievements = achievements, stats = stats)
+        } catch (e: Exception) {
+            Timber.e(e, "Error fetching achievement schema for app $appId")
+            null
+        }
     }
 }
