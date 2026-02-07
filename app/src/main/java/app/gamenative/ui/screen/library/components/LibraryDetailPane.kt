@@ -19,6 +19,7 @@ import java.util.EnumSet
 internal fun LibraryDetailPane(
     libraryItem: LibraryItem?,
     onClickPlay: (Boolean) -> Unit,
+    onTestGraphics: () -> Unit,
     onBack: () -> Unit,
 ) {
     Surface {
@@ -43,6 +44,7 @@ internal fun LibraryDetailPane(
             AppScreen(
                 libraryItem = libraryItem,
                 onClickPlay = onClickPlay,
+                onTestGraphics = onTestGraphics,
                 onBack = onBack,
             )
         }
@@ -67,6 +69,7 @@ private fun Preview_LibraryDetailPane() {
                 gameSource = GameSource.STEAM,
             ),
             onClickPlay = { },
+            onTestGraphics = { },
             onBack = { },
         )
     }

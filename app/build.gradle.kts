@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.kotlinter)
     alias(libs.plugins.ksp)
     alias(libs.plugins.secrets.gradle)
+    alias(libs.plugins.room)
 }
 
 val keystorePropertiesFile = rootProject.file("app/keystores/keystore.properties")
@@ -26,6 +27,10 @@ val posthogHost: String = project.findProperty("POSTHOG_HOST") as String? ?: Sys
 // Add Supabase URL and key as build-time variables
 val supabaseUrl: String = project.findProperty("SUPABASE_URL") as String? ?: System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
 val supabaseKey: String = project.findProperty("SUPABASE_KEY") as String? ?: System.getenv("SUPABASE_KEY") ?: ""
+
+room {
+    schemaDirectory("$projectDir/schemas")
+}
 
 android {
     namespace = "app.gamenative"
@@ -51,8 +56,8 @@ android {
         minSdk = 26
         targetSdk = 28
 
-        versionCode = 7
-        versionName = "0.6.0"
+        versionCode = 10
+        versionName = "0.7.1"
 
         buildConfigField("boolean", "GOLD", "false")
         fun secret(name: String) =
@@ -79,10 +84,16 @@ android {
         // Localization support - specify which languages to include
         resourceConfigurations += listOf(
             "en",      // English (default)
+            "es",      // Spanish
             "da",      // Danish
             "pt-rBR",  // Portuguese (Brazilian)
-            "zh-rTW",   // Traditional Chinese
-            "zh-rCN",   // Simplified Chinese
+            "zh-rTW",  // Traditional Chinese
+            "zh-rCN",  // Simplified Chinese
+            "fr",      // French
+            "de",      // German
+            "uk",      // Ukrainian
+            "it",      // Italian
+            "ro",      // Română
             // TODO: Add more languages here using the ISO 639-1 locale code with regional qualifiers (e.g., "pt-rPT" for European Portuguese)
         )
 
@@ -146,16 +157,12 @@ android {
         buildConfig = true
     }
 
-    ksp {
-        arg("room.schemaLocation", "$projectDir/schemas")
-        arg("room.incremental", "true")
-    }
-
     packaging {
         resources {
             excludes += "/DebugProbesKt.bin"
             excludes += "/junit/runner/smalllogo.gif"
             excludes += "/junit/runner/logo.gif"
+            excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
         jniLibs {
             // 'extractNativeLibs' was not enough to keep the jniLibs and
@@ -175,12 +182,12 @@ android {
     }
 
     // build extras needed in libwinlator_bionic.so
-//    externalNativeBuild {
-//        cmake {
-//            path = file("src/main/cpp/extras/CMakeLists.txt")   // the file shown above
-//            version = "3.22.1"
-//        }
-//    }
+    // externalNativeBuild {
+    //     cmake {
+    //         path = file("src/main/cpp/extras/CMakeLists.txt")   // the file shown above
+    //         version = "3.22.1"
+    //     }
+    // }
 
     // cmake on release builds a proot that fails to process ld-2.31.so
     // externalNativeBuild {
@@ -200,18 +207,23 @@ android {
 
 dependencies {
     implementation(libs.material)
+
+    // Chrome Custom Tabs for GOG OAuth
+    implementation("androidx.browser:browser:1.8.0")
+
     // JavaSteam
     val localBuild = false // Change to 'true' needed when building JavaSteam manually
     if (localBuild) {
-        implementation(files("../../JavaSteam/build/libs/javasteam-1.8.0-SNAPSHOT.jar"))
-        implementation(files("../../JavaSteam/javasteam-depotdownloader/build/libs/javasteam-depotdownloader-1.8.0-SNAPSHOT.jar"))
-        implementation(libs.bundles.steamkit.dev)
+        implementation(files("../../JavaSteam/build/libs/javasteam-1.8.0-11-SNAPSHOT.jar"))
+        implementation(files("../../JavaSteam/javasteam-depotdownloader/build/libs/javasteam-depotdownloader-1.8.0-11-SNAPSHOT.jar"))
+        implementation(libs.bundles.javasteam.dev)
     } else {
-        implementation(libs.steamkit) {
+        implementation(libs.javasteam) {
             isChanging = version?.contains("SNAPSHOT") ?: false
         }
-        implementation("io.github.utkarshdalal:javasteam-depotdownloader:1.8.0-SNAPSHOT")
-//        implementation("in.dragonbra:javasteam-depotdownloader:1.8.0-SNAPSHOT")
+        implementation(libs.javasteam.depotdownloader) {
+            isChanging = version?.contains("SNAPSHOT") ?: false
+        }
     }
     implementation(libs.spongycastle)
 
@@ -265,8 +277,11 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.mockk)
     testImplementation(libs.androidx.ui.test.junit4)
     testImplementation(libs.zstd.jni)
+    testImplementation(libs.orgJson)
+    testImplementation(libs.mockwebserver)
 
     // Add PostHog Android SDK dependency
     implementation("com.posthog:posthog-android:3.8.0")
@@ -279,4 +294,6 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:realtime-kt")
 
     implementation("io.ktor:ktor-client-android:3.1.3")
+
+    implementation("com.auth0.android:jwtdecode:2.0.2")
 }

@@ -53,6 +53,55 @@ import app.gamenative.ui.util.rememberWindowWidthClass
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import app.gamenative.ui.screen.PluviaScreen
+import app.gamenative.utils.PaddingUtils
+import timber.log.Timber
+
+/**
+ * Calculates the installed games count based on the current filter state.
+ *
+ * @param state The current library state containing filters and visibility settings
+ * @return The number of installed games, respecting current filters and source visibility
+ */
+private fun calculateInstalledCount(state: LibraryState): Int {
+    // If INSTALLED filter is active, all items in the filtered list are installed
+    if (state.appInfoSortType.contains(AppFilter.INSTALLED)) {
+        return state.totalAppsInFilter
+    }
+
+    // Otherwise, count all installed games (respecting source visibility)
+    val downloadDirectoryApps = DownloadService.getDownloadDirectoryApps()
+
+    // Count installed Steam games
+    val steamCount = if (state.showSteamInLibrary) {
+        downloadDirectoryApps.count()
+    } else {
+        0
+    }
+
+    // Count Custom Games (always considered "installed")
+    val customGameCount = if (state.showCustomGamesInLibrary) {
+        PrefManager.customGamesCount
+    } else {
+        0
+    }
+
+    // Count GOG games that are installed (from PrefManager)
+    val gogCount = if (state.showGOGInLibrary) {
+        PrefManager.gogInstalledGamesCount
+    } else {
+        0
+    }
+
+    // Count Epic games that are installed (from PrefManager)
+    val epicCount = if (state.showEpicInLibrary) {
+        PrefManager.epicInstalledGamesCount
+    } else {
+        0
+    }
+
+    return steamCount + customGameCount + gogCount + epicCount
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +115,20 @@ internal fun LibraryListPane(
     modifier: Modifier = Modifier,
 ) {
     val snackBarHost = remember { SnackbarHostState() }
+
+    // Calculate installed count based on current filter state
+    val installedCount = remember(
+        state.appInfoSortType,
+        state.showSteamInLibrary,
+        state.showCustomGamesInLibrary,
+        state.showGOGInLibrary,
+        state.showEpicInLibrary,
+        state.totalAppsInFilter,
+    ) {
+        calculateInstalledCount(state)
+    }
+
+
     val pullToRefreshState = rememberPullToRefreshState()
     val windowWidthClass = rememberWindowWidthClass()
 

@@ -81,6 +81,7 @@ import app.gamenative.utils.CustomGameScanner
 fun HomeLibraryScreen(
     viewModel: LibraryViewModel = hiltViewModel(),
     onClickPlay: (String, Boolean) -> Unit,
+    onTestGraphics: (String) -> Unit,
     onNavigateRoute: (String) -> Unit,
     onLogout: () -> Unit,
     onGoOnline: () -> Unit,
@@ -100,6 +101,7 @@ fun HomeLibraryScreen(
         onSearchQuery = viewModel::onSearchQuery,
         onRefresh = viewModel::onRefresh,
         onClickPlay = onClickPlay,
+        onTestGraphics = onTestGraphics,
         onNavigateRoute = onNavigateRoute,
         onLogout = onLogout,
         onGoOnline = onGoOnline,
@@ -124,6 +126,7 @@ private fun LibraryScreenContent(
     onIsSearching: (Boolean) -> Unit,
     onSearchQuery: (String) -> Unit,
     onClickPlay: (String, Boolean) -> Unit,
+    onTestGraphics: (String) -> Unit,
     onRefresh: () -> Unit,
     onNavigateRoute: (String) -> Unit,
     onLogout: () -> Unit,
@@ -149,6 +152,9 @@ private fun LibraryScreenContent(
     }
 
     var isSystemMenuOpen by remember { mutableStateOf(false) }
+    // Keep a stable reference to the selected item so detail view doesn't disappear during list refresh/pagination.
+    var selectedLibraryItem by remember { mutableStateOf<LibraryItem?>(null) }
+    val filterFabExpanded by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
 
     // Dialog state for add custom game prompt
     var showAddCustomGameDialog by remember { mutableStateOf(false) }
@@ -206,6 +212,7 @@ private fun LibraryScreenContent(
 
     BackHandler(enabled = selectedAppId != null) {
         selectedAppId = null
+        selectedLibraryItem = null
     }
 
     // Refresh list when navigating back from detail view
@@ -220,19 +227,13 @@ private fun LibraryScreenContent(
 
     // Apply top padding differently for list vs game detail pages.
     // On the game page we want to hide the top padding when the status bar is hidden.
-    val safePaddingModifier = if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT) {
-        if (selectedAppId != null) {
-            // Detail (game) page: use actual status bar height when status bar is visible,
-            // or 0.dp when status bar is hidden
-            val topPadding = if (PrefManager.hideStatusBarWhenNotInGame) {
-                0.dp
-            } else {
-                WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-            }
-            Modifier.padding(top = topPadding)
+    val safePaddingModifier = if (selectedLibraryItem != null) {
+        // Detail (game) page: use actual status bar height when status bar is visible,
+        // or 0.dp when status bar is hidden
+        val topPadding = if (PrefManager.hideStatusBarWhenNotInGame) {
+            0.dp
         } else {
-            // List page keeps safe cutout padding (for notches)
-            Modifier.displayCutoutPadding()
+            WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         }
     } else {
         Modifier
@@ -364,17 +365,20 @@ private fun LibraryScreenContent(
                 }
             }
         } else {
-            // Find the LibraryItem from the state based on selectedAppId
-            val selectedLibraryItem = selectedAppId?.let { appId ->
-                state.appInfoList.find { it.appId == appId }
-            }
-
             LibraryDetailPane(
                 libraryItem = selectedLibraryItem,
-                onBack = { selectedAppId = null },
+                onBack = {
+                    selectedAppId = null
+                    selectedLibraryItem = null
+                },
                 onClickPlay = {
                     selectedLibraryItem?.let { libraryItem ->
                         onClickPlay(libraryItem.appId, it)
+                    }
+                },
+                onTestGraphics = {
+                    selectedLibraryItem?.let { libraryItem ->
+                        onTestGraphics(libraryItem.appId)
                     }
                 },
             )
@@ -562,6 +566,7 @@ private fun Preview_LibraryScreenContent() {
                 state = state.copy(modalBottomSheet = !currentState)
             },
             onClickPlay = { _, _ -> },
+            onTestGraphics = { },
             onRefresh = { },
             onNavigateRoute = {},
             onLogout = {},

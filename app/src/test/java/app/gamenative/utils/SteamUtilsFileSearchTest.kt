@@ -4,11 +4,14 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import app.gamenative.data.ConfigInfo
+import app.gamenative.data.SaveFilePattern
 import app.gamenative.data.SteamApp
+import app.gamenative.data.UFS
 import app.gamenative.db.PluviaDatabase
 import app.gamenative.enums.AppType
 import app.gamenative.enums.Marker
 import app.gamenative.enums.OS
+import app.gamenative.enums.PathType
 import app.gamenative.enums.ReleaseState
 import app.gamenative.service.DownloadService
 import app.gamenative.service.SteamService
@@ -222,9 +225,13 @@ class SteamUtilsFileSearchTest {
         val dosDevicesPath = File(imageFs.wineprefix, "dosdevices/a:")
         dosDevicesPath.mkdirs()
 
-        // Create .original.exe file
+        // Create multiple .original.exe files in different folders
         val origExeFile = File(dosDevicesPath, "game.exe.original.exe")
         origExeFile.writeBytes("original exe content".toByteArray())
+        val nestedDir = File(dosDevicesPath, "bin")
+        nestedDir.mkdirs()
+        val origExeFile2 = File(nestedDir, "game2.exe.original.exe")
+        origExeFile2.writeBytes("original exe content 2".toByteArray())
 
         // Call the actual function
         SteamUtils.restoreOriginalExecutable(context, steamAppId)
@@ -234,6 +241,10 @@ class SteamUtilsFileSearchTest {
         assertTrue("Should restore exe to original location", restoredFile.exists())
         assertEquals("Restored content should match backup",
             "original exe content", restoredFile.readText())
+        val restoredFile2 = File(nestedDir, "game2.exe")
+        assertTrue("Should restore exe to original location in subdirectory", restoredFile2.exists())
+        assertEquals("Restored content should match backup for second exe",
+            "original exe content 2", restoredFile2.readText())
     }
 
     @Test
@@ -566,8 +577,30 @@ class SteamUtilsFileSearchTest {
         val steamClientDll = File(steamDir, "steamclient.dll")
         steamClientDll.writeBytes("fake steamclient.dll".toByteArray())
 
+        // Create steam client files in wineprefix Steam directory for backup testing
+        val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
+        wineprefixSteamDir.mkdirs()
+        val steamClientFiles = SteamUtils.steamClientFiles()
+        val originalSteamClientContents = mutableMapOf<String, String>()
+        steamClientFiles.forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            val content = "original $fileName content"
+            file.writeBytes(content.toByteArray())
+            originalSteamClientContents[fileName] = content
+        }
+
         // Step 2: Call replaceSteamClientDll (First Time)
         SteamUtils.replaceSteamclientDll(context, testAppId)
+
+        // Verify steam client files are backed up
+        val backupDir = File(wineprefixSteamDir, "steamclient_backup")
+        assertTrue("steamclient_backup directory should exist", backupDir.exists())
+        steamClientFiles.forEach { fileName ->
+            val backupFile = File(backupDir, "$fileName.orig")
+            assertTrue("Backup file $fileName.orig should exist", backupFile.exists())
+            assertEquals("Backup file $fileName.orig should contain original content",
+                originalSteamClientContents[fileName], backupFile.readText())
+        }
 
         // Verify steam_settings folder is created next to steamclient.dll in Steam directory
         val steamSettingsDir = File(steamDir, "steam_settings")
@@ -587,7 +620,7 @@ class SteamUtilsFileSearchTest {
         assertTrue("configs.user.ini should contain account_name field", userIniContent.contains("account_name="))
         assertTrue("configs.user.ini should contain account_steamid field", userIniContent.contains("account_steamid="))
         assertTrue("configs.user.ini should contain language field", userIniContent.contains("language="))
-        assertTrue("configs.user.ini should contain ticket field", userIniContent.contains("ticket="))
+        assertFalse("configs.user.ini should not contain ticket field", userIniContent.contains("ticket="))
 
         // Verify configs.app.ini contains expected content
         val appIniContent = configsAppIni.readText()
@@ -666,7 +699,7 @@ class SteamUtilsFileSearchTest {
             appUserIniContent.contains("account_steamid="))
         assertTrue("configs.user.ini in app directory should contain language field",
             appUserIniContent.contains("language="))
-        assertTrue("configs.user.ini in app directory should contain ticket field",
+        assertFalse("configs.user.ini in app directory should not contain ticket field",
             appUserIniContent.contains("ticket="))
 
         // Verify configs.app.ini contains expected content in app directory
@@ -737,7 +770,7 @@ class SteamUtilsFileSearchTest {
             steamAppId.toString(), steamAppIdFile.readText().trim())
 
         // Verify game.exe is NOT overwritten after second replaceSteamClientDll call
-        assertEquals("game.exe should be overwritten after second replaceSteamClientDll",
+        assertEquals("game.exe should not be overwritten after second replaceSteamClientDll",
             "unpacked exe content", gameExe.readText())
 
         // Verify marker was set
@@ -784,8 +817,43 @@ class SteamUtilsFileSearchTest {
         val steamClientDll = File(steamDir, "steamclient.dll")
         steamClientDll.writeBytes("fake steamclient.dll".toByteArray())
 
+        // Create steam client files in wineprefix Steam directory for backup/restore testing
+        val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
+        wineprefixSteamDir.mkdirs()
+        val steamClientFiles = SteamUtils.steamClientFiles()
+        val originalSteamClientContents = mutableMapOf<String, String>()
+        steamClientFiles.forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            val content = "original $fileName content"
+            file.writeBytes(content.toByteArray())
+            originalSteamClientContents[fileName] = content
+        }
+
+        // Create extra_dlls directory to test deletion
+        val extraDllsDir = File(wineprefixSteamDir, "extra_dlls")
+        extraDllsDir.mkdirs()
+        File(extraDllsDir, "test.dll").writeBytes("test dll content".toByteArray())
+
         // Step 2: Call replaceSteamClientDll (First Time)
         SteamUtils.replaceSteamclientDll(context, testAppId)
+
+        // Verify steam client files are backed up
+        val backupDir = File(wineprefixSteamDir, "steamclient_backup")
+        assertTrue("steamclient_backup directory should exist", backupDir.exists())
+        steamClientFiles.forEach { fileName ->
+            val backupFile = File(backupDir, "$fileName.orig")
+            assertTrue("Backup file $fileName.orig should exist", backupFile.exists())
+            assertEquals("Backup file $fileName.orig should contain original content",
+                originalSteamClientContents[fileName], backupFile.readText())
+        }
+
+        // Modify original files to verify they get restored
+        steamClientFiles.forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            if (file.exists()) {
+                file.writeBytes("modified $fileName content".toByteArray())
+            }
+        }
 
         // Verify steam_settings folder is created next to steamclient.dll in Steam directory
         val steamSettingsDir = File(steamDir, "steam_settings")
@@ -833,6 +901,18 @@ class SteamUtilsFileSearchTest {
         assertEquals("steam_api64.dll should remain the same after restoreSteamApi",
             originalDllContent, dllFile.readText())
 
+        // Verify steam client files are restored from backup
+        steamClientFiles.forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            assertTrue("Steam client file $fileName should exist after restore", file.exists())
+            assertEquals("Steam client file $fileName should be restored to original content",
+                originalSteamClientContents[fileName], file.readText())
+        }
+
+        // Verify extra_dlls directory is deleted
+        assertFalse("extra_dlls directory should be deleted after restoreSteamclientFiles",
+            extraDllsDir.exists())
+
         // Verify marker was set
         assertTrue("Should add STEAM_DLL_RESTORED marker",
             MarkerUtils.hasMarker(appDir.absolutePath, Marker.STEAM_DLL_RESTORED))
@@ -863,7 +943,7 @@ class SteamUtilsFileSearchTest {
         assertTrue("configs.user.ini should contain account_name field", userIniContent.contains("account_name="))
         assertTrue("configs.user.ini should contain account_steamid field", userIniContent.contains("account_steamid="))
         assertTrue("configs.user.ini should contain language field", userIniContent.contains("language="))
-        assertTrue("configs.user.ini should contain ticket field", userIniContent.contains("ticket="))
+        assertFalse("configs.user.ini should not contain ticket field", userIniContent.contains("ticket="))
 
         // Verify configs.app.ini contains expected content
         val appIniContent = configsAppIni.readText()
@@ -923,8 +1003,39 @@ class SteamUtilsFileSearchTest {
         MarkerUtils.removeMarker(appDir.absolutePath, Marker.STEAM_DLL_RESTORED)
         MarkerUtils.removeMarker(appDir.absolutePath, Marker.STEAM_COLDCLIENT_USED)
 
+        // Create steam client files and backup in wineprefix Steam directory
+        // This simulates a previous replaceSteamclientDll call that created backups
+        val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
+        wineprefixSteamDir.mkdirs()
+        val steamClientFiles = SteamUtils.steamClientFiles()
+        val originalSteamClientContents = mutableMapOf<String, String>()
+        val backupDir = File(wineprefixSteamDir, "steamclient_backup")
+        backupDir.mkdirs()
+
+        // Create backup files (simulating previous backup)
+        steamClientFiles.forEach { fileName ->
+            val content = "original $fileName content"
+            originalSteamClientContents[fileName] = content
+            val backupFile = File(backupDir, "$fileName.orig")
+            backupFile.writeBytes(content.toByteArray())
+        }
+
+        // Create modified steam client files (they should be restored during replaceSteamApi)
+        steamClientFiles.forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            file.writeBytes("modified $fileName content".toByteArray())
+        }
+
         // Step 2: Call replaceSteamApi (First Time)
         SteamUtils.replaceSteamApi(context, testAppId)
+
+        // Verify restoreSteamclientFiles was called during replaceSteamApi (files should be restored from backup)
+        steamClientFiles.forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            assertTrue("Steam client file $fileName should exist after replaceSteamApi", file.exists())
+            assertEquals("Steam client file $fileName should be restored to original content during replaceSteamApi",
+                originalSteamClientContents[fileName], file.readText())
+        }
 
         // Verify steam_api64.dll gets overwritten with content from assets
         val expectedDllContent = loadTestAsset(context, "steampipe/steam_api64.dll")
@@ -959,7 +1070,7 @@ class SteamUtilsFileSearchTest {
             appUserIniContent.contains("account_steamid="))
         assertTrue("configs.user.ini should contain language field",
             appUserIniContent.contains("language="))
-        assertTrue("configs.user.ini should contain ticket field",
+        assertFalse("configs.user.ini should not contain ticket field",
             appUserIniContent.contains("ticket="))
 
         // Verify configs.app.ini contains expected content
@@ -990,6 +1101,19 @@ class SteamUtilsFileSearchTest {
         assertTrue("Should add STEAM_DLL_REPLACED marker",
             MarkerUtils.hasMarker(appDir.absolutePath, Marker.STEAM_DLL_REPLACED))
 
+        // Modify steam client files again to test restore during restoreSteamApi
+        steamClientFiles.forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            if (file.exists()) {
+                file.writeBytes("modified again $fileName content".toByteArray())
+            }
+        }
+
+        // Create extra_dlls directory to test deletion
+        val extraDllsDir = File(wineprefixSteamDir, "extra_dlls")
+        extraDllsDir.mkdirs()
+        File(extraDllsDir, "test.dll").writeBytes("test dll content".toByteArray())
+
         // Step 3: Call restoreSteamApi
         // Remove markers to allow the function to run
         MarkerUtils.removeMarker(appDir.absolutePath, Marker.STEAM_COLDCLIENT_USED)
@@ -1003,6 +1127,18 @@ class SteamUtilsFileSearchTest {
         // Verify restoreOriginalExecutable overwrites game.exe with game.exe.original.exe content
         assertEquals("game.exe should be overwritten with game.exe.original.exe content after restoreSteamApi",
             "original exe content", gameExe.readText())
+
+        // Verify steam client files are restored from backup
+        steamClientFiles.forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            assertTrue("Steam client file $fileName should exist after restoreSteamApi", file.exists())
+            assertEquals("Steam client file $fileName should be restored to original content after restoreSteamApi",
+                originalSteamClientContents[fileName], file.readText())
+        }
+
+        // Verify extra_dlls directory is deleted
+        assertFalse("extra_dlls directory should be deleted after restoreSteamclientFiles",
+            extraDllsDir.exists())
 
         // Verify marker was set
         assertTrue("Should add STEAM_DLL_RESTORED marker",
@@ -1053,5 +1189,536 @@ class SteamUtilsFileSearchTest {
         // Verify marker was set
         assertTrue("Should add STEAM_DLL_REPLACED marker again",
             MarkerUtils.hasMarker(appDir.absolutePath, Marker.STEAM_DLL_REPLACED))
+    }
+
+    @Test
+    fun testGenerateCloudSaveConfig_withWindowsPatterns() = runBlocking {
+        // Update test app with Windows saveFilePatterns
+        val testApp = db.steamAppDao().findApp(steamAppId)!!
+        val updatedApp = testApp.copy(
+            ufs = UFS(
+                saveFilePatterns = listOf(
+                    SaveFilePattern(
+                        root = PathType.GameInstall,
+                        path = "saves/game.dat",
+                        pattern = "*.dat"
+                    ),
+                    SaveFilePattern(
+                        root = PathType.WinAppDataLocal,
+                        path = "MyGame/{64BitSteamID}/save.sav",
+                        pattern = "*.sav"
+                    ),
+                    SaveFilePattern(
+                        root = PathType.WinMyDocuments,
+                        path = "MyGame/{Steam3AccountID}/config.ini",
+                        pattern = "*.ini"
+                    )
+                )
+            )
+        )
+        db.steamAppDao().update(updatedApp)
+
+        // Ensure no marker exists
+        MarkerUtils.removeMarker(appDir.absolutePath, Marker.STEAM_DLL_REPLACED)
+
+        // Create DLL file
+        val dllFile = File(appDir, "steam_api.dll")
+        dllFile.writeBytes("original dll content".toByteArray())
+
+        // Call replaceSteamApi to trigger ensureSteamSettings
+        SteamUtils.replaceSteamApi(context, testAppId)
+
+        // Verify configs.app.ini exists and contains cloud save config
+        // steam_settings is created next to the DLL in app directory
+        val steamSettingsDir = File(appDir, "steam_settings")
+        val appIni = File(steamSettingsDir, "configs.app.ini")
+        assertTrue("configs.app.ini should exist", appIni.exists())
+
+        val appIniContent = appIni.readText()
+        assertTrue("configs.app.ini should contain [app::cloud_save::general] section",
+            appIniContent.contains("[app::cloud_save::general]"))
+        assertTrue("configs.app.ini should contain create_default_dir=1",
+            appIniContent.contains("create_default_dir=1"))
+        assertTrue("configs.app.ini should contain create_specific_dirs=1",
+            appIniContent.contains("create_specific_dirs=1"))
+        assertTrue("configs.app.ini should contain [app::cloud_save::win] section",
+            appIniContent.contains("[app::cloud_save::win]"))
+
+        // Verify GameInstall is converted to gameinstall
+        assertTrue("configs.app.ini should contain gameinstall (lowercase)",
+            appIniContent.contains("{::gameinstall::}"))
+        assertFalse("configs.app.ini should not contain GameInstall (uppercase)",
+            appIniContent.contains("{::GameInstall::}"))
+
+        // Verify placeholder replacements
+        assertTrue("configs.app.ini should contain {::64BitSteamID::}",
+            appIniContent.contains("{::64BitSteamID::}"))
+        assertTrue("configs.app.ini should contain {::Steam3AccountID::}",
+            appIniContent.contains("{::Steam3AccountID::}"))
+        assertFalse("configs.app.ini should not contain {64BitSteamID}",
+            appIniContent.contains("{64BitSteamID}"))
+        assertFalse("configs.app.ini should not contain {Steam3AccountID}",
+            appIniContent.contains("{Steam3AccountID}"))
+
+        // Verify directory entries exist
+        assertTrue("configs.app.ini should contain dir1=", appIniContent.contains("dir1="))
+        assertTrue("configs.app.ini should contain dir2=", appIniContent.contains("dir2="))
+        assertTrue("configs.app.ini should contain dir3=", appIniContent.contains("dir3="))
+    }
+
+    @Test
+    fun testGenerateCloudSaveConfig_deduplication() = runBlocking {
+        // Update test app with duplicate Windows patterns
+        val testApp = db.steamAppDao().findApp(steamAppId)!!
+        val updatedApp = testApp.copy(
+            ufs = UFS(
+                saveFilePatterns = listOf(
+                    SaveFilePattern(
+                        root = PathType.GameInstall,
+                        path = "saves/game.dat",
+                        pattern = "*.dat"
+                    ),
+                    SaveFilePattern(
+                        root = PathType.GameInstall,
+                        path = "saves/game.dat",  // Duplicate
+                        pattern = "*.dat"
+                    ),
+                    SaveFilePattern(
+                        root = PathType.WinAppDataLocal,
+                        path = "MyGame/save.sav",
+                        pattern = "*.sav"
+                    ),
+                    SaveFilePattern(
+                        root = PathType.WinAppDataLocal,
+                        path = "MyGame/save.sav",  // Duplicate
+                        pattern = "*.sav"
+                    )
+                )
+            )
+        )
+        db.steamAppDao().update(updatedApp)
+
+        // Ensure no marker exists
+        MarkerUtils.removeMarker(appDir.absolutePath, Marker.STEAM_DLL_REPLACED)
+
+        // Create DLL file
+        val dllFile = File(appDir, "steam_api.dll")
+        dllFile.writeBytes("original dll content".toByteArray())
+
+        // Call replaceSteamApi
+        SteamUtils.replaceSteamApi(context, testAppId)
+
+        // Verify configs.app.ini exists
+        // steam_settings is created next to the DLL in app directory
+        val steamSettingsDir = File(appDir, "steam_settings")
+        val appIni = File(steamSettingsDir, "configs.app.ini")
+        assertTrue("configs.app.ini should exist", appIni.exists())
+
+        val appIniContent = appIni.readText()
+
+        // Verify only unique entries exist
+        val dirLines = appIniContent.lines().filter { it.startsWith("dir") && it.contains("=") }
+        val uniqueDirs = dirLines.toSet()
+        assertEquals("Should have 2 unique directory entries", 2, uniqueDirs.size)
+
+        // Verify the directory strings are unique (no duplicates)
+        val dirValues = dirLines.map { it.substringAfter("=") }.toSet()
+        assertEquals("Should have 2 unique directory values", 2, dirValues.size)
+    }
+
+    @Test
+    fun testGenerateCloudSaveConfig_noWindowsPatterns() = runBlocking {
+        // Update test app with only non-Windows patterns
+        val testApp = db.steamAppDao().findApp(steamAppId)!!
+        val updatedApp = testApp.copy(
+            ufs = UFS(
+                saveFilePatterns = listOf(
+                    SaveFilePattern(
+                        root = PathType.LinuxHome,
+                        path = ".local/share/game",
+                        pattern = "*.sav"
+                    ),
+                    SaveFilePattern(
+                        root = PathType.MacHome,
+                        path = "Library/Application Support/game",
+                        pattern = "*.sav"
+                    )
+                )
+            )
+        )
+        db.steamAppDao().update(updatedApp)
+
+        // Ensure no marker exists
+        MarkerUtils.removeMarker(appDir.absolutePath, Marker.STEAM_DLL_REPLACED)
+
+        // Create DLL file
+        val dllFile = File(appDir, "steam_api.dll")
+        dllFile.writeBytes("original dll content".toByteArray())
+
+        // Call replaceSteamApi
+        SteamUtils.replaceSteamApi(context, testAppId)
+
+        // Verify configs.app.ini exists
+        // steam_settings is created next to the DLL in app directory
+        val steamSettingsDir = File(appDir, "steam_settings")
+        val appIni = File(steamSettingsDir, "configs.app.ini")
+        assertTrue("configs.app.ini should exist", appIni.exists())
+
+        val appIniContent = appIni.readText()
+
+        // Verify cloud save sections are NOT present
+        assertFalse("configs.app.ini should not contain [app::cloud_save::general] section",
+            appIniContent.contains("[app::cloud_save::general]"))
+        assertFalse("configs.app.ini should not contain [app::cloud_save::win] section",
+            appIniContent.contains("[app::cloud_save::win]"))
+        assertFalse("configs.app.ini should not contain create_default_dir",
+            appIniContent.contains("create_default_dir"))
+    }
+
+    @Test
+    fun testGenerateCloudSaveConfig_mixedPatterns() = runBlocking {
+        // Update test app with both Windows and non-Windows patterns
+        val testApp = db.steamAppDao().findApp(steamAppId)!!
+        val updatedApp = testApp.copy(
+            ufs = UFS(
+                saveFilePatterns = listOf(
+                    SaveFilePattern(
+                        root = PathType.GameInstall,
+                        path = "saves/game.dat",
+                        pattern = "*.dat"
+                    ),
+                    SaveFilePattern(
+                        root = PathType.LinuxHome,
+                        path = ".local/share/game",
+                        pattern = "*.sav"
+                    ),
+                    SaveFilePattern(
+                        root = PathType.WinAppDataLocal,
+                        path = "MyGame/save.sav",
+                        pattern = "*.sav"
+                    )
+                )
+            )
+        )
+        db.steamAppDao().update(updatedApp)
+
+        // Ensure no marker exists
+        MarkerUtils.removeMarker(appDir.absolutePath, Marker.STEAM_DLL_REPLACED)
+
+        // Create DLL file
+        val dllFile = File(appDir, "steam_api.dll")
+        dllFile.writeBytes("original dll content".toByteArray())
+
+        // Call replaceSteamApi
+        SteamUtils.replaceSteamApi(context, testAppId)
+
+        // Verify configs.app.ini exists
+        // steam_settings is created next to the DLL in app directory
+        val steamSettingsDir = File(appDir, "steam_settings")
+        val appIni = File(steamSettingsDir, "configs.app.ini")
+        assertTrue("configs.app.ini should exist", appIni.exists())
+
+        val appIniContent = appIni.readText()
+
+        // Verify cloud save sections exist
+        assertTrue("configs.app.ini should contain [app::cloud_save::general] section",
+            appIniContent.contains("[app::cloud_save::general]"))
+        assertTrue("configs.app.ini should contain [app::cloud_save::win] section",
+            appIniContent.contains("[app::cloud_save::win]"))
+
+        // Verify only Windows patterns appear (GameInstall and WinAppDataLocal)
+        assertTrue("configs.app.ini should contain gameinstall",
+            appIniContent.contains("{::gameinstall::}"))
+        assertTrue("configs.app.ini should contain WinAppDataLocal",
+            appIniContent.contains("{::WinAppDataLocal::}"))
+
+        // Verify non-Windows patterns do NOT appear
+        assertFalse("configs.app.ini should not contain LinuxHome",
+            appIniContent.contains("{::LinuxHome::}"))
+        assertFalse("configs.app.ini should not contain MacHome",
+            appIniContent.contains("{::MacHome::}"))
+
+        // Should have exactly 2 directory entries (only Windows patterns)
+        val dirLines = appIniContent.lines().filter { it.startsWith("dir") && it.contains("=") }
+        assertEquals("Should have 2 directory entries (only Windows patterns)", 2, dirLines.size)
+    }
+
+    @Test
+    fun testLocalSavePath_noSaveFilePatterns() = runBlocking {
+        // Update test app with empty saveFilePatterns
+        val testApp = db.steamAppDao().findApp(steamAppId)!!
+        val updatedApp = testApp.copy(
+            ufs = UFS(
+                saveFilePatterns = emptyList()
+            )
+        )
+        db.steamAppDao().update(updatedApp)
+
+        // Ensure no marker exists
+        MarkerUtils.removeMarker(appDir.absolutePath, Marker.STEAM_DLL_REPLACED)
+
+        // Create DLL file
+        val dllFile = File(appDir, "steam_api.dll")
+        dllFile.writeBytes("original dll content".toByteArray())
+
+        // Call replaceSteamApi
+        SteamUtils.replaceSteamApi(context, testAppId)
+
+        // Verify configs.user.ini exists
+        // steam_settings is created next to the DLL in app directory
+        val steamSettingsDir = File(appDir, "steam_settings")
+        val userIni = File(steamSettingsDir, "configs.user.ini")
+        assertTrue("configs.user.ini should exist", userIni.exists())
+
+        val userIniContent = userIni.readText()
+
+        // Verify [user::saves] section exists
+        assertTrue("configs.user.ini should contain [user::saves] section",
+            userIniContent.contains("[user::saves]"))
+
+        // Verify local_save_path exists with correct format
+        assertTrue("configs.user.ini should contain local_save_path",
+            userIniContent.contains("local_save_path="))
+
+        // Verify the path format (accountId will be 0L from mock, but format should be correct)
+        val accountId = SteamService.userSteamId?.accountID ?: 0L
+        val expectedPath = "C:\\Program Files (x86)\\Steam\\userdata\\$accountId"
+        assertTrue("configs.user.ini should contain correct local_save_path format",
+            userIniContent.contains("local_save_path=$expectedPath"))
+    }
+
+    @Test
+    fun testLocalSavePath_withSaveFilePatterns() = runBlocking {
+        // Update test app with saveFilePatterns
+        val testApp = db.steamAppDao().findApp(steamAppId)!!
+        val updatedApp = testApp.copy(
+            ufs = UFS(
+                saveFilePatterns = listOf(
+                    SaveFilePattern(
+                        root = PathType.GameInstall,
+                        path = "saves/game.dat",
+                        pattern = "*.dat"
+                    )
+                )
+            )
+        )
+        db.steamAppDao().update(updatedApp)
+
+        // Ensure no marker exists
+        MarkerUtils.removeMarker(appDir.absolutePath, Marker.STEAM_DLL_REPLACED)
+
+        // Create DLL file
+        val dllFile = File(appDir, "steam_api.dll")
+        dllFile.writeBytes("original dll content".toByteArray())
+
+        // Call replaceSteamApi
+        SteamUtils.replaceSteamApi(context, testAppId)
+
+        // Verify configs.user.ini exists
+        // steam_settings is created next to the DLL in app directory
+        val steamSettingsDir = File(appDir, "steam_settings")
+        val userIni = File(steamSettingsDir, "configs.user.ini")
+        assertTrue("configs.user.ini should exist", userIni.exists())
+
+        val userIniContent = userIni.readText()
+
+        // Verify [user::saves] section does NOT exist
+        assertFalse("configs.user.ini should not contain [user::saves] section",
+            userIniContent.contains("[user::saves]"))
+
+        // Verify local_save_path does NOT exist
+        assertFalse("configs.user.ini should not contain local_save_path",
+            userIniContent.contains("local_save_path="))
+    }
+
+    @Test
+    fun test_backupSteamclientFiles_backsUpExistingFiles() {
+        val imageFs = ImageFs.find(context)
+        val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
+        wineprefixSteamDir.mkdirs()
+
+        // Create some (not all) of the steam client files
+        val steamClientFiles = SteamUtils.steamClientFiles()
+        val filesToCreate = steamClientFiles.take(3) // Create only first 3 files
+        val originalContents = mutableMapOf<String, String>()
+
+        filesToCreate.forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            val content = "original $fileName content"
+            file.writeBytes(content.toByteArray())
+            originalContents[fileName] = content
+        }
+
+        // Call backupSteamclientFiles
+        SteamUtils.backupSteamclientFiles(context, steamAppId)
+
+        // Verify backup directory is created
+        val backupDir = File(wineprefixSteamDir, "steamclient_backup")
+        assertTrue("steamclient_backup directory should exist", backupDir.exists())
+
+        // Verify only existing files are backed up
+        filesToCreate.forEach { fileName ->
+            val backupFile = File(backupDir, "$fileName.orig")
+            assertTrue("Backup file $fileName.orig should exist", backupFile.exists())
+            assertEquals("Backup file $fileName.orig should contain original content",
+                originalContents[fileName], backupFile.readText())
+        }
+
+        // Verify non-existent files are NOT backed up
+        val filesNotCreated = steamClientFiles.drop(3)
+        filesNotCreated.forEach { fileName ->
+            val backupFile = File(backupDir, "$fileName.orig")
+            assertFalse("Backup file $fileName.orig should NOT exist for non-existent file", backupFile.exists())
+        }
+    }
+
+    @Test
+    fun test_backupSteamclientFiles_handlesNonExistentFiles() {
+        val imageFs = ImageFs.find(context)
+        val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
+        wineprefixSteamDir.mkdirs()
+
+        // Create only some of the steam client files
+        val steamClientFiles = SteamUtils.steamClientFiles()
+        val filesToCreate = listOf(steamClientFiles[0], steamClientFiles[2], steamClientFiles[4]) // Create 3 specific files
+        val originalContents = mutableMapOf<String, String>()
+
+        filesToCreate.forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            val content = "original $fileName content"
+            file.writeBytes(content.toByteArray())
+            originalContents[fileName] = content
+        }
+
+        // Call backupSteamclientFiles
+        SteamUtils.backupSteamclientFiles(context, steamAppId)
+
+        // Verify backup directory is created
+        val backupDir = File(wineprefixSteamDir, "steamclient_backup")
+        assertTrue("steamclient_backup directory should exist", backupDir.exists())
+
+        // Verify existing files are backed up
+        filesToCreate.forEach { fileName ->
+            val backupFile = File(backupDir, "$fileName.orig")
+            assertTrue("Backup file $fileName.orig should exist", backupFile.exists())
+            assertEquals("Backup file $fileName.orig should contain original content",
+                originalContents[fileName], backupFile.readText())
+        }
+    }
+
+    @Test
+    fun test_restoreSteamclientFiles_restoresFromBackup() {
+        val imageFs = ImageFs.find(context)
+        val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
+        wineprefixSteamDir.mkdirs()
+
+        // Create backup files
+        val backupDir = File(wineprefixSteamDir, "steamclient_backup")
+        backupDir.mkdirs()
+        val steamClientFiles = SteamUtils.steamClientFiles()
+        val backupContents = mutableMapOf<String, String>()
+
+        steamClientFiles.forEach { fileName ->
+            val backupFile = File(backupDir, "$fileName.orig")
+            val content = "backup $fileName content"
+            backupFile.writeBytes(content.toByteArray())
+            backupContents[fileName] = content
+        }
+
+        // Modify or delete original files
+        steamClientFiles.forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            if (fileName == steamClientFiles[0]) {
+                // Delete first file
+                if (file.exists()) file.delete()
+            } else {
+                // Modify other files
+                file.writeBytes("modified $fileName content".toByteArray())
+            }
+        }
+
+        // Call restoreSteamclientFiles
+        SteamUtils.restoreSteamclientFiles(context, steamAppId)
+
+        // Verify files are restored from backup
+        steamClientFiles.forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            assertTrue("Steam client file $fileName should exist after restore", file.exists())
+            assertEquals("Steam client file $fileName should be restored from backup",
+                backupContents[fileName], file.readText())
+        }
+    }
+
+    @Test
+    fun test_restoreSteamclientFiles_deletesExtraDlls() {
+        val imageFs = ImageFs.find(context)
+        val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
+        wineprefixSteamDir.mkdirs()
+
+        // Create backup files
+        val backupDir = File(wineprefixSteamDir, "steamclient_backup")
+        backupDir.mkdirs()
+        val steamClientFiles = SteamUtils.steamClientFiles()
+        steamClientFiles.forEach { fileName ->
+            val backupFile = File(backupDir, "$fileName.orig")
+            backupFile.writeBytes("backup content".toByteArray())
+        }
+
+        // Create extra_dlls directory with files
+        val extraDllsDir = File(wineprefixSteamDir, "extra_dlls")
+        extraDllsDir.mkdirs()
+        val testDll = File(extraDllsDir, "test.dll")
+        testDll.writeBytes("test dll content".toByteArray())
+        val testDll2 = File(extraDllsDir, "test2.dll")
+        testDll2.writeBytes("test2 dll content".toByteArray())
+
+        assertTrue("extra_dlls directory should exist before restore", extraDllsDir.exists())
+
+        // Call restoreSteamclientFiles
+        SteamUtils.restoreSteamclientFiles(context, steamAppId)
+
+        // Verify extra_dlls directory is deleted
+        assertFalse("extra_dlls directory should be deleted after restoreSteamclientFiles",
+            extraDllsDir.exists())
+    }
+
+    @Test
+    fun test_restoreSteamclientFiles_handlesMissingBackup() {
+        val imageFs = ImageFs.find(context)
+        val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
+        wineprefixSteamDir.mkdirs()
+
+        // Create some original files
+        val steamClientFiles = SteamUtils.steamClientFiles()
+        val originalContents = mutableMapOf<String, String>()
+        steamClientFiles.take(2).forEach { fileName ->
+            val file = File(wineprefixSteamDir, fileName)
+            val content = "original $fileName content"
+            file.writeBytes(content.toByteArray())
+            originalContents[fileName] = content
+        }
+
+        // Ensure no backup directory exists
+        val backupDir = File(wineprefixSteamDir, "steamclient_backup")
+        if (backupDir.exists()) {
+            backupDir.deleteRecursively()
+        }
+
+        // Call restoreSteamclientFiles - should not throw
+        try {
+            SteamUtils.restoreSteamclientFiles(context, steamAppId)
+            // Test passes if no exception is thrown
+            assertTrue("Should complete without error when backup missing", true)
+        } catch (e: Exception) {
+            fail("Should not throw exception when backup missing: ${e.message}")
+        }
+
+        // Verify original files remain unchanged
+        originalContents.forEach { (fileName, content) ->
+            val file = File(wineprefixSteamDir, fileName)
+            assertTrue("Original file $fileName should still exist", file.exists())
+            assertEquals("Original file $fileName should remain unchanged",
+                content, file.readText())
+        }
     }
 }

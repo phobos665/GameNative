@@ -96,6 +96,15 @@ import app.gamenative.ui.theme.PluviaTheme
 import app.gamenative.ui.util.AdaptiveHeroHeight
 import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil.CoilImage
+import app.gamenative.utils.SteamUtils
+import com.winlator.container.ContainerData
+import com.winlator.xenvironment.ImageFsInstaller
+import com.winlator.fexcore.FEXCoreManager
+import app.gamenative.ui.screen.library.appscreen.SteamAppScreen
+import app.gamenative.ui.screen.library.appscreen.CustomGameAppScreen
+import app.gamenative.ui.screen.library.appscreen.GOGAppScreen
+import app.gamenative.ui.screen.library.appscreen.EpicAppScreen
+import app.gamenative.ui.data.GameDisplayInfo
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -354,6 +363,7 @@ private fun InfoCard(
 fun AppScreen(
     libraryItem: LibraryItem,
     onClickPlay: (Boolean) -> Unit,
+    onTestGraphics: () -> Unit,
     onBack: () -> Unit,
 ) {
     // Get the appropriate screen model based on game source
@@ -361,6 +371,8 @@ fun AppScreen(
         when (libraryItem.gameSource) {
             app.gamenative.data.GameSource.STEAM -> SteamAppScreen()
             app.gamenative.data.GameSource.CUSTOM_GAME -> CustomGameAppScreen()
+            app.gamenative.data.GameSource.GOG -> GOGAppScreen()
+            app.gamenative.data.GameSource.EPIC -> EpicAppScreen()
         }
     }
 
@@ -368,6 +380,7 @@ fun AppScreen(
     screenModel.Content(
         libraryItem = libraryItem,
         onClickPlay = onClickPlay,
+        onTestGraphics = onTestGraphics,
         onBack = onBack,
     )
 }
@@ -398,6 +411,7 @@ internal fun AppScreenContent(
     downloadProgress: Float,
     hasPartialDownload: Boolean,
     isUpdatePending: Boolean,
+    downloadInfo: app.gamenative.data.DownloadInfo? = null,
     onDownloadInstallClick: () -> Unit,
     onPauseResumeClick: () -> Unit,
     onDeleteDownloadClick: () -> Unit,
@@ -1090,6 +1104,7 @@ private fun Preview_AppScreen() {
                 downloadProgress = .50f,
                 hasPartialDownload = false,
                 isUpdatePending = false,
+                downloadInfo = null,
                 onDownloadInstallClick = { isDownloading = !isDownloading },
                 onPauseResumeClick = { },
                 onDeleteDownloadClick = { },

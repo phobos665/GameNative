@@ -26,30 +26,6 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
 
     private boolean winetricksRunning = false;
 
-    private final AudioManager audioManager;
-    private boolean audioCallbackRegistered = false;
-    private final AudioDeviceCallback audioDeviceCallback = new AudioDeviceCallback() {
-        @Override
-        public void onAudioDevicesAdded(AudioDeviceInfo[] addedDevices) {
-            // Handle newly added audio devices (e.g., headphones connected)
-            for (AudioDeviceInfo device : addedDevices) {
-                if (device.isSink()) {
-                    restartAudioComponent();
-                }
-            }
-        }
-
-        @Override
-        public void onAudioDevicesRemoved(AudioDeviceInfo[] removedDevices) {
-            // Handle removed audio devices (e.g., headphones disconnected)
-            for (AudioDeviceInfo device : removedDevices) {
-                if (device.isSink()) {
-                    restartAudioComponent();
-                }
-            }
-        }
-    };
-
     public synchronized boolean isWinetricksRunning() {
         return winetricksRunning;
     }
@@ -61,9 +37,6 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
     public XEnvironment(Context context, ImageFs imageFs) {
         this.context = context;
         this.imageFs = imageFs;
-        this.audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-        this.audioManager.registerAudioDeviceCallback(audioDeviceCallback, null);
-        this.audioCallbackRegistered = true;
     }
 
     public Context getContext() {
@@ -110,11 +83,6 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
     }
 
     public void onPause() {
-        if (audioCallbackRegistered) {
-            audioManager.unregisterAudioDeviceCallback(audioDeviceCallback);
-            audioCallbackRegistered = false;
-        }
-
         GuestProgramLauncherComponent guestProgramLauncherComponent = getComponent(GuestProgramLauncherComponent.class);
         if (guestProgramLauncherComponent != null) guestProgramLauncherComponent.suspendProcess();
         GlibcProgramLauncherComponent glibcProgramLauncherComponent = getComponent(GlibcProgramLauncherComponent.class);
@@ -124,30 +92,11 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
     }
 
     public void onResume() {
-        if (!audioCallbackRegistered) {
-            audioManager.registerAudioDeviceCallback(audioDeviceCallback, null);
-            audioCallbackRegistered = true;
-        }
-
         GuestProgramLauncherComponent guestProgramLauncherComponent = getComponent(GuestProgramLauncherComponent.class);
         if (guestProgramLauncherComponent != null) guestProgramLauncherComponent.resumeProcess();
         GlibcProgramLauncherComponent glibcProgramLauncherComponent = getComponent(GlibcProgramLauncherComponent.class);
         if (glibcProgramLauncherComponent != null) glibcProgramLauncherComponent.resumeProcess();
         BionicProgramLauncherComponent bionicProgramLauncherComponent = getComponent(BionicProgramLauncherComponent.class);
         if (bionicProgramLauncherComponent != null) bionicProgramLauncherComponent.resumeProcess();
-    }
-
-    private void restartAudioComponent() {
-        final ALSAServerComponent alsaServerComponent = getComponent(ALSAServerComponent.class);
-        if (alsaServerComponent != null) {
-            alsaServerComponent.stop();
-            alsaServerComponent.start();
-        }
-
-        final PulseAudioComponent pulseAudioComponent = getComponent(PulseAudioComponent.class);
-        if (pulseAudioComponent != null) {
-            //pulseAudioComponent.stop(); stop is already called inside start function
-            pulseAudioComponent.start();
-        }
     }
 }

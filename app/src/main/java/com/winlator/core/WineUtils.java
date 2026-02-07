@@ -11,7 +11,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 
 import timber.log.Timber;
@@ -170,9 +173,8 @@ public abstract class WineUtils {
             setWindowMetrics(registryEditor);
         }
 
-        File wineRoot = wineInfo.path != null ? new File(wineInfo.path) : new File(rootDir, "/opt/wine");
-        File wineSystem32Dir = new File(wineRoot, "lib/wine/x86_64-windows");
-        File wineSysWoW64Dir = new File(wineRoot, "lib/wine/i386-windows");
+        File wineSystem32Dir = new File(rootDir, "/opt/wine/lib/wine/x86_64-windows");
+        File wineSysWoW64Dir = new File(rootDir, "/opt/wine/lib/wine/i386-windows");
         File containerSystem32Dir = new File(rootDir, ImageFs.WINEPREFIX+"/drive_c/windows/system32");
         File containerSysWoW64Dir = new File(rootDir, ImageFs.WINEPREFIX+"/drive_c/windows/syswow64");
 
@@ -356,8 +358,38 @@ public abstract class WineUtils {
         }
     }
 
+    private static final String[] SERVICE_DEFAULTS = {
+            "BITS:3",
+            "Eventlog:2",
+            "HTTP:3",
+            "LanmanServer:3",
+            "NDIS:2",
+            "PlugPlay:2",
+            "RpcSs:3",
+            "scardsvr:3",
+            "Schedule:3",
+            "Spooler:3",
+            "StiSvc:3",
+            "TermService:3",
+            "winebus:3",
+            "winehid:3",
+            "Winmgmt:3",
+            "wuauserv:3",
+    };
+
+    public static List<String> getEssentialServiceNames() {
+        ArrayList<String> names = new ArrayList<>();
+        for (String service : SERVICE_DEFAULTS) {
+            int separator = service.indexOf(":");
+            if (separator > 0) {
+                names.add(service.substring(0, separator));
+            }
+        }
+        return Collections.unmodifiableList(names);
+    }
+
     public static void changeServicesStatus(Container container, boolean onlyEssential) {
-        final String[] services = {"BITS:3", "Eventlog:2", "HTTP:3", "LanmanServer:3", "NDIS:2", "PlugPlay:2", "RpcSs:3", "scardsvr:3", "Schedule:3", "Spooler:3", "StiSvc:3", "TermService:3", "winebus:3", "winehid:3", "Winmgmt:3", "wuauserv:3"};
+        final String[] services = SERVICE_DEFAULTS;
         File systemRegFile = new File(container.getRootDir(), ".wine/system.reg");
 
         try (WineRegistryEditor registryEditor = new WineRegistryEditor(systemRegFile)) {

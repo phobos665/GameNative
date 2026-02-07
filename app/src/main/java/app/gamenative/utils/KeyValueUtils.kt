@@ -10,6 +10,7 @@ import app.gamenative.data.LibraryHeroInfo
 import app.gamenative.data.LibraryLogoInfo
 import app.gamenative.data.ManifestInfo
 import app.gamenative.data.SaveFilePattern
+import app.gamenative.data.SteamControllerConfigDetail
 import app.gamenative.data.SteamApp
 import app.gamenative.data.UFS
 import app.gamenative.enums.AppType
@@ -107,7 +108,7 @@ fun KeyValue.generateSteamApp(): SteamApp {
         // dlcAppIds = (this["common"]["extended"]["listofdlc"].value).Split(",").Select(uint.Parse).ToArray(),
         dlcAppIds = emptyList(),
         isFreeApp = this["common"]["extended"]["isfreeapp"].asBoolean(),
-        dlcForAppId = this["common"]["extended"]["dlcforappid"].asInteger(),
+        dlcForAppId = this["extended"]["dlcforappid"].asInteger(this["common"]["extended"]["dlcforappid"].asInteger()),
         mustOwnAppToPurchase = this["common"]["extended"]["mustownapptopurchase"].asInteger(),
         dlcAvailableOnStore = this["common"]["extended"]["dlcavailableonstore"].asBoolean(),
         optionalDlc = this["common"]["extended"]["optionaldlc"].asBoolean(),
@@ -143,6 +144,8 @@ fun KeyValue.generateSteamApp(): SteamApp {
             },
             steamControllerTemplateIndex = this["config"]["steamcontrollertemplateindex"].asInteger(),
             steamControllerTouchTemplateIndex = this["config"]["steamcontrollertouchtemplateindex"].asInteger(),
+            steamInputManifestPath = this["config"]["steaminputmanifestpath"].value.orEmpty(),
+            steamControllerConfigDetails = parseSteamControllerConfigDetails(),
         ),
         ufs = UFS(
             quota = this["ufs"]["quota"].asInteger(),
@@ -152,10 +155,33 @@ fun KeyValue.generateSteamApp(): SteamApp {
                     root = PathType.from(it["root"].value),
                     path = it["path"].value.orEmpty(),
                     pattern = it["pattern"].value.orEmpty(),
+                    recursive = it["recursive"].asInteger(0),
                 )
             },
         ),
     )
+}
+
+private fun KeyValue.parseSteamControllerConfigDetails(): List<SteamControllerConfigDetail> {
+    val details = this["config"]["steamcontrollerconfigdetails"]
+    if (details.children.isEmpty()) return emptyList()
+
+    return details.children.mapNotNull { detail ->
+        val publishedFileId = detail.name?.toLongOrNull() ?: return@mapNotNull null
+        val controllerType = detail["controller_type"].value.orEmpty()
+        val enabledBranches = detail["enabled_branches"]
+            .value
+            .orEmpty()
+            .split(',')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        SteamControllerConfigDetail(
+            publishedFileId = publishedFileId,
+            controllerType = controllerType,
+            enabledBranches = enabledBranches,
+        )
+    }
 }
 
 fun List<KeyValue>.generateManifest(): Map<String, ManifestInfo> = associate { manifest ->

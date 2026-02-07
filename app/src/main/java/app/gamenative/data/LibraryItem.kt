@@ -6,6 +6,8 @@ import app.gamenative.utils.CustomGameScanner
 enum class GameSource {
     STEAM,
     CUSTOM_GAME,
+    GOG,
+    EPIC
     // Add other platforms here..
 }
 
@@ -46,12 +48,25 @@ data class LibraryItem(
                     ""
                 }
             }
+            GameSource.GOG -> {
+                // GoG Images are typically the full URL, but have fallback just in case.
+                if (iconHash.isEmpty()) {
+                    ""
+                } else if (iconHash.startsWith("http")) {
+                    iconHash
+                } else {
+                    "${GOGGame.GOG_IMAGE_BASE_URL}/$iconHash"
+                }
+            }
+            GameSource.EPIC -> {
+                iconHash
+            }
         }
 
     /**
      * Helper property to get the game ID as an integer
-     * Extracts the numeric part by removing the gameSource prefix
+     * For all game sources, extract the numeric part after the prefix
      */
     val gameId: Int
-        get() = appId.removePrefix("${gameSource.name}_").toInt()
+        get() = appId.removePrefix("${gameSource.name}_").toIntOrNull() ?: 0
 }

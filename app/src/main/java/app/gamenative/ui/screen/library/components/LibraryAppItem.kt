@@ -29,9 +29,18 @@ import app.gamenative.PrefManager
 import app.gamenative.data.GameCompatibilityStatus
 import app.gamenative.data.GameSource
 import app.gamenative.data.LibraryItem
+import app.gamenative.service.DownloadService
+import app.gamenative.service.SteamService
+import app.gamenative.service.epic.EpicService
+import app.gamenative.service.gog.GOGService
 import app.gamenative.ui.enums.PaneType
+import app.gamenative.ui.icons.Steam
 import app.gamenative.ui.internal.fakeAppInfo
 import app.gamenative.ui.theme.PluviaTheme
+import app.gamenative.ui.util.ListItemImage
+import app.gamenative.utils.CustomGameScanner
+import java.io.File
+import timber.log.Timber
 
 /**
  * Library app item that displays a game in either list or grid view.
@@ -120,6 +129,16 @@ internal fun AppItem(
     }
 }
 
+@Composable
+fun GameSourceIcon(gameSource: GameSource, modifier: Modifier = Modifier, iconSize: Int = 12) {
+    when (gameSource) {
+        GameSource.STEAM -> Icon(imageVector = Icons.Filled.Steam, contentDescription = "Steam", modifier = modifier.size(iconSize.dp).alpha(0.7f))
+        GameSource.CUSTOM_GAME -> Icon(imageVector = Icons.Filled.Folder, contentDescription = "Custom Game", modifier = modifier.size(iconSize.dp).alpha(0.7f))
+        GameSource.GOG -> Icon(painter = painterResource(R.drawable.ic_gog), contentDescription = "Gog", modifier = modifier.size(iconSize.dp).alpha(0.7f))
+        GameSource.EPIC -> Icon(painter = painterResource(R.drawable.ic_epic), contentDescription = "Epic", modifier = modifier.size(iconSize.dp).alpha(0.7f))
+    }
+}
+
 /***********
  * PREVIEW *
  ***********/
@@ -142,6 +161,7 @@ private fun Preview_AppItem() {
                             name = item.name,
                             iconHash = item.iconHash,
                             isShared = idx % 2 == 0,
+                            gameSource = GameSource.STEAM,
                         )
                     },
                     itemContent = {
@@ -178,7 +198,7 @@ private fun Preview_AppItemGrid() {
                         name = item.name,
                         iconHash = item.iconHash,
                         isShared = idx % 2 == 0,
-                        gameSource = GameSource.STEAM,
+                        gameSource = GameSource.CUSTOM_GAME,
                     )
                 }
 
