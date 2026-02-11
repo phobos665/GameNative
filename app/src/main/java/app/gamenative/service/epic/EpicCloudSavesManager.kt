@@ -1152,7 +1152,7 @@ object EpicCloudSavesManager {
         val cloudSaveFolder = game.saveFolder.ifEmpty { return null }
 
         // Get the container's Wine prefix path (similar to GOG)
-        val appId = "EPIC_${game.appName}"
+        val appId = "EPIC_${game.id}"
         val container = app.gamenative.utils.ContainerUtils.getOrCreateContainer(context, appId)
         val winePrefix = File(container.rootDir, ".wine").absolutePath
         val user = "xuser"
@@ -1339,14 +1339,23 @@ object EpicCloudSavesManager {
             val data = ByteArray(dataSize)
             buffer.get(data)
 
-            // Decompress if needed
+            // Decompress if needed (Epic uses raw deflate without zlib headers)
             if (isCompressed) {
                 try {
-                    java.io.ByteArrayInputStream(data).use { inputStream ->
-                        java.util.zip.InflaterInputStream(inputStream).use { inflater ->
-                            inflater.readBytes()
-                        }
+                    val inflater = java.util.zip.Inflater(true) // true = nowrap mode for raw deflate
+                    inflater.setInput(data)
+
+                    // Use a buffer to decompress in chunks
+                    val outputStream = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    while (!inflater.finished()) {
+                        val count = inflater.inflate(buffer)
+                        if (count == 0) break
+                        outputStream.write(buffer, 0, count)
                     }
+                    inflater.end()
+
+                    outputStream.toByteArray()
                 } catch (e: Exception) {
                     Timber.tag("Epic").w(e, "[Cloud Saves] Failed to decompress chunk data, using raw data")
                     data

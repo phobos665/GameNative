@@ -1234,7 +1234,8 @@ fun preLaunchApp(
             // Handle Cloud Saves
             Timber.tag("Epic").i("[Cloud Saves] Epic Game detected for $appId — syncing cloud saves before launch")
             // Sync cloud saves (download latest saves before playing)
-            Timber.tag("Epic").d("[Cloud Saves] Starting pre-game download sync for $appId")
+            Timber.tag("Epic").d("[Cloud Saves] Starting pre-game download sync for appId=$appId, gameId=$gameId")
+
             val syncSuccess = app.gamenative.service.epic.EpicCloudSavesManager.syncCloudSaves(
                 context = context,
                 appId = gameId,

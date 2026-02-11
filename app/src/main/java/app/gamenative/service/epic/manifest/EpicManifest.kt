@@ -859,6 +859,7 @@ data class ChunkPart(
  * Custom fields in the manifest
  */
 data class CustomFields(
+    var version: Int = 0,
     private val fields: MutableMap<String, String> = mutableMapOf()
 ) {
     operator fun get(key: String): String? = fields[key]
@@ -872,10 +873,17 @@ data class CustomFields(
 
             if (buffer.hasRemaining()) {
                 val size = buffer.int
+                cf.version = buffer.get().toInt() // version byte
                 val count = buffer.int
 
+                // Read all keys first
+                val keys = mutableListOf<String>()
                 repeat(count) {
-                    val key = readFString(buffer)
+                    keys.add(readFString(buffer))
+                }
+
+                // Then read all values
+                keys.forEach { key ->
                     val value = readFString(buffer)
                     cf[key] = value
                 }
@@ -888,10 +896,16 @@ data class CustomFields(
     fun write(buffer: ByteBuffer) {
         val startPos = buffer.position()
         buffer.putInt(0) // placeholder for size
+        buffer.put(version.toByte()) // version byte
         buffer.putInt(fields.size)
 
-        fields.forEach { (key, value) ->
+        // Write all keys first
+        fields.keys.forEach { key ->
             writeFString(buffer, key)
+        }
+
+        // Then write all values
+        fields.values.forEach { value ->
             writeFString(buffer, value)
         }
 
