@@ -871,10 +871,39 @@ data class CustomFields(
         fun read(buffer: ByteBuffer): CustomFields {
             val cf = CustomFields()
 
-            if (buffer.hasRemaining()) {
+            // Check if there's enough data for at minimum the size field (4 bytes)
+            if (buffer.remaining() < 4) {
+                return cf // Return empty CustomFields if not enough data
+            }
+
+            try {
+                val cfStartPos = buffer.position()
                 val size = buffer.int
+                
+                // If size is 0 or less than minimum (size + version + count = 9 bytes), return empty
+                if (size < 9) {
+                    Timber.tag("Epic").d("[Manifest] CustomFields size too small ($size), returning empty")
+                    return cf
+                }
+                
+                // Size includes the size field itself, so remaining data should be (size - 4)
+                val expectedDataSize = size - 4
+                if (buffer.remaining() < expectedDataSize) {
+                    Timber.tag("Epic").w("[Manifest] Not enough data for CustomFields: expected $expectedDataSize bytes, got ${buffer.remaining()}")
+                    // Reset position to avoid leaving buffer in bad state
+                    buffer.position(cfStartPos)
+                    return cf
+                }
+                
                 cf.version = buffer.get().toInt() // version byte
                 val count = buffer.int
+
+                // Sanity check on count (Legendary doesn't check, but good practice)
+                if (count < 0 || count > 1000) {
+                    Timber.tag("Epic").w("[Manifest] Invalid CustomFields count: $count, returning empty")
+                    buffer.position(cfStartPos)
+                    return cf
+                }
 
                 // Read all keys first
                 val keys = mutableListOf<String>()
@@ -887,6 +916,14 @@ data class CustomFields(
                     val value = readFString(buffer)
                     cf[key] = value
                 }
+                
+                // Verify we read the correct amount of data
+                val bytesRead = buffer.position() - cfStartPos
+                if (bytesRead != size) {
+                    Timber.tag("Epic").w("[Manifest] CustomFields size mismatch: read $bytesRead bytes, expected $size")
+                }
+            } catch (e: Exception) {
+                Timber.tag("Epic").w(e, "[Manifest] Error reading CustomFields, returning partial/empty data")
             }
 
             return cf
@@ -920,12 +957,19 @@ data class CustomFields(
  * Read a variable-length string from the buffer (Epic's FString format)
  */
 private fun readFString(buffer: ByteBuffer): String {
+    if (buffer.remaining() < 4) {
+        throw IllegalStateException("Not enough data to read FString length")
+    }
+    
     val length = buffer.int
 
     return when {
         length < 0 -> {
             // UTF-16 encoded (negative length)
             val absLength = -length * 2
+            if (absLength > buffer.remaining()) {
+                throw IllegalStateException("FString UTF-16 length ($absLength) exceeds remaining buffer (${buffer.remaining()})")
+            }
             val bytes = ByteArray(absLength - 2)
             buffer.get(bytes)
             buffer.position(buffer.position() + 2) // Skip null terminator
@@ -933,6 +977,9 @@ private fun readFString(buffer: ByteBuffer): String {
         }
         length > 0 -> {
             // ASCII encoded
+            if (length > buffer.remaining()) {
+                throw IllegalStateException("FString ASCII length ($length) exceeds remaining buffer (${buffer.remaining()})")
+            }
             val bytes = ByteArray(length - 1)
             buffer.get(bytes)
             buffer.position(buffer.position() + 1) // Skip null terminator

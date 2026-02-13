@@ -447,6 +447,7 @@ object EpicCloudSavesManager {
             var downloadSuccess = true
             if (toDownload.isNotEmpty()) {
                 Timber.tag("Epic").i("[Cloud Saves] Downloading ${toDownload.size} files based on timestamp comparison")
+                Timber.tag("Epic").d("[Cloud Saves] Files to download: ${toDownload.joinToString(", ")}")
 
                 // Download the required chunks and reconstruct files
                 val chunks = mutableMapOf<String, ByteArray>()
@@ -455,6 +456,7 @@ object EpicCloudSavesManager {
                 Timber.tag("Epic").d("[Cloud Saves] Manifest path: $manifestPath")
                 Timber.tag("Epic").d("[Cloud Saves] Path prefix: $pathPrefix")
                 Timber.tag("Epic").d("[Cloud Saves] Available cloud files: ${cloudSaves.files.keys.take(10)}")
+                Timber.tag("Epic").d("[Cloud Saves] Manifest files: ${manifest.fileManifestList?.elements?.map { it.filename }?.joinToString(", ")}")
 
                 manifest.chunkDataList?.elements?.forEach { chunkInfo ->
                     try {
@@ -468,26 +470,32 @@ object EpicCloudSavesManager {
                             return@forEach
                         }
 
-                        Timber.tag("Epic").d("[Cloud Saves] Downloading chunk: ${chunkInfo.getPath()}")
+                        Timber.tag("Epic").d("[Cloud Saves] Downloading chunk: ${chunkInfo.getPath()}, GUID: ${chunkInfo.guidStr}")
                         val chunkData = downloadFile(chunkFile.readLink)
                         if (chunkData.isSuccess) {
                             val chunkBytes = chunkData.getOrNull()!!
                             val decompressedData = decompressChunk(chunkBytes)
                             chunks[chunkInfo.guidStr] = decompressedData
+                            Timber.tag("Epic").d("[Cloud Saves] Chunk stored: ${chunkInfo.guidStr} (${decompressedData.size} bytes)")
                         }
                     } catch (e: Exception) {
                         Timber.tag("Epic").e(e, "[Cloud Saves] Error processing chunk: ${chunkInfo.getPath()}")
                     }
                 }
+                
+                Timber.tag("Epic").d("[Cloud Saves] Total chunks downloaded: ${chunks.size}, GUIDs: ${chunks.keys.joinToString(", ")}")
 
                 // Reconstruct only the files we need to download
                 manifest.fileManifestList?.elements?.forEach { fileManifest ->
+                    Timber.tag("Epic").d("[Cloud Saves] Checking manifest file: ${fileManifest.filename}, in toDownload: ${toDownload.contains(fileManifest.filename)}")
+                    
                     if (toDownload.contains(fileManifest.filename)) {
                         try {
                             val outputFile = File(saveDir, fileManifest.filename)
                             outputFile.parentFile?.mkdirs()
 
                             Timber.tag("Epic").d("[Cloud Saves] Reconstructing file: ${fileManifest.filename}")
+                            Timber.tag("Epic").d("[Cloud Saves] File needs ${fileManifest.chunkParts.size} chunk parts: ${fileManifest.chunkParts.map { it.guidStr }.joinToString(", ")}")
 
                             outputFile.outputStream().use { output ->
                                 fileManifest.chunkParts.forEach { chunkPart ->
@@ -600,20 +608,37 @@ object EpicCloudSavesManager {
                 return@withContext false
             }
 
-            Timber.tag("Epic").i("[Cloud Saves] Manifest parsed: ${manifest.fileManifestList?.elements?.size ?: 0} files")
+            Timber.tag("Epic").i("[Cloud Saves] Manifest parsed: ${manifest.fileManifestList?.elements?.size ?: 0} files, ${manifest.chunkDataList?.elements?.size ?: 0} chunks")
+
+            // Handle empty manifest (no saves in cloud yet)
+            val fileCount = manifest.fileManifestList?.elements?.size ?: 0
+            val chunkCount = manifest.chunkDataList?.elements?.size ?: 0
+            
+            if (fileCount == 0 && chunkCount == 0) {
+                Timber.tag("Epic").i("[Cloud Saves] Empty manifest - no saves in cloud yet")
+                return@withContext true
+            }
 
             // 7. Download chunks referenced in manifest
             val chunks = mutableMapOf<String, ByteArray>()
             val pathPrefix = manifestPath.split("/", limit = 4).take(3).joinToString("/")
 
-            manifest.chunkDataList?.elements?.forEach { chunkInfo ->
+            val chunkDataList = manifest.chunkDataList?.elements
+            if (chunkDataList.isNullOrEmpty()) {
+                Timber.tag("Epic").e("[Cloud Saves] Manifest has files but no chunks - invalid manifest")
+                return@withContext false
+            }
+
+            Timber.tag("Epic").d("[Cloud Saves] Processing ${chunkDataList.size} chunks from chunkDataList")
+
+            chunkDataList.forEach { chunkInfo ->
                 try {
                     // Get chunk path using ChunkInfo's getPath method
                     val chunkPath = "$pathPrefix/${chunkInfo.getPath()}"
                     val chunkFile = cloudSaves.files[chunkPath]
 
                     if (chunkFile?.readLink == null) {
-                        Timber.tag("Epic").w("[Cloud Saves] Chunk not found in cloud: $chunkPath")
+                        Timber.tag("Epic").w("[Cloud Saves] Chunk not found in cloud: $chunkPath (GUID: ${chunkInfo.guidStr})")
                         return@forEach
                     }
 
@@ -636,6 +661,30 @@ object EpicCloudSavesManager {
             if (chunks.isEmpty()) {
                 Timber.tag("Epic").e("[Cloud Saves] No chunks were downloaded, aborting")
                 return@withContext false
+            }
+
+            // Collect all required chunks from file manifests
+            val requiredChunks = mutableSetOf<String>()
+            manifest.fileManifestList?.elements?.forEach { fileManifest ->
+                fileManifest.chunkParts.forEach { chunkPart ->
+                    requiredChunks.add(chunkPart.guidStr)
+                }
+            }
+
+            Timber.tag("Epic").d("[Cloud Saves] Downloaded chunks: ${chunks.keys.sorted().joinToString(", ")}")
+            Timber.tag("Epic").d("[Cloud Saves] Required chunks: ${requiredChunks.sorted().joinToString(", ")}")
+            
+            val missingChunks = requiredChunks - chunks.keys
+            val unusedChunks = chunks.keys - requiredChunks
+            val matchingChunks = chunks.keys.intersect(requiredChunks)
+            
+            Timber.tag("Epic").d("[Cloud Saves] Matching chunks: ${matchingChunks.size}, Missing: ${missingChunks.size}, Unused: ${unusedChunks.size}")
+            
+            if (missingChunks.isNotEmpty()) {
+                Timber.tag("Epic").e("[Cloud Saves] Missing ${missingChunks.size} chunks: ${missingChunks.sorted().take(5).joinToString(", ")}${if (missingChunks.size > 5) "..." else ""}")
+            }
+            if (unusedChunks.isNotEmpty()) {
+                Timber.tag("Epic").w("[Cloud Saves] Unused ${unusedChunks.size} chunks: ${unusedChunks.sorted().take(5).joinToString(", ")}${if (unusedChunks.size > 5) "..." else ""}")
             }
 
             // 8. Reconstruct files from chunks
@@ -1306,13 +1355,15 @@ object EpicCloudSavesManager {
 
     /**
      * Decompress chunk data similar to Legendary's Chunk.read_buffer
-     * Chunk format: magic (4 bytes) + header + compressed data
+     * Chunk format matches Legendary's implementation:
+     * https://github.com/derrod/legendary/blob/master/legendary/models/chunk.py
      */
     private fun decompressChunk(chunkBytes: ByteArray): ByteArray {
         return try {
             val buffer = java.nio.ByteBuffer.wrap(chunkBytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
 
-            // Read chunk header
+            // Read chunk header - must match Legendary exactly
+            val chunkStart = buffer.position()
             val magic = buffer.int
             if (magic != 0xB1FE3AA2.toInt()) {
                 Timber.tag("Epic").w("[Cloud Saves] Invalid chunk magic: ${"%08X".format(magic)}, trying direct decompress")
@@ -1322,43 +1373,115 @@ object EpicCloudSavesManager {
             val headerVersion = buffer.int
             val headerSize = buffer.int
             val compressedSize = buffer.int
-
-            // Skip GUID (16 bytes) and hash (8 bytes)
-            buffer.position(buffer.position() + 24)
-
-            // Read stored_as flag to determine if compressed
+            
+            // GUID (16 bytes)
+            buffer.position(buffer.position() + 16)
+            
+            // Hash (8 bytes)
+            buffer.position(buffer.position() + 8)
+            
+            // stored_as flag (1 byte)
             val storedAs = buffer.get().toInt()
             val isCompressed = (storedAs and 0x1) != 0
-
-            // Skip hash type and SHA hash (21 bytes total for the flag + hash)
-            buffer.position(buffer.position() + 20)
-
-            // Get remaining data
-            val dataStart = buffer.position()
-            val dataSize = chunkBytes.size - dataStart
+            
+            // Header version 2+: SHA hash (20 bytes) + hash type (1 byte)
+            if (headerVersion >= 2) {
+                buffer.position(buffer.position() + 21)
+            }
+            
+            // Header version 3+: uncompressed size (4 bytes)
+            var uncompressedSize = -1 // -1 means unknown
+            if (headerVersion >= 3) {
+                uncompressedSize = buffer.int
+                // Validate uncompressed size is reasonable (0 to 100MB)
+                if (uncompressedSize < 0 || uncompressedSize > 100 * 1024 * 1024) {
+                    Timber.tag("Epic").w("[Cloud Saves] Invalid uncompressed size: $uncompressedSize, ignoring")
+                    uncompressedSize = -1
+                }
+            }
+            
+            // Data starts at headerSize offset from chunk start
+            buffer.position(chunkStart + headerSize)
+            
+            // Read compressed data - use compressedSize to know exactly how much to read
+            val dataSize = if (compressedSize > 0 && compressedSize <= buffer.remaining()) {
+                compressedSize
+            } else {
+                // Fall back to reading all remaining data
+                buffer.remaining()
+            }
+            
+            if (dataSize <= 0) {
+                Timber.tag("Epic").w("[Cloud Saves] No data after chunk header")
+                return ByteArray(0)
+            }
+            
             val data = ByteArray(dataSize)
             buffer.get(data)
+            
+            Timber.tag("Epic").d("[Cloud Saves] Chunk header: version=$headerVersion, headerSize=$headerSize, compressedSize=$compressedSize, storedAs=$storedAs, uncompressedSize=$uncompressedSize, dataSize=$dataSize")
 
-            // Decompress if needed (Epic uses raw deflate without zlib headers)
+            // Decompress if needed
             if (isCompressed) {
+                // Try raw deflate first (Epic typically uses this)
                 try {
                     val inflater = java.util.zip.Inflater(true) // true = nowrap mode for raw deflate
                     inflater.setInput(data)
-
-                    // Use a buffer to decompress in chunks
-                    val outputStream = java.io.ByteArrayOutputStream()
-                    val buffer = ByteArray(8192)
+                    
+                    val outputStream = if (uncompressedSize > 0) {
+                        java.io.ByteArrayOutputStream(uncompressedSize)
+                    } else {
+                        java.io.ByteArrayOutputStream()
+                    }
+                    val tempBuffer = ByteArray(8192)
+                    
                     while (!inflater.finished()) {
-                        val count = inflater.inflate(buffer)
-                        if (count == 0) break
-                        outputStream.write(buffer, 0, count)
+                        val count = inflater.inflate(tempBuffer)
+                        if (count == 0) {
+                            if (inflater.needsInput()) {
+                                Timber.tag("Epic").w("[Cloud Saves] Inflater needs more input but none available")
+                                break
+                            }
+                        }
+                        outputStream.write(tempBuffer, 0, count)
                     }
                     inflater.end()
-
-                    outputStream.toByteArray()
+                    
+                    val result = outputStream.toByteArray()
+                    Timber.tag("Epic").d("[Cloud Saves] Decompressed chunk: $dataSize -> ${result.size} bytes")
+                    return result
+                } catch (e: java.util.zip.DataFormatException) {
+                    Timber.tag("Epic").d("[Cloud Saves] Raw deflate failed (${e.message}), trying zlib format")
+                    
+                    // Try with zlib wrapper
+                    try {
+                        val inflater = java.util.zip.Inflater(false) // false = zlib format
+                        inflater.setInput(data)
+                        
+                        val outputStream = if (uncompressedSize > 0) {
+                            java.io.ByteArrayOutputStream(uncompressedSize)
+                        } else {
+                            java.io.ByteArrayOutputStream()
+                        }
+                        val tempBuffer = ByteArray(8192)
+                        
+                        while (!inflater.finished()) {
+                            val count = inflater.inflate(tempBuffer)
+                            if (count == 0) break
+                            outputStream.write(tempBuffer, 0, count)
+                        }
+                        inflater.end()
+                        
+                        val result = outputStream.toByteArray()
+                        Timber.tag("Epic").d("[Cloud Saves] Decompressed chunk with zlib: $dataSize -> ${result.size} bytes")
+                        return result
+                    } catch (e2: Exception) {
+                        Timber.tag("Epic").w(e2, "[Cloud Saves] Both deflate formats failed, using raw data")
+                        return data
+                    }
                 } catch (e: Exception) {
-                    Timber.tag("Epic").w(e, "[Cloud Saves] Failed to decompress chunk data, using raw data")
-                    data
+                    Timber.tag("Epic").w(e, "[Cloud Saves] Failed to decompress chunk data (${e.message}), using raw data")
+                    return data
                 }
             } else {
                 data
