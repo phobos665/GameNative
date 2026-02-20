@@ -159,9 +159,13 @@ fun BootingSplash(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.scale(logoScale),
                 ) {
+                    val appLabel = androidx.compose.ui.platform.LocalContext.current.applicationInfo.loadLabel(
+                        androidx.compose.ui.platform.LocalContext.current.packageManager
+                    ).toString()
+
                     // Glow layer (blurred behind)
                     Text(
-                        text = "GameNative",
+                        text = appLabel,
                         style = MaterialTheme.typography.displaySmall.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 36.sp,
@@ -175,7 +179,7 @@ fun BootingSplash(
 
                     // Main logo text
                     Text(
-                        text = "GameNative",
+                        text = appLabel,
                         style = MaterialTheme.typography.displaySmall.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 36.sp,

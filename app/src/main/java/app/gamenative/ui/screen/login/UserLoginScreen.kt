@@ -350,7 +350,9 @@ private fun UserLoginScreenContent(
             ) {
                 // Logo
                 Text(
-                    text = stringResource(R.string.login_app_name),
+                    text = androidx.compose.ui.platform.LocalContext.current.applicationInfo.loadLabel(
+                        androidx.compose.ui.platform.LocalContext.current.packageManager
+                    ).toString(),
                     style = MaterialTheme.typography.headlineSmall.copy(
                         fontWeight = FontWeight.Bold,
                         brush = Brush.horizontalGradient(

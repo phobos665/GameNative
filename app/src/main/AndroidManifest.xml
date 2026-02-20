@@ -28,7 +28,7 @@
         android:extractNativeLibs="true"
         android:icon="${icon}"
         android:isGame="true"
-        android:label="@string/app_name"
+        android:label="${appLabel}"
         android:supportsRtl="true"
         android:largeHeap="true"
         android:theme="@style/Theme.Pluvia"
@@ -57,7 +57,7 @@
                     android:scheme="home" />
             </intent-filter>
             <intent-filter>
-                <action android:name="app.gamenative.LAUNCH_GAME" />
+                <action android:name="${applicationId}.LAUNCH_GAME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
@@ -92,7 +92,7 @@
             android:enabled="true"
             android:exported="true"
             android:icon="@mipmap/ic_launcher"
-            android:label="@string/app_name"
+            android:label="${appLabel}"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -104,7 +104,7 @@
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/ic_launcher_alt"
-            android:label="@string/app_name"
+            android:label="${appLabel}"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

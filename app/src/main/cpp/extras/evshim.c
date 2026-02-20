@@ -12,14 +12,41 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <SDL2/SDL.h>
 #include <stdarg.h>
+#include <stdint.h>
+
+/* minimal SDL2 type stubs — all functions resolved via dlsym at runtime */
+typedef struct { uint8_t major, minor, patch; } SDL_version;
+typedef struct SDL_Joystick SDL_Joystick;
+#define SDL_INIT_JOYSTICK 0x00000200u
+#define SDL_JOYSTICK_TYPE_GAMECONTROLLER 1
+#define SDL_VIRTUAL_JOYSTICK_DESC_VERSION 1
+typedef struct {
+    uint16_t version;
+    uint16_t type;
+    uint16_t naxes;
+    uint16_t nbuttons;
+    uint16_t nhats;
+    uint16_t vendor_id;
+    uint16_t product_id;
+    uint16_t padding;
+    uint32_t button_mask;
+    uint32_t axis_mask;
+    const char *name;
+    void *userdata;
+    void (*Update)(void *userdata);
+    void (*SetPlayerIndex)(void *userdata, int player_index);
+    int  (*Rumble)(void *userdata, uint16_t low_frequency_rumble, uint16_t high_frequency_rumble);
+    int  (*RumbleTriggers)(void *userdata, uint16_t left_rumble, uint16_t right_rumble);
+    int  (*SetLED)(void *userdata, uint8_t red, uint8_t green, uint8_t blue);
+    int  (*SendEffect)(void *userdata, const void *data, int size);
+} SDL_VirtualJoystickDesc;
 
 static int g_debug_enabled = 0;
 
-#define LOGI(...) dprintf(STDOUT_FILENO, __VA_ARGS__)
-#define LOGE(...) dprintf(STDERR_FILENO, __VA_ARGS__)
-#define LOGD(...) do { if (g_debug_enabled) dprintf(STDOUT_FILENO, __VA_ARGS__); } while (0)
+#define LOGI(...) LOGD(__VA_ARGS__)
+#define LOGE(...) dprintf(2, "EVSHIM: " __VA_ARGS__)
+#define LOGD(...) do { if (g_debug_enabled) dprintf(2, "EVSHIM: " __VA_ARGS__); } while (0)
 
 #define MAX_GAMEPADS 4
 static int vjoy_ids[MAX_GAMEPADS] = {-1};
@@ -103,16 +130,16 @@ static void *vjoy_updater(void *arg)
         return NULL;
     }
 
-    struct gamepad_io cur, last_state = {0};
-
-    LOGI("VJOY UPDATER P%d running (PID %d)\n", idx, getpid());
+    volatile struct gamepad_io cur;
+    struct gamepad_io last_state = {0};
+    memset((void*)&cur, 0, sizeof cur);
 
     for (;;) {
         pthread_mutex_lock(&shm_mutex);
 
-        ssize_t n = read(fd, &cur, sizeof cur);
+        ssize_t n = pread(fd, (void*)&cur, sizeof cur, 0);
 
-        if (n == sizeof cur && memcmp(&cur, &last_state, sizeof cur) != 0) {
+        if (n == (ssize_t)sizeof cur && memcmp((const void*)&cur, &last_state, sizeof cur) != 0) {
 
             p_SDL_JoystickSetVirtualAxis (js, 0, cur.lx);
             p_SDL_JoystickSetVirtualAxis (js, 1, cur.ly);
@@ -126,7 +153,7 @@ static void *vjoy_updater(void *arg)
 
             p_SDL_JoystickSetVirtualHat(js, 0, cur.hat);
 
-            last_state = cur;
+            memcpy(&last_state, (const void*)&cur, sizeof cur);
         }
         else if (n < 0) {
             LOGE("P%d: read error: %s\n", idx, strerror(errno));
@@ -143,8 +170,8 @@ static void *vjoy_updater(void *arg)
 __attribute__((constructor))
 static void initialize_all_pads(void)
 {
-    const char *dbg = getenv("EVSHIM_DEBUG");
-    g_debug_enabled = dbg && strchr("1yY", *dbg);
+    const char *dbg_env = getenv("EVSHIM_DEBUG");
+    g_debug_enabled = dbg_env && strchr("1yY", *dbg_env);
 
     LOGI("EVSHIM initializing…\n");
 
@@ -165,14 +192,20 @@ static void initialize_all_pads(void)
     int players = getenv("EVSHIM_MAX_PLAYERS") ? atoi(getenv("EVSHIM_MAX_PLAYERS")) : 1;
     if (players > MAX_GAMEPADS) players = MAX_GAMEPADS;
 
+    const char *data_dir = getenv("EVSHIM_DATA_DIR");
+    if (!data_dir) data_dir = "/data/data/app.gamenative";
+    LOGI("EVSHIM_DATA_DIR=%s players=%d\n", data_dir, players);
 
     /* per-player setup */
     for (int i = 0; i < players; ++i) {
 
         char path[256];
         snprintf(path, sizeof path,
-                 "/data/data/app.gamenative/files/imagefs/tmp/gamepad%s.mem",
+                 "%s/files/imagefs/tmp/gamepad%s.mem",
+                 data_dir,
                  (i == 0) ? "" : (char[2]){'0' + i, '\0'});
+
+        LOGI("P%d: opening '%s'\n", i, path);
 
         /* open once – store for reader + writer */
         read_fd  [i] = open(path, O_RDONLY);
@@ -204,7 +237,7 @@ static void initialize_all_pads(void)
             close(rumble_fd[i]); rumble_fd[i] = -1;
             continue;
         }
-        LOGD("P%d: virtual joystick id=%d ready\n", i, vjoy_ids[i]);
+        LOGI("P%d: virtual joystick id=%d ready\n", i, vjoy_ids[i]);
 
         pthread_t up_tid;
         pthread_create(&up_tid, NULL, vjoy_updater, (void*)(intptr_t)i);
