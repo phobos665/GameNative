@@ -61,9 +61,9 @@ class PhysicalControllerHandler(
                 val controllerBinding = controller.getControllerBinding(event.keyCode)
                 if (controllerBinding != null) {
                     if (event.action == KeyEvent.ACTION_DOWN) {
-                        handleInputEvent(controllerBinding.binding, true)
+                        handleInputEvent(controllerBinding.binding, true, deviceId = event.deviceId)
                     } else if (event.action == KeyEvent.ACTION_UP) {
-                        handleInputEvent(controllerBinding.binding, false)
+                        handleInputEvent(controllerBinding.binding, false, deviceId = event.deviceId)
                     }
                     return true
                 }
@@ -85,7 +85,8 @@ class PhysicalControllerHandler(
                 if (controllerBinding != null) {
                     handleInputEvent(
                         controllerBinding.binding,
-                        controller.state.isPressed(ExternalController.IDX_BUTTON_L2.toInt())
+                        controller.state.isPressed(ExternalController.IDX_BUTTON_L2.toInt()),
+                        deviceId = event.deviceId
                     )
                 }
 
@@ -93,12 +94,13 @@ class PhysicalControllerHandler(
                 if (controllerBinding != null) {
                     handleInputEvent(
                         controllerBinding.binding,
-                        controller.state.isPressed(ExternalController.IDX_BUTTON_R2.toInt())
+                        controller.state.isPressed(ExternalController.IDX_BUTTON_R2.toInt()),
+                        deviceId = event.deviceId
                     )
                 }
 
                 // Process analog stick input
-                processJoystickInput(controller)
+                processJoystickInput(controller, event.deviceId)
                 return true
             }
         }
@@ -132,7 +134,7 @@ class PhysicalControllerHandler(
      * Process analog stick input and apply bindings.
      * Extracted from InputControlsView.processJoystickInput()
      */
-    private fun processJoystickInput(controller: ExternalController) {
+    private fun processJoystickInput(controller: ExternalController, deviceId: Int) {
         // Reset mouse movement offset at the start - contributions will be added during processing
         mouseMoveOffset.set(0f, 0f)
 
@@ -159,20 +161,20 @@ class PhysicalControllerHandler(
                 val keyCode = ExternalControllerBinding.getKeyCodeForAxis(axes[i], Mathf.sign(values[i]))
                 controllerBinding = controller.getControllerBinding(keyCode)
                 if (controllerBinding != null) {
-                    handleInputEvent(controllerBinding.binding, true, values[i])
+                    handleInputEvent(controllerBinding.binding, true, values[i], deviceId = deviceId)
                 }
             } else {
                 controllerBinding = controller.getControllerBinding(
                     ExternalControllerBinding.getKeyCodeForAxis(axes[i], 1.toByte())
                 )
                 if (controllerBinding != null) {
-                    handleInputEvent(controllerBinding.binding, false, values[i])
+                    handleInputEvent(controllerBinding.binding, false, values[i], deviceId = deviceId)
                 }
                 controllerBinding = controller.getControllerBinding(
                     ExternalControllerBinding.getKeyCodeForAxis(axes[i], (-1).toByte())
                 )
                 if (controllerBinding != null) {
-                    handleInputEvent(controllerBinding.binding, false, values[i])
+                    handleInputEvent(controllerBinding.binding, false, values[i], deviceId = deviceId)
                 }
             }
         }
@@ -182,10 +184,17 @@ class PhysicalControllerHandler(
      * Apply a binding to the virtual gamepad state and send to WinHandler.
      * Extracted from InputControlsView.handleInputEvent()
      */
-    private fun handleInputEvent(binding: Binding, isActionDown: Boolean, offset: Float = 0f) {
+    private fun handleInputEvent(binding: Binding, isActionDown: Boolean, offset: Float = 0f, deviceId: Int = 0) {
         if (binding.isGamepad) {
             val winHandler = xServer?.winHandler
-            val state = profile?.gamepadState
+            val slotIndex = if (winHandler != null && deviceId != 0) winHandler.getSlotForDevice(deviceId) else -1
+
+            // For P2-PX(slot > 0), write to that controller's own state
+            val state: GamepadState? = if (slotIndex > 0) {
+                winHandler?.getExtraController(slotIndex)?.state
+            } else {
+                profile?.gamepadState
+            }
 
             if (state != null) {
                 val buttonIdx = binding.ordinal - Binding.GAMEPAD_BUTTON_A.ordinal
@@ -224,12 +233,18 @@ class PhysicalControllerHandler(
                 }
 
                 if (winHandler != null) {
-                    val controller = winHandler.currentController
-                    if (controller != null) {
-                        controller.state.copy(state)
+                    if (slotIndex > 0) {
+                        // P2-PX: write to the slot's .mem file
+                        winHandler.sendSlotMemState(slotIndex)
+                    } else {
+                        // Assume P1
+                        val controller = winHandler.currentController
+                        if (controller != null) {
+                            controller.state.copy(state)
+                        }
+                        winHandler.sendGamepadState()
+                        winHandler.sendVirtualGamepadState(state)
                     }
-                    winHandler.sendGamepadState()
-                    winHandler.sendVirtualGamepadState(state)
                 }
             }
         } else {

@@ -227,6 +227,32 @@ public class ControllerManager {
         return -1; // Not found
     }
 
+    /**
+     * Returns the slot for the given device, auto-assigning it to the next free slot (0–3) if
+     * it has never been seen before.  The assignment is persisted so the same controller
+     * reconnects to the same slot across sessions.
+    */
+    public int getOrAssignSlot(int deviceId) {
+        // Return existing assignment if present.
+        int existing = getSlotForDevice(deviceId);
+        if (existing != -1) return existing;
+
+        InputDevice device = inputManager.getInputDevice(deviceId);
+        String deviceIdentifier = getDeviceIdentifier(device);
+        if (deviceIdentifier == null) return -1;
+
+        // Claim the first free slot.
+        for (int slot = 0; slot < 4; slot++) {
+            if (slotAssignments.get(slot) == null) {
+                slotAssignments.put(slot, deviceIdentifier);
+                enabledSlots[slot] = true;
+                saveAssignments();
+                return slot;
+            }
+        }
+        return -1; // All four slots occupied.
+    }
+
 
     /**
      * Gets the InputDevice object that is currently assigned to a specific player slot.
