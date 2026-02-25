@@ -647,6 +647,21 @@
     <string name="settings_emulation_wine_proton_manager_title">Wine/Proton Manager</string>
     <string name="settings_emulation_wine_proton_manager_subtitle">Import custom Wine/Proton versions (Bionic only)</string>
 
+    <!-- Settings: Controller Group -->
+    <string name="settings_controller_title">Controller</string>
+    <string name="settings_controller_order_title">Controller Order</string>
+    <string name="settings_controller_order_subtitle">Assign physical controllers to player slots (P1–P4)</string>
+    <string name="settings_controller_order_description">Assign each connected controller to a player slot. Changes take effect on the next game launch.</string>
+    <string name="settings_controller_rebind_title">Rebind Buttons</string>
+    <string name="settings_controller_rebind_subtitle">Remap controller buttons to gamepad, keyboard, or mouse actions</string>
+    <string name="settings_controller_rebind_pick_player">Select Controller to Rebind</string>
+    <string name="settings_controller_rebind_player_entry">Player %d — %s</string>
+    <string name="settings_controller_rebind_no_controllers">No controllers connected.\nConnect a controller and try again.</string>
+    <string name="controller_order_player_slot">Player %d</string>
+    <string name="controller_order_assigned_controller">Controller</string>
+    <string name="controller_order_unassigned">Unassigned</string>
+    <string name="controller_order_no_devices">No controllers detected. Connect a controller and reopen this dialog.</string>
+
     <!-- Settings: Debug Group -->
     <string name="settings_debug_title">Debug</string>
     <string name="settings_debug_wine_channels_title">Select Wine Debug Channels</string>

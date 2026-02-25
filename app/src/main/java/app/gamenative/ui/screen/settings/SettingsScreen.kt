@@ -77,6 +77,7 @@ private fun SettingsScreenContent(
                 .verticalScroll(scrollState),
         ) {
             SettingsGroupEmulation()
+            SettingsGroupController()
             SettingsGroupInterface(
                 appTheme = appTheme,
                 paletteStyle = paletteStyle,

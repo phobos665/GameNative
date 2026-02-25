@@ -56,26 +56,42 @@ class PhysicalControllerHandler(
      * Extracted from InputControlsView.onKeyEvent()
      */
     fun onKeyEvent(event: KeyEvent): Boolean {
-        if (profile != null && event.repeatCount == 0) {
-            val controller = profile?.getController(event.deviceId)
-            if (controller != null) {
-                val controllerBinding = controller.getControllerBinding(event.keyCode)
-                if (controllerBinding != null) {
-                    // Some controllers emit BOTH a digital KeyEvent for L2/R2 and an analog axis value in MotionEvent.
-                    // If this physical key is mapped to a virtual trigger AND the device exposes trigger axes,
-                    // ignore the KeyEvent to avoid an initial "full press" spike. MotionEvent will provide the analog value.
-                    if ((event.keyCode == KeyEvent.KEYCODE_BUTTON_L2 || event.keyCode == KeyEvent.KEYCODE_BUTTON_R2) &&
-                        (controllerBinding.binding == Binding.GAMEPAD_BUTTON_L2 || controllerBinding.binding == Binding.GAMEPAD_BUTTON_R2) &&
-                        deviceHasTriggerAxis(event.device, event.keyCode)
-                    ) {
-                        return true
-                    }
-                    val offset = if (event.action == KeyEvent.ACTION_DOWN &&
-                        (controllerBinding.binding == Binding.GAMEPAD_BUTTON_L2 || controllerBinding.binding == Binding.GAMEPAD_BUTTON_R2)
-                    ) 1f else 0f
-                    handleInputEvent(controllerBinding.binding, event.action == KeyEvent.ACTION_DOWN, offset, deviceId = event.deviceId)
+        if (profile == null || event.repeatCount != 0) return false
+
+        // Same slot guard as onGenericMotionEvent: only handle P1 (slot 0 / unassigned) here.
+        // P2+ key events fall through to WinHandler which routes them to the correct slot.
+        val winHandler = xServer?.winHandler
+        val slot = if (winHandler != null) winHandler.getSlotForDevice(event.deviceId) else -1
+        if (slot > 0) return false
+
+        val controller = profile?.getController(event.deviceId)
+        if (controller != null) {
+            val controllerBinding = controller.getControllerBinding(event.keyCode)
+            if (controllerBinding != null) {
+                // Some controllers emit BOTH a digital KeyEvent for L2/R2 and an analog axis value in MotionEvent.
+                // If this physical key is mapped to a virtual trigger AND the device exposes trigger axes,
+                // ignore the KeyEvent to avoid an initial "full press" spike. MotionEvent will provide the analog value.
+                if ((event.keyCode == KeyEvent.KEYCODE_BUTTON_L2 || event.keyCode == KeyEvent.KEYCODE_BUTTON_R2) &&
+                    (controllerBinding.binding == Binding.GAMEPAD_BUTTON_L2 || controllerBinding.binding == Binding.GAMEPAD_BUTTON_R2) &&
+                    deviceHasTriggerAxis(event.device, event.keyCode)
+                ) {
                     return true
                 }
+                // Many controllers emit BOTH KEYCODE_DPAD_* key events and AXIS_HAT_X/Y motion events
+                // for the same physical d-pad press. When the device exposes HAT axes, suppress the
+                // key event — updateStateFromMotionEvent() already writes state.dpad[] from the HAT,
+                // so processing the key event here too would duplicate the directional input.
+                if (event.keyCode in DPAD_KEY_CODES &&
+                    controllerBinding.binding.isDpad &&
+                    deviceHasHatAxis(event.device)
+                ) {
+                    return true
+                }
+                val offset = if (event.action == KeyEvent.ACTION_DOWN &&
+                    (controllerBinding.binding == Binding.GAMEPAD_BUTTON_L2 || controllerBinding.binding == Binding.GAMEPAD_BUTTON_R2)
+                ) 1f else 0f
+                handleInputEvent(controllerBinding.binding, event.action == KeyEvent.ACTION_DOWN, offset, deviceId = event.deviceId)
+                return true
             }
         }
         return false
@@ -91,6 +107,23 @@ class PhysicalControllerHandler(
         }
     }
 
+    private fun deviceHasHatAxis(device: InputDevice?): Boolean {
+        return hasMotionRange(device, MotionEvent.AXIS_HAT_X) || hasMotionRange(device, MotionEvent.AXIS_HAT_Y)
+    }
+
+    private val Binding.isDpad: Boolean
+        get() = this == Binding.GAMEPAD_DPAD_UP || this == Binding.GAMEPAD_DPAD_DOWN ||
+                this == Binding.GAMEPAD_DPAD_LEFT || this == Binding.GAMEPAD_DPAD_RIGHT
+
+    companion object {
+        private val DPAD_KEY_CODES = intArrayOf(
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_RIGHT,
+        )
+    }
+
     private fun hasMotionRange(device: InputDevice?, axis: Int): Boolean {
         if (device == null) return false
         return device.getMotionRange(axis, InputDevice.SOURCE_JOYSTICK) != null ||
@@ -103,34 +136,48 @@ class PhysicalControllerHandler(
      * Extracted from InputControlsView.onGenericMotionEvent()
      */
     fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        if (profile != null) {
-            val controller = profile?.getController(event.deviceId)
-            if (controller != null && controller.updateStateFromMotionEvent(event)) {
-                // Process trigger buttons (L2/R2)
-                var controllerBinding = controller.getControllerBinding(KeyEvent.KEYCODE_BUTTON_L2)
-                if (controllerBinding != null) {
-                    handleInputEvent(
-                        controllerBinding.binding,
-                        controller.state.triggerL > 0f,
-                        controller.state.triggerL,
-                        deviceId = event.deviceId
-                    )
-                }
+        if (profile == null) return false
 
-                controllerBinding = controller.getControllerBinding(KeyEvent.KEYCODE_BUTTON_R2)
-                if (controllerBinding != null) {
-                    handleInputEvent(
-                        controllerBinding.binding,
-                        controller.state.triggerR > 0f,
-                        controller.state.triggerR,
-                        deviceId = event.deviceId
-                    )
-                }
+        // Determine the player slot for this device before touching any shared state.
+        // The wildcard ExternalController in the profile is a *shared* object — its .state
+        // is mutated in-place by updateStateFromMotionEvent. If a P2+ device's event reaches
+        // here first and overwrites that shared state with zeros, P1's held inputs get wiped.
+        val winHandler = xServer?.winHandler
+        val slot = if (winHandler != null) winHandler.getSlotForDevice(event.deviceId) else -1
 
-                // Process analog stick input
-                processJoystickInput(controller, event.deviceId)
-                return true
+        if (slot > 0) {
+            // P2+ device: let WinHandler handle it through its own ExternalController so
+            // the shared profile wildcard state is never touched.
+            return false
+        }
+
+        // Slot 0 / unassigned → P1 path: safe to use the shared profile wildcard.
+        val controller = profile?.getController(event.deviceId)
+        if (controller != null && controller.updateStateFromMotionEvent(event)) {
+            // Process trigger buttons (L2/R2)
+            var controllerBinding = controller.getControllerBinding(KeyEvent.KEYCODE_BUTTON_L2)
+            if (controllerBinding != null) {
+                handleInputEvent(
+                    controllerBinding.binding,
+                    controller.state.triggerL > 0f,
+                    controller.state.triggerL,
+                    deviceId = event.deviceId
+                )
             }
+
+            controllerBinding = controller.getControllerBinding(KeyEvent.KEYCODE_BUTTON_R2)
+            if (controllerBinding != null) {
+                handleInputEvent(
+                    controllerBinding.binding,
+                    controller.state.triggerR > 0f,
+                    controller.state.triggerR,
+                    deviceId = event.deviceId
+                )
+            }
+
+            // Process analog stick input
+            processJoystickInput(controller, event.deviceId)
+            return true
         }
         return false
     }
@@ -161,6 +208,12 @@ class PhysicalControllerHandler(
     /**
      * Process analog stick input and apply bindings.
      * Extracted from InputControlsView.processJoystickInput()
+     *
+     * NOTE: AXIS_HAT_X and AXIS_HAT_Y are intentionally excluded here.
+     * [ExternalController.updateStateFromMotionEvent] already writes state.dpad[] directly
+     * from raw HAT values before this is called. Re-processing the HAT axes through bindings
+     * would duplicate every directional input — once from the KeyEvent (KEYCODE_DPAD_*) path
+     * and once again here from the MotionEvent HAT path.
      */
     private fun processJoystickInput(controller: ExternalController, deviceId: Int) {
         // Reset mouse movement offset at the start - contributions will be added during processing
@@ -171,16 +224,13 @@ class PhysicalControllerHandler(
             MotionEvent.AXIS_Y,
             MotionEvent.AXIS_Z,
             MotionEvent.AXIS_RZ,
-            MotionEvent.AXIS_HAT_X,
-            MotionEvent.AXIS_HAT_Y
+            // AXIS_HAT_X and AXIS_HAT_Y intentionally omitted — handled by updateStateFromMotionEvent
         )
         val values = floatArrayOf(
             controller.state.thumbLX,
             controller.state.thumbLY,
             controller.state.thumbRX,
             controller.state.thumbRY,
-            controller.state.dPadX.toFloat(),
-            controller.state.dPadY.toFloat()
         )
 
         for (i in axes.indices) {
