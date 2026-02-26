@@ -23,6 +23,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.gamenative.R
 import com.winlator.inputcontrols.Binding
+import com.winlator.inputcontrols.ControllerManager
 import com.winlator.inputcontrols.ControlsProfile
 import com.winlator.inputcontrols.ExternalControllerBinding
 
@@ -47,70 +48,88 @@ internal fun PhysicalControllerConfigSection(
 ) {
     val context = LocalContext.current
 
-    // Ensure a wildcard controller exists for all physical controllers
-    val controller = remember {
-        var ctrl = profile.getController("*")
+    // Per-player slot selection (P1–P4)
+    var selectedPlayerSlot by remember { mutableIntStateOf(0) }
+
+    // Controller for the currently selected player slot.
+    // Uses "player_N" IDs; migrates from the legacy wildcard "*" for slot 0 on first access.
+    val controller = remember(selectedPlayerSlot) {
+        val controllerId = "player_$selectedPlayerSlot"
+        var ctrl = profile.getController(controllerId)
         if (ctrl == null) {
-            Log.d("gncontrol", "=== Physical Controller Init: Creating wildcard controller for profile: ${profile.name} (ID: ${profile.id}) ===")
-            ctrl = profile.addController("*")
+            Log.d("gncontrol", "=== Physical Controller Init: Creating controller '$controllerId' for profile: ${profile.name} (ID: ${profile.id}) ===")
+            ctrl = profile.addController(controllerId)
 
-            // Copy default bindings from the Physical Controller Default profile (ID 0)
-            val manager = com.winlator.inputcontrols.InputControlsManager(context)
-            val defaultProfile = manager.getProfile(0)
-            if (defaultProfile != null) {
-                Log.d("gncontrol", "Loading defaults from profile: ${defaultProfile.name} (ID: ${defaultProfile.id})")
-                val defaultControllers = defaultProfile.getControllers()
-                if (defaultControllers.isNotEmpty()) {
-                    val defaultController = defaultControllers[0]
-                    val bindingCount = defaultController.getControllerBindings().size
-                    Log.d("gncontrol", "Copying $bindingCount default controller bindings from ${defaultProfile.name}")
-                    for (binding in defaultController.getControllerBindings()) {
-                        val newBinding = ExternalControllerBinding()
-                        newBinding.setKeyCode(binding.getKeyCodeForAxis())
-                        newBinding.setBinding(binding.getBinding())
-                        ctrl.addControllerBinding(newBinding)
-                    }
-
-                    // Ensure Home/Guide/PS button is always set to OPEN_NAVIGATION_MENU
-                    val homeButtonBinding = ExternalControllerBinding()
-                    homeButtonBinding.setKeyCode(KeyEvent.KEYCODE_BUTTON_MODE)
-                    homeButtonBinding.setBinding(com.winlator.inputcontrols.Binding.OPEN_NAVIGATION_MENU)
-                    // Remove any existing home button binding first
-                    val existingHomeBinding = ctrl.getControllerBindings().find {
-                        it.getKeyCodeForAxis() == KeyEvent.KEYCODE_BUTTON_MODE
-                    }
-                    if (existingHomeBinding != null) {
-                        ctrl.removeControllerBinding(existingHomeBinding)
-                    }
-                    ctrl.addControllerBinding(homeButtonBinding)
-                    Log.d("gncontrol", "Set Home button (KEYCODE_BUTTON_MODE) to OPEN_NAVIGATION_MENU")
-                } else {
-                    Log.w("gncontrol", "No controllers found in default profile ${defaultProfile.name}")
+            // For P1: migrate bindings from the legacy wildcard controller if it already has bindings
+            val migrationSource = if (selectedPlayerSlot == 0) profile.getController("*") else null
+            if (migrationSource != null && migrationSource.getControllerBindings().isNotEmpty()) {
+                Log.d("gncontrol", "Migrating ${migrationSource.getControllerBindings().size} bindings from wildcard '*' to '$controllerId'")
+                for (binding in migrationSource.getControllerBindings()) {
+                    val newBinding = ExternalControllerBinding()
+                    newBinding.setKeyCode(binding.getKeyCodeForAxis())
+                    newBinding.setBinding(binding.getBinding())
+                    ctrl.addControllerBinding(newBinding)
                 }
-
-                // Copy on-screen elements from default profile if current profile has empty/NONE elements
-                copyElementsIfNeeded(context, profile, defaultProfile)
             } else {
-                Log.w("gncontrol", "Default profile 0 not found, wildcard controller will be empty")
+                // No migration source — load defaults from Physical Controller Default profile (ID 0)
+                val manager = com.winlator.inputcontrols.InputControlsManager(context)
+                val defaultProfile = manager.getProfile(0)
+                if (defaultProfile != null) {
+                    Log.d("gncontrol", "Loading defaults from profile: ${defaultProfile.name} (ID: ${defaultProfile.id})")
+                    val defaultControllers = defaultProfile.getControllers()
+                    if (defaultControllers.isNotEmpty()) {
+                        val defaultController = defaultControllers[0]
+                        val bindingCount = defaultController.getControllerBindings().size
+                        Log.d("gncontrol", "Copying $bindingCount default controller bindings from ${defaultProfile.name}")
+                        for (binding in defaultController.getControllerBindings()) {
+                            val newBinding = ExternalControllerBinding()
+                            newBinding.setKeyCode(binding.getKeyCodeForAxis())
+                            newBinding.setBinding(binding.getBinding())
+                            ctrl.addControllerBinding(newBinding)
+                        }
+                    } else {
+                        Log.w("gncontrol", "No controllers found in default profile ${defaultProfile.name}")
+                    }
+                    if (selectedPlayerSlot == 0) {
+                        // Copy on-screen elements from default profile only for the primary player
+                        copyElementsIfNeeded(context, profile, defaultProfile)
+                    }
+                } else {
+                    Log.w("gncontrol", "Default profile 0 not found, controller will be empty")
+                }
             }
+
+            // Ensure Home/Guide/PS button is always set to OPEN_NAVIGATION_MENU
+            val homeButtonBinding = ExternalControllerBinding()
+            homeButtonBinding.setKeyCode(KeyEvent.KEYCODE_BUTTON_MODE)
+            homeButtonBinding.setBinding(com.winlator.inputcontrols.Binding.OPEN_NAVIGATION_MENU)
+            val existingHomeBinding = ctrl.getControllerBindings().find {
+                it.getKeyCodeForAxis() == KeyEvent.KEYCODE_BUTTON_MODE
+            }
+            if (existingHomeBinding != null) {
+                ctrl.removeControllerBinding(existingHomeBinding)
+            }
+            ctrl.addControllerBinding(homeButtonBinding)
+            Log.d("gncontrol", "Set Home button (KEYCODE_BUTTON_MODE) to OPEN_NAVIGATION_MENU for '$controllerId'")
 
             profile.save()
         }
         ctrl
     }
 
-    // Create a snapshot of original bindings for cancel behavior
-    val originalBindings = remember {
+    // Snapshot of original bindings for cancel behavior (keyed per player slot)
+    val originalBindings = remember(selectedPlayerSlot) {
         controller?.getControllerBindings()?.map {
             it.getKeyCodeForAxis() to it.getBinding()
         }?.toMap() ?: emptyMap()
     }
 
-    // Working copy of bindings (memory only until Save is clicked)
-    val workingBindings = remember { mutableStateMapOf<Int, com.winlator.inputcontrols.Binding?>() }
+    // Working copy of bindings — one map per player slot, recreated on slot change
+    val workingBindings = remember(selectedPlayerSlot) { mutableStateMapOf<Int, com.winlator.inputcontrols.Binding?>() }
 
-    // Initialize working copy with current bindings
-    LaunchedEffect(controller) {
+    // Populate working copy whenever the player slot or its controller changes
+    LaunchedEffect(selectedPlayerSlot, controller) {
+        workingBindings.clear()
         controller?.getControllerBindings()?.forEach {
             workingBindings[it.getKeyCodeForAxis()] = it.getBinding()
         }
@@ -119,6 +138,12 @@ internal fun PhysicalControllerConfigSection(
     var selectedCategory by remember { mutableStateOf(0) } // 0 = Face, 1 = Shoulder, 2 = Menu, 3 = Thumbstick, 4 = Left Stick, 5 = Right Stick, 6 = D-Pad
     var showBindingDialog by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
+
+    // Close any open binding picker and force a redraw when the player slot changes
+    LaunchedEffect(selectedPlayerSlot) {
+        showBindingDialog = null
+        refreshKey++
+    }
 
     // Pre-compute all button configurations
     // Face buttons
@@ -310,10 +335,18 @@ internal fun PhysicalControllerConfigSection(
                     .padding(padding),
                 color = MaterialTheme.colorScheme.surface
             ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                PlayerSlotSelector(
+                    selectedSlot = selectedPlayerSlot,
+                    onSlotSelected = { selectedPlayerSlot = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp))
                 // Two-column layout: Left = Categories, Right = Bindings list
                 Row(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth()
+                        .weight(1f)
                         .padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -527,6 +560,7 @@ internal fun PhysicalControllerConfigSection(
                         }
                     }
                 }
+                }
             }
         }
     }
@@ -551,6 +585,46 @@ internal fun PhysicalControllerConfigSection(
                 refreshKey++
                 showBindingDialog = null
             }
+        )
+    }
+}
+
+/**
+ * Horizontal row of P1–P4 selector chips with the assigned controller name shown below.
+ */
+@Composable
+private fun PlayerSlotSelector(
+    selectedSlot: Int,
+    onSlotSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val controllerManager = remember { ControllerManager.getInstance() }
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            for (slot in 0 until 4) {
+                FilterChip(
+                    selected = selectedSlot == slot,
+                    onClick = { onSlotSelected(slot) },
+                    label = {
+                        Text(
+                            text = "P${slot + 1}",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        val assignedName = controllerManager?.getAssignedDeviceForSlot(selectedSlot)?.name
+            ?: stringResource(R.string.no_controller_assigned)
+        Text(
+            text = assignedName,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
         )
     }
 }
