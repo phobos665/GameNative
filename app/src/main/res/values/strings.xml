@@ -281,6 +281,7 @@
     <!-- Physical Controller Config -->
     <string name="physical_controller_config">Physical Controller Bindings Editor</string>
     <string name="physical_controller_config_subtitle">Configure button mappings for your physical controller</string>
+    <string name="no_controller_assigned">No controller assigned</string>
     <string name="face_buttons">Face Buttons</string>
     <string name="button_a">A Button</string>
     <string name="button_a_subtitle">Bottom face button (Confirm)</string>
