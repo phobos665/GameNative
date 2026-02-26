@@ -1,6 +1,8 @@
 package app.gamenative.ui.component.dialog
 
+import android.content.res.Configuration
 import android.util.Log
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.compose.foundation.clickable
@@ -18,10 +20,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.gamenative.R
+import app.gamenative.ui.theme.PluviaTheme
 import com.winlator.inputcontrols.Binding
 import com.winlator.inputcontrols.ControllerManager
 import com.winlator.inputcontrols.ControlsProfile
@@ -590,19 +594,44 @@ internal fun PhysicalControllerConfigSection(
 }
 
 /**
- * Horizontal row of P1–P4 selector chips with the assigned controller name shown below.
+ * Horizontal row of P1–P4 selector chips with a device-assignment dropdown for the selected slot.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlayerSlotSelector(
     selectedSlot: Int,
     onSlotSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val controllerManager = remember { ControllerManager.getInstance() }
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    val context = LocalContext.current
+    val controllerManager = remember {
+        ControllerManager.getInstance().also { it.init(context) }
+    }
+    val detectedDevices: List<InputDevice> = remember {
+        controllerManager.scanForDevices()
+        controllerManager.detectedDevices.toList()
+    }
+
+    val unassignedLabel = stringResource(R.string.controller_order_unassigned)
+    val deviceLabels = listOf(unassignedLabel) + detectedDevices.map { it.name ?: it.id.toString() }
+
+    var dropdownExpanded by remember { mutableStateOf(false) }
+
+    // Recalculate the current assignment index whenever the selected slot changes
+    val assignedDevice = controllerManager.getAssignedDeviceForSlot(selectedSlot)
+    val currentIndex = remember(selectedSlot, detectedDevices.size) {
+        if (assignedDevice != null) {
+            val idx = detectedDevices.indexOfFirst { it.id == assignedDevice.id }
+            if (idx >= 0) idx + 1 else 0
+        } else 0
+    }
+    var selectedIndex by remember(selectedSlot, detectedDevices.size) { mutableIntStateOf(currentIndex) }
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // P1–P4 chips
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             for (slot in 0 until 4) {
                 FilterChip(
@@ -611,21 +640,53 @@ private fun PlayerSlotSelector(
                     label = {
                         Text(
                             text = "P${slot + 1}",
-                            style = MaterialTheme.typography.labelMedium
+                            style = MaterialTheme.typography.labelMedium,
                         )
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
-        val assignedName = controllerManager?.getAssignedDeviceForSlot(selectedSlot)?.name
-            ?: stringResource(R.string.no_controller_assigned)
-        Text(
-            text = assignedName,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
+
+        // Device assignment dropdown for the currently selected slot
+        ExposedDropdownMenuBox(
+            expanded = dropdownExpanded,
+            onExpandedChange = { dropdownExpanded = it },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedTextField(
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+                readOnly = true,
+                value = deviceLabels.getOrElse(selectedIndex) { unassignedLabel },
+                onValueChange = {},
+                label = { Text(stringResource(R.string.controller_order_assigned_controller)) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                singleLine = true,
+            )
+            ExposedDropdownMenu(
+                expanded = dropdownExpanded,
+                onDismissRequest = { dropdownExpanded = false },
+            ) {
+                deviceLabels.forEachIndexed { idx, label ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = {
+                            selectedIndex = idx
+                            dropdownExpanded = false
+                            if (idx == 0) {
+                                controllerManager.unassignSlot(selectedSlot)
+                            } else {
+                                controllerManager.assignDeviceToSlot(selectedSlot, detectedDevices[idx - 1])
+                            }
+                        },
+                        contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -936,6 +997,324 @@ private fun applyPhysicalPreset(
         if (keyCode != 0 && index < bindings.size) {
             workingBindings[keyCode] = bindings[index]
         }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Previews
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Preview-only slot selector that accepts plain device name strings instead of [InputDevice] /
+ * [ControllerManager], so it can render without any system services.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlayerSlotSelectorPreview(
+    deviceNames: List<String>,
+    selectedSlot: Int = 0,
+    modifier: Modifier = Modifier,
+) {
+    val unassignedLabel = stringResource(R.string.controller_order_unassigned)
+    val deviceLabels = listOf(unassignedLabel) + deviceNames
+    var currentSlot by remember { mutableIntStateOf(selectedSlot) }
+    var selectedIndex by remember(currentSlot) {
+        mutableIntStateOf(if (currentSlot < deviceNames.size) currentSlot + 1 else 0)
+    }
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for (slot in 0 until 4) {
+                FilterChip(
+                    selected = currentSlot == slot,
+                    onClick = { currentSlot = slot },
+                    label = {
+                        Text(
+                            text = "P${slot + 1}",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        ExposedDropdownMenuBox(
+            expanded = false,
+            onExpandedChange = {},
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedTextField(
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+                readOnly = true,
+                value = deviceLabels.getOrElse(selectedIndex) { unassignedLabel },
+                onValueChange = {},
+                label = { Text(stringResource(R.string.controller_order_assigned_controller)) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = false) },
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                singleLine = true,
+            )
+        }
+    }
+}
+
+/**
+ * Preview-only full-screen shell for [PhysicalControllerConfigSection] that uses plain
+ * strings instead of a real [com.winlator.inputcontrols.ControlsProfile].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PhysicalControllerConfigSectionPreviewContent(
+    deviceNames: List<String> = listOf("Xbox Wireless Controller", "DualSense Wireless Controller"),
+) {
+    val context = LocalContext.current
+    val categories = listOf(
+        context.getString(R.string.face_buttons_category),
+        context.getString(R.string.shoulder_buttons_category),
+        context.getString(R.string.menu_buttons_category),
+        context.getString(R.string.thumbstick_buttons_category),
+        context.getString(R.string.left_stick),
+        context.getString(R.string.right_stick),
+        context.getString(R.string.dpad_category),
+    )
+    var selectedCategory by remember { mutableIntStateOf(0) }
+    val workingBindings = remember {
+        mutableStateMapOf(
+            KeyEvent.KEYCODE_BUTTON_A to Binding.GAMEPAD_BUTTON_A,
+            KeyEvent.KEYCODE_BUTTON_B to Binding.GAMEPAD_BUTTON_B,
+            KeyEvent.KEYCODE_BUTTON_X to Binding.GAMEPAD_BUTTON_X,
+            KeyEvent.KEYCODE_BUTTON_Y to Binding.GAMEPAD_BUTTON_Y,
+        )
+    }
+    val faceButtonLabels = listOf(
+        context.getString(R.string.button_a) to KeyEvent.KEYCODE_BUTTON_A,
+        context.getString(R.string.button_b) to KeyEvent.KEYCODE_BUTTON_B,
+        context.getString(R.string.button_x) to KeyEvent.KEYCODE_BUTTON_X,
+        context.getString(R.string.button_y) to KeyEvent.KEYCODE_BUTTON_Y,
+    )
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        text = stringResource(R.string.physical_controller_config),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = {}) { Icon(Icons.Default.Close, null) }
+                },
+                actions = {
+                    IconButton(onClick = {}) { Icon(Icons.Default.Refresh, null) }
+                    IconButton(onClick = {}) { Icon(Icons.Default.Save, null) }
+                },
+            )
+        },
+    ) { padding ->
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                PlayerSlotSelectorPreview(
+                    deviceNames = deviceNames,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // Left column: categories
+                    Column(
+                        modifier = Modifier
+                            .weight(0.35f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState())
+                            .padding(vertical = 7.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        categories.forEachIndexed { idx, name ->
+                            CategoryButton(
+                                label = name,
+                                isSelected = selectedCategory == idx,
+                                onClick = { selectedCategory = idx },
+                            )
+                        }
+                    }
+                    // Right column: binding items
+                    Column(
+                        modifier = Modifier
+                            .weight(0.65f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState())
+                            .padding(vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        faceButtonLabels.forEach { (label, keyCode) ->
+                            ControllerBindingItem(
+                                label = label,
+                                keyCode = keyCode,
+                                workingBindings = workingBindings,
+                                onClick = {},
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Preview(
+    name = "CategoryButton — light",
+    widthDp = 180,
+    uiMode = Configuration.UI_MODE_NIGHT_NO or Configuration.UI_MODE_TYPE_NORMAL,
+)
+@Preview(
+    name = "CategoryButton — dark",
+    widthDp = 180,
+    uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL,
+)
+@Composable
+private fun Preview_CategoryButton() {
+    PluviaTheme {
+        Surface {
+            Column(
+                modifier = Modifier.padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                CategoryButton(label = "Face Buttons", isSelected = true, onClick = {})
+                CategoryButton(label = "Shoulder Buttons", isSelected = false, onClick = {})
+                CategoryButton(label = "Left Stick", isSelected = false, onClick = {})
+                CategoryButton(label = "D-Pad", isSelected = false, onClick = {})
+            }
+        }
+    }
+}
+
+@Preview(
+    name = "ControllerBindingItem — light",
+    widthDp = 280,
+    uiMode = Configuration.UI_MODE_NIGHT_NO or Configuration.UI_MODE_TYPE_NORMAL,
+)
+@Preview(
+    name = "ControllerBindingItem — dark",
+    widthDp = 280,
+    uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL,
+)
+@Composable
+private fun Preview_ControllerBindingItem() {
+    PluviaTheme {
+        val bindings = remember {
+            mutableStateMapOf(
+                KeyEvent.KEYCODE_BUTTON_A to Binding.GAMEPAD_BUTTON_A,
+                KeyEvent.KEYCODE_BUTTON_B to Binding.GAMEPAD_BUTTON_B,
+            )
+        }
+        Surface {
+            Column(
+                modifier = Modifier.padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                ControllerBindingItem("A", KeyEvent.KEYCODE_BUTTON_A, bindings, {})
+                ControllerBindingItem("B", KeyEvent.KEYCODE_BUTTON_B, bindings, {})
+                ControllerBindingItem("X (not set)", KeyEvent.KEYCODE_BUTTON_X, bindings, {})
+            }
+        }
+    }
+}
+
+@Preview(
+    name = "PlayerSlotSelector — with devices",
+    widthDp = 400,
+    uiMode = Configuration.UI_MODE_NIGHT_NO or Configuration.UI_MODE_TYPE_NORMAL,
+)
+@Preview(
+    name = "PlayerSlotSelector — no devices (dark)",
+    widthDp = 400,
+    uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL,
+)
+@Composable
+private fun Preview_PlayerSlotSelector() {
+    PluviaTheme {
+        Surface {
+            PlayerSlotSelectorPreview(
+                deviceNames = listOf("Xbox Wireless Controller", "DualSense"),
+                modifier = Modifier.padding(12.dp),
+            )
+        }
+    }
+}
+
+@Preview(
+    name = "PlayerSlotSelector — no devices",
+    widthDp = 400,
+    uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL,
+)
+@Composable
+private fun Preview_PlayerSlotSelector_NoDevices() {
+    PluviaTheme {
+        Surface {
+            PlayerSlotSelectorPreview(
+                deviceNames = emptyList(),
+                modifier = Modifier.padding(12.dp),
+            )
+        }
+    }
+}
+
+@Preview(
+    name = "PhysicalControllerConfigSection — light",
+    uiMode = Configuration.UI_MODE_NIGHT_NO or Configuration.UI_MODE_TYPE_NORMAL,
+    device = "spec:width=673dp,height=841dp,dpi=480",
+)
+@Composable
+private fun Preview_PhysicalControllerConfigSection_Light() {
+    PluviaTheme {
+        PhysicalControllerConfigSectionPreviewContent(
+            deviceNames = listOf("Xbox Wireless Controller", "DualSense Wireless Controller"),
+        )
+    }
+}
+
+@Preview(
+    name = "PhysicalControllerConfigSection — dark",
+    uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL,
+    device = "spec:width=673dp,height=841dp,dpi=480",
+)
+@Composable
+private fun Preview_PhysicalControllerConfigSection_Dark() {
+    PluviaTheme {
+        PhysicalControllerConfigSectionPreviewContent(
+            deviceNames = listOf("Xbox Wireless Controller", "DualSense Wireless Controller"),
+        )
+    }
+}
+
+@Preview(
+    name = "PhysicalControllerConfigSection — no devices",
+    uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL,
+    device = "spec:width=673dp,height=841dp,dpi=480",
+)
+@Composable
+private fun Preview_PhysicalControllerConfigSection_NoDevices() {
+    PluviaTheme {
+        PhysicalControllerConfigSectionPreviewContent(deviceNames = emptyList())
     }
 }
 
