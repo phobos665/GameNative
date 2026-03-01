@@ -11,8 +11,10 @@ import app.gamenative.data.LaunchInfo
 import app.gamenative.data.LibraryItem
 import app.gamenative.events.AndroidEvent
 import app.gamenative.PluviaApp
+import app.gamenative.enums.Marker
 import app.gamenative.service.NotificationHelper
 import app.gamenative.utils.ContainerUtils
+import app.gamenative.utils.MarkerUtils
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -116,10 +118,6 @@ class GOGService : Service() {
             return GOGAuthManager.getStoredCredentials(context)
         }
 
-        suspend fun validateCredentials(context: Context): Result<Boolean> {
-            return GOGAuthManager.validateCredentials(context)
-        }
-
         fun clearStoredCredentials(context: Context): Boolean {
             return GOGAuthManager.clearStoredCredentials(context)
         }
@@ -173,43 +171,47 @@ class GOGService : Service() {
             syncInProgress = inProgress
         }
 
-        fun isSyncInProgress(): Boolean = syncInProgress
-
         fun getInstance(): GOGService? = instance
 
         // ==========================================================================
         // DOWNLOAD OPERATIONS - Delegate to instance GOGManager
         // ==========================================================================
 
-        fun hasActiveDownload(): Boolean {
-            return getInstance()?.activeDownloads?.isNotEmpty() ?: false
-        }
-
-        fun getCurrentlyDownloadingGame(): String? {
-            return getInstance()?.activeDownloads?.keys?.firstOrNull()
-        }
-
         fun getDownloadInfo(gameId: String): DownloadInfo? {
             return getInstance()?.activeDownloads?.get(gameId)
         }
 
-        fun cleanupDownload(gameId: String) {
-            getInstance()?.activeDownloads?.remove(gameId)
-        }
+        suspend fun cleanupDownload(gameId: String, deleteFiles: Boolean = false) {
+            val instance = getInstance() ?: return
 
-        fun cancelDownload(gameId: String): Boolean {
-            val instance = getInstance()
-            val downloadInfo = instance?.activeDownloads?.get(gameId)
+            // Cancel and remove download from active downloads if exists
+            instance.activeDownloads[gameId]?.cancel()
+            instance.activeDownloads.remove(gameId)
 
-            return if (downloadInfo != null) {
-                Timber.i("Cancelling download for game: $gameId")
-                downloadInfo.cancel()
-                instance.activeDownloads.remove(gameId)
-                Timber.d("Download cancelled for game: $gameId")
-                true
-            } else {
-                Timber.w("No active download found for game: $gameId")
-                false
+            Timber.tag("GOG").i("Killed download for gameId: $gameId")
+
+            withContext(Dispatchers.IO) {
+                instance.gogManager.getGameFromDbById(gameId)?.let { game ->
+                    val path = GOGConstants.getGameInstallPath(game.title)
+                    if(!deleteFiles) {
+                        Timber.tag("GOG").i("Skipping file deletion for gameId: $gameId.")
+                        MarkerUtils.removeMarker(path, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+                        return@let
+                    }
+
+                    Timber.tag("GOG").i("Preparing to delete installation folder for gameId: $gameId at path: $path")
+                    if (File(path).exists()) {
+                        Timber.tag("GOG").i("Deleting installation folder: $path")
+                        val deleted = File(path).deleteRecursively()
+                        if (!deleted) {
+                            throw Exception("Failed to delete installation folder")
+                        }
+                        Timber.tag("GOG").i("Successfully deleted installation folder")
+                        MarkerUtils.removeMarker(path, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+                    } else {
+                        Timber.tag("GOG").w("Cannot delete folder for download cleanup - No folder detected for gameId: $gameId")
+                    }
+                }
             }
         }
 
@@ -221,10 +223,6 @@ class GOGService : Service() {
             return runBlocking(Dispatchers.IO) {
                 getInstance()?.gogManager?.getGameFromDbById(gameId)
             }
-        }
-
-        suspend fun updateGOGGame(game: GOGGame) {
-            getInstance()?.gogManager?.updateGame(game)
         }
 
         fun isGameInstalled(gameId: String): Boolean {
@@ -251,16 +249,6 @@ class GOGService : Service() {
             }
         }
 
-        fun verifyInstallation(gameId: String): Pair<Boolean, String?> {
-            return getInstance()?.gogManager?.verifyInstallation(gameId)
-                ?: Pair(false, "Service not available")
-        }
-
-        suspend fun getInstalledExe(libraryItem: LibraryItem): String {
-            return getInstance()?.gogManager?.getInstalledExe(libraryItem)
-                ?: ""
-        }
-
         /**
          * Resolves the effective launch executable for a GOG game (container config or auto-detected).
          * Returns empty string if no executable can be found.
@@ -281,11 +269,6 @@ class GOGService : Service() {
             return getInstance()?.gogManager?.getGogWineStartCommand(
                 libraryItem, container, bootToContainer, appLaunchInfo, envVars, guestProgramLauncherComponent, gameId,
             ) ?: "\"explorer.exe\""
-        }
-
-        suspend fun refreshLibrary(context: Context): Result<Int> {
-            return getInstance()?.gogManager?.refreshLibrary(context)
-                ?: Result.failure(Exception("Service not available"))
         }
 
         fun runScriptInterpreterIfNeeded(
@@ -366,11 +349,6 @@ class GOGService : Service() {
             }
 
             return Result.success(downloadInfo)
-        }
-
-        suspend fun refreshSingleGame(gameId: String, context: Context): Result<GOGGame?> {
-            return getInstance()?.gogManager?.refreshSingleGame(gameId, context)
-                ?: Result.failure(Exception("Service not available"))
         }
 
         /**

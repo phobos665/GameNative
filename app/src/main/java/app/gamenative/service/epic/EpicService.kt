@@ -158,8 +158,6 @@ class EpicService : Service() {
             syncInProgress = inProgress
         }
 
-        fun isSyncInProgress(): Boolean = syncInProgress
-
         fun getInstance(): EpicService? = instance
 
         // ==========================================================================
@@ -180,26 +178,23 @@ class EpicService : Service() {
 
         suspend fun deleteGame(context: Context, appId: Int): Result<Unit> {
             val instance = getInstance()
-            if (instance == null) {
-                return Result.failure(Exception("Service not available"))
-            }
-
             return try {
+                if (instance == null) {
+                    throw Exception("Service Unavailable: $appId")
+                }
                 // Get the game to find its install path
                 val game = instance.epicManager.getGameById(appId)
-                if (game == null) {
-                    return Result.failure(Exception("Game not found: $appId"))
-                }
+                    ?: throw Exception("Game not found with AppID: $appId")
 
-                val path = if (game.installPath.isNotEmpty()) game.installPath else EpicConstants.getGameInstallPath(context, game.appName)
+                val path = game.installPath.ifEmpty { EpicConstants.getGameInstallPath(context, game.appName) }
+                // recursively delete contents if exists.
                 if (File(path).exists()) {
                     Timber.tag("Epic").i("Deleting installation folder: $path")
                     val deleted = File(path).deleteRecursively()
-                    if (deleted) {
-                        Timber.tag("Epic").i("Successfully deleted installation folder")
-                    } else {
-                        Timber.tag("Epic").w("Failed to delete some files in installation folder")
+                    if (!deleted) {
+                        throw Exception("Failed to delete installation folder")
                     }
+                    Timber.tag("Epic").i("Successfully deleted installation folder")
                     MarkerUtils.removeMarker(path, Marker.DOWNLOAD_COMPLETE_MARKER)
                     MarkerUtils.removeMarker(path, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
                 }
@@ -224,30 +219,35 @@ class EpicService : Service() {
                 Result.failure(e)
             }
         }
+        suspend fun cleanupDownload(context: Context, appId: Int, deleteFiles: Boolean = false) {
+            val instance = getInstance() ?: return
 
-        suspend fun cleanupDownload(context: Context, appId: Int) {
+            // Cancel and remove download from active downloads if exists
+            instance.activeDownloads[appId]?.cancel()
+            instance.activeDownloads.remove(appId)
+
+            Timber.tag("Epic").i("Killed download for appId: $appId")
+
             withContext(Dispatchers.IO) {
-                getInstance()?.epicManager?.getGameById(appId)?.let { game ->
+                instance.epicManager.getGameById(appId)?.let { game ->
                     val path = EpicConstants.getGameInstallPath(context, game.appName)
-                    MarkerUtils.removeMarker(path, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+                    if(!deleteFiles) {
+                        Timber.tag("Epic").i("Skipping file deletion for appId: $appId.")
+                        MarkerUtils.removeMarker(path, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+                        return@let
+                    }
+                    if (File(path).exists()) {
+                        Timber.tag("Epic").i("Deleting installation folder: $path")
+                        val deleted = File(path).deleteRecursively()
+                        if (!deleted) {
+                            throw Exception("Failed to delete installation folder")
+                        }
+                        Timber.tag("Epic").i("Successfully deleted installation folder")
+                        MarkerUtils.removeMarker(path, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+                    } else {
+                        Timber.tag("Epic").w("Cannot delete folder for download cleanup - No folder detected for appId: $appId")
+                    }
                 }
-            }
-            getInstance()?.activeDownloads?.remove(appId)
-        }
-
-        fun cancelDownload(appId: Int): Boolean {
-            val instance = getInstance()
-            val downloadInfo = instance?.activeDownloads?.get(appId)
-
-            return if (downloadInfo != null) {
-                Timber.tag("EPIC").i("Cancelling download for Epic game: $appId")
-                downloadInfo.cancel()
-                instance.activeDownloads.remove(appId)
-                Timber.tag("EPIC").d("Download cancelled for Epic game: $appId")
-                true
-            } else {
-                Timber.w("No active download found for Epic game: $appId")
-                false
             }
         }
 
@@ -258,12 +258,6 @@ class EpicService : Service() {
         fun getEpicGameOf(appId: Int): EpicGame? {
             return runBlocking(Dispatchers.IO) {
                 getInstance()?.epicManager?.getGameById(appId)
-            }
-        }
-
-        fun getEpicGameByAppName(appName: String): EpicGame? {
-            return runBlocking(Dispatchers.IO) {
-                getInstance()?.epicManager?.getGameByAppName(appName)
             }
         }
 
@@ -292,10 +286,6 @@ class EpicService : Service() {
             }
         }
 
-        suspend fun getInstalledExe(appId: Int): String {
-            return getInstance()?.epicManager?.getInstalledExe(appId) ?: ""
-        }
-
         /**
          * Resolves the effective launch executable for an Epic game.
          * Container id is expected to be "EPIC_&lt;numericId&gt;" (from library). Returns empty if
@@ -309,11 +299,6 @@ class EpicService : Service() {
                 return ""
             }
             return getInstance()?.epicManager?.getLaunchExecutable(gameId) ?: ""
-        }
-
-        suspend fun refreshLibrary(context: Context): Result<Int> {
-            return getInstance()?.epicManager?.refreshLibrary(context)
-                ?: Result.failure(Exception("Service not available"))
         }
 
         suspend fun fetchManifestSizes(context: Context, appId: Int): EpicManager.ManifestSizes {
@@ -414,29 +399,9 @@ class EpicService : Service() {
             return Result.success(downloadInfo)
         }
 
-        suspend fun refreshSingleGame(appId: Int, context: Context): Result<EpicGame?> {
-            // For now, just get from database
-            val game = getInstance()?.epicManager?.getGameById(appId)
-            // TODO: Fix this up.
-            return if (game != null) {
-                Result.success(game)
-            } else {
-                Result.failure(Exception("Game not found: $appId"))
-            }
-        }
-
         // ==========================================================================
         // Game Launcher Helpers
         // ==========================================================================
-
-        suspend fun getGameLaunchToken(
-            context: Context,
-            namespace: String? = null,
-            catalogItemId: String? = null,
-            requiresOwnershipToken: Boolean = false
-        ): Result<EpicGameToken> {
-            return EpicAuthManager.getGameLaunchToken(context, namespace, catalogItemId, requiresOwnershipToken)
-        }
 
         suspend fun buildLaunchParameters(
             context: Context,
@@ -449,26 +414,6 @@ class EpicService : Service() {
 
         fun cleanupLaunchTokens(context: Context) {
             EpicGameLauncher.cleanupOwnershipTokens(context)
-        }
-
-        // ==========================================================================
-        // CLOUD SAVES HELPERS
-        // ==========================================================================
-
-        /**
-         * Get the Epic account ID from stored credentials
-         */
-        fun getAccountId(): String? {
-            return try {
-                val context = getInstance()?.applicationContext ?: return null
-                val credentialsResult = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
-                    EpicAuthManager.getStoredCredentials(context)
-                }
-                credentialsResult.getOrNull()?.accountId
-            } catch (e: Exception) {
-                Timber.tag("Epic").e(e, "Failed to get account ID")
-                null
-            }
         }
     }
 

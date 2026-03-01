@@ -219,8 +219,9 @@ class GOGAppScreen : BaseAppScreen() {
         if (isDownloading) {
             // Cancel ongoing download
             Timber.tag(TAG).i("Cancelling GOG download for: ${libraryItem.appId}")
-            downloadInfo.cancel()
-            GOGService.cleanupDownload(gameId)
+            CoroutineScope(Dispatchers.IO).launch {
+                GOGService.cleanupDownload(gameId)
+            }
         } else if (installed) {
             // Already installed: launch game
             Timber.tag(TAG).i("GOG game already installed, launching: ${libraryItem.appId}")
@@ -319,8 +320,9 @@ class GOGAppScreen : BaseAppScreen() {
 
         if (downloadInfo != null) {
             Timber.tag(TAG).i("Cancelling GOG download: ${libraryItem.appId}")
-            downloadInfo.cancel()
-            GOGService.cleanupDownload(gameId)
+            CoroutineScope(Dispatchers.IO).launch {
+                GOGService.cleanupDownload(gameId)
+            }
         }
     }
 
@@ -336,8 +338,9 @@ class GOGAppScreen : BaseAppScreen() {
         if (isDownloading) {
             // Cancel download immediately if currently downloading
             Timber.tag(TAG).i("Cancelling active download for GOG game: ${libraryItem.appId}")
-            downloadInfo.cancel()
-            GOGService.cleanupDownload(gameId)
+            CoroutineScope(Dispatchers.IO).launch {
+                GOGService.cleanupDownload(gameId, true)
+            }
             android.widget.Toast.makeText(
                 context,
                 "Download cancelled",
