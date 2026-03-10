@@ -74,6 +74,10 @@ data class ContainerData(
     val disableMouseInput: Boolean = false,
     /** Touchscreen mode **/
     val touchscreenMode: Boolean = false,
+    /** Shooter mode (auto-replace sticks with dynamic joysticks) **/
+    val shooterMode: Boolean = true,
+    /** Serialised JSON gesture configuration (used when touchscreenMode is true) **/
+    val gestureConfig: String = "",
     /** External display input handling: off|touchpad|keyboard|hybrid **/
     val externalDisplayMode: String = Container.DEFAULT_EXTERNAL_DISPLAY_MODE,
     /** Swap game/input between internal and external displays **/
@@ -84,6 +88,8 @@ data class ContainerData(
     val steamOfflineMode: Boolean = false,
     val useLegacyDRM: Boolean = false,
     val unpackFiles: Boolean = false,
+    val suspendPolicy: String = Container.SUSPEND_POLICY_MANUAL,
+    val portraitMode: Boolean = false,
     val sharpnessEffect: String = "None",
     val sharpnessLevel: Int = 100,
     val sharpnessDenoise: Int = 100,
@@ -134,6 +140,8 @@ data class ContainerData(
                     "dinputMapperType" to state.dinputMapperType,
                     "disableMouseInput" to state.disableMouseInput,
                     "touchscreenMode" to state.touchscreenMode,
+                    "shooterMode" to state.shooterMode,
+                    "gestureConfig" to state.gestureConfig,
                     "externalDisplayMode" to state.externalDisplayMode,
                     "externalDisplaySwap" to state.externalDisplaySwap,
                     "useDRI3" to state.useDRI3,
@@ -142,6 +150,8 @@ data class ContainerData(
                     "steamOfflineMode" to state.steamOfflineMode,
                     "useLegacyDRM" to state.useLegacyDRM,
                     "unpackFiles" to state.unpackFiles,
+                    "suspendPolicy" to state.suspendPolicy,
+                    "portraitMode" to state.portraitMode,
                     "sharpnessEffect" to state.sharpnessEffect,
                     "sharpnessLevel" to state.sharpnessLevel,
                     "sharpnessDenoise" to state.sharpnessDenoise,
@@ -191,6 +201,8 @@ data class ContainerData(
                     dinputMapperType = savedMap["dinputMapperType"] as Byte,
                     disableMouseInput = savedMap["disableMouseInput"] as Boolean,
                     touchscreenMode = savedMap["touchscreenMode"] as Boolean,
+                    shooterMode = (savedMap["shooterMode"] as? Boolean) ?: true,
+                    gestureConfig = (savedMap["gestureConfig"] as? String) ?: "",
                     externalDisplayMode = (savedMap["externalDisplayMode"] as? String) ?: Container.DEFAULT_EXTERNAL_DISPLAY_MODE,
                     externalDisplaySwap = (savedMap["externalDisplaySwap"] as? Boolean) ?: false,
                     useDRI3 = (savedMap["useDRI3"] as? Boolean) ?: true,
@@ -199,6 +211,8 @@ data class ContainerData(
                     steamOfflineMode = (savedMap["steamOfflineMode"] as? Boolean) ?: false,
                     useLegacyDRM = (savedMap["useLegacyDRM"] as? Boolean) ?: false,
                     unpackFiles = (savedMap["unpackFiles"] as? Boolean) ?: false,
+                    suspendPolicy = (savedMap["suspendPolicy"] as? String) ?: Container.SUSPEND_POLICY_MANUAL,
+                    portraitMode = (savedMap["portraitMode"] as? Boolean) ?: false,
                     sharpnessEffect = (savedMap["sharpnessEffect"] as? String) ?: "None",
                     sharpnessLevel = (savedMap["sharpnessLevel"] as? Int) ?: 100,
                     sharpnessDenoise = (savedMap["sharpnessDenoise"] as? Int) ?: 100,

@@ -4,6 +4,8 @@ import app.gamenative.PrefManager
 import app.gamenative.data.GameCompatibilityStatus
 import app.gamenative.data.LibraryItem
 import app.gamenative.ui.enums.AppFilter
+import app.gamenative.ui.enums.LibraryTab
+import app.gamenative.ui.enums.SortOption
 import java.util.EnumSet
 
 data class LibraryState(
@@ -37,4 +39,21 @@ data class LibraryState(
 
     // Compatibility status map: game name -> compatibility status
     val compatibilityMap: Map<String, GameCompatibilityStatus> = emptyMap(),
+
+    // Sort option for the library
+    val currentSortOption: SortOption = PrefManager.librarySortOption,
+
+    // Options panel open state
+    val isOptionsPanelOpen: Boolean = false,
+
+    // Current library tab for quick filter access
+    val currentTab: LibraryTab = LibraryTab.ALL,
+
+    // Per-source game counts for tab badges
+    val allCount: Int = 0,
+    val steamCount: Int = 0,
+    val gogCount: Int = 0,
+    val epicCount: Int = 0,
+    val amazonCount: Int = 0,
+    val localCount: Int = 0,
 )

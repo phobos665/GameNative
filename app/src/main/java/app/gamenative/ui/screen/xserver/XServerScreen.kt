@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.os.Build
 import android.util.Log
 import android.view.Display
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
@@ -14,26 +15,23 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ViewList
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,6 +52,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.gamenative.R
+import app.gamenative.ui.util.SnackbarManager
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -68,16 +67,18 @@ import app.gamenative.data.LibraryItem
 import app.gamenative.data.SteamApp
 import app.gamenative.events.AndroidEvent
 import app.gamenative.events.SteamEvent
+import app.gamenative.ui.enums.Orientation
+import java.util.EnumSet
 import app.gamenative.externaldisplay.ExternalDisplayInputController
 import app.gamenative.externaldisplay.ExternalDisplaySwapController
 import app.gamenative.externaldisplay.SwapInputOverlayView
 import app.gamenative.service.SteamService
+import app.gamenative.service.amazon.AmazonService
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGService
-import android.widget.Toast
-import app.gamenative.ui.component.settings.SettingsListDropdown
+import app.gamenative.ui.component.QuickMenu
+import app.gamenative.ui.component.QuickMenuAction
 import app.gamenative.ui.data.XServerState
-import app.gamenative.ui.theme.settingsTileColors
 import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.CustomGameScanner
 import app.gamenative.utils.ExecutableSelectionUtils
@@ -88,7 +89,6 @@ import com.posthog.PostHog
 import com.winlator.alsaserver.ALSAClient
 import com.winlator.container.Container
 import com.winlator.container.ContainerManager
-import com.winlator.contentdialog.NavigationDialog
 import com.winlator.contents.AdrenotoolsManager
 import com.winlator.contents.ContentProfile
 import com.winlator.contents.ContentsManager
@@ -109,7 +109,6 @@ import com.winlator.core.WineRegistryEditor
 import com.winlator.core.WineStartMenuCreator
 import com.winlator.core.WineThemeManager
 import com.winlator.core.WineUtils
-import com.winlator.core.envvars.EnvVarInfo
 import com.winlator.core.envvars.EnvVars
 import com.winlator.fexcore.FEXCoreManager
 import com.winlator.inputcontrols.ControllerManager
@@ -138,6 +137,7 @@ import com.winlator.xenvironment.components.SteamClientComponent
 import com.winlator.xenvironment.components.SysVSharedMemoryComponent
 import com.winlator.xenvironment.components.VirGLRendererComponent
 import com.winlator.xenvironment.components.VortekRendererComponent
+import com.winlator.xenvironment.components.WineRequestComponent
 import com.winlator.xenvironment.components.XServerComponent
 import com.winlator.xserver.Keyboard
 import com.winlator.xserver.Property
@@ -246,9 +246,6 @@ fun XServerScreen(
 
     // PluviaApp.events.emit(AndroidEvent.SetAppBarVisibility(false))
     PluviaApp.events.emit(AndroidEvent.SetSystemUIVisibility(false))
-    PluviaApp.events.emit(
-        AndroidEvent.SetAllowedOrientation(PrefManager.allowedOrientation),
-    )
 
     // seems to be used to indicate when a custom wine is being installed (intent extra "generate_wineprefix")
     // val generateWinePrefix = false
@@ -264,6 +261,21 @@ fun XServerScreen(
     val container = remember(appId) {
         ContainerUtils.getContainer(context, appId)
     }
+
+    val suspendPolicy = remember(container.id) { container.suspendPolicy }
+    val neverSuspend = suspendPolicy.equals(Container.SUSPEND_POLICY_NEVER, ignoreCase = true)
+    val manualResumeMode = suspendPolicy.equals(Container.SUSPEND_POLICY_MANUAL, ignoreCase = true)
+
+    SideEffect {
+        PluviaApp.setActiveSuspendPolicy(suspendPolicy)
+    }
+
+    PluviaApp.events.emit(
+        AndroidEvent.SetAllowedOrientation(
+            if (container.isPortraitMode) EnumSet.of(Orientation.PORTRAIT)
+            else PrefManager.allowedOrientation,
+        ),
+    )
 
     val xServerState = rememberSaveable(stateSaver = XServerState.Saver) {
         mutableStateOf(
@@ -328,13 +340,59 @@ fun XServerScreen(
     var areControlsVisible by remember { mutableStateOf(false) }
     var isEditMode by remember { mutableStateOf(false) }
     var gameRoot by remember { mutableStateOf<View?>(null) }
+    var windowModificationListener by remember { mutableStateOf<WindowManager.OnWindowModificationListener?>(null) }
     // Snapshot of element positions before entering edit mode (for cancel behavior)
     var elementPositionsSnapshot by remember { mutableStateOf<Map<com.winlator.inputcontrols.ControlElement, Pair<Int, Int>>>(emptyMap()) }
     var showElementEditor by remember { mutableStateOf(false) }
     var elementToEdit by remember { mutableStateOf<com.winlator.inputcontrols.ControlElement?>(null) }
     var showPhysicalControllerDialog by remember { mutableStateOf(false) }
-    var isOverlayPaused by remember { mutableStateOf(false) }
     var keyboardRequestedFromOverlay by remember { mutableStateOf(false) }
+    var showQuickMenu by remember { mutableStateOf(false) }
+    var hasPhysicalController by remember { mutableStateOf(false) }
+    var keepPausedForEditor by remember { mutableStateOf(false) }
+
+    fun clearOverlayPauseState() {
+        PluviaApp.isOverlayPaused = false
+    }
+
+    fun pauseForOverlayIfAllowed() {
+        if (neverSuspend) {
+            Timber.d("Skipping overlay suspend due to suspend policy=never")
+            return
+        }
+        PluviaApp.xEnvironment?.onPause()
+        PluviaApp.isOverlayPaused = true
+    }
+
+    fun resumeIfAllowedAfterOverlay() {
+        if (!PluviaApp.isOverlayPaused) return
+        if (neverSuspend) {
+            clearOverlayPauseState()
+            return
+        }
+        if (manualResumeMode) {
+            Timber.d("Keeping game suspended until Resume is pressed")
+            return
+        }
+        PluviaApp.xEnvironment?.onResume()
+        clearOverlayPauseState()
+    }
+
+    fun forceResumeIfSuspended() {
+        if (PluviaApp.isOverlayPaused && !neverSuspend) {
+            PluviaApp.xEnvironment?.onResume()
+        }
+        clearOverlayPauseState()
+    }
+
+    fun resumeFromManualButton() {
+        if (!PluviaApp.isOverlayPaused) return
+        if (!neverSuspend) {
+            PluviaApp.xEnvironment?.onResume()
+        }
+        keepPausedForEditor = false
+        clearOverlayPauseState()
+    }
 
     fun startExitWatchForUnmappedGameWindow(window: Window) {
         val winHandler = xServerView?.getxServer()?.winHandler ?: return
@@ -395,6 +453,7 @@ fun XServerScreen(
                                     frameRating,
                                     currentAppInfo,
                                     container,
+                                    appId,
                                     onExit,
                                     navigateBack,
                                 )
@@ -409,6 +468,172 @@ fun XServerScreen(
                 synchronized(lock) {
                     pendingSnapshot = null
                 }
+            }
+        }
+    }
+
+    val dismissOverlayMenu: () -> Unit = {
+        if (!keyboardRequestedFromOverlay) {
+            imeInputReceiver?.hideKeyboard()
+        }
+        val resumeImmediatelyForKeyboard = keyboardRequestedFromOverlay && manualResumeMode
+        keyboardRequestedFromOverlay = false
+        if (!keepPausedForEditor) {
+            if (resumeImmediatelyForKeyboard) {
+                forceResumeIfSuspended()
+            } else {
+                resumeIfAllowedAfterOverlay()
+            }
+        }
+        showQuickMenu = false
+    }
+
+    val onQuickMenuItemSelected: (Int) -> Unit = { itemId ->
+        when (itemId) {
+            QuickMenuAction.KEYBOARD -> {
+                keyboardRequestedFromOverlay = true
+                val anchor = view // use the same composable root view
+                val c = if (Build.VERSION.SDK_INT >= 30)
+                    anchor.windowInsetsController else null
+
+                anchor.post {
+                    if (anchor.windowToken == null) return@post
+                    val show = {
+                        PostHog.capture(event = "onscreen_keyboard_enabled")
+                        val isExternalDisplaySession =
+                            (anchor.display?.displayId ?: Display.DEFAULT_DISPLAY) != Display.DEFAULT_DISPLAY
+
+                        if (isExternalDisplaySession) {
+                            imeInputReceiver?.showKeyboard() ?: imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
+                        } else {
+                            imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
+                        }
+                    }
+                    if (Build.VERSION.SDK_INT > 29 && c != null) {
+                        anchor.postDelayed({ show() }, 500)  // Pixel/Android-12+ quirk
+                    } else {
+                        show()
+                    }
+                }
+            }
+
+            QuickMenuAction.INPUT_CONTROLS -> {
+                if (areControlsVisible) {
+                    PostHog.capture(event = "onscreen_controller_disabled")
+                    hideInputControls()
+                } else {
+                    PostHog.capture(event = "onscreen_controller_enabled")
+                    val manager = PluviaApp.inputControlsManager
+                    val profiles = manager?.getProfiles(false) ?: listOf()
+                    if (profiles.isNotEmpty()) {
+                        // Use current profile (custom or Profile 0)
+                        val profileIdStr = container.getExtra("profileId", "0")
+                        val profileId = profileIdStr.toIntOrNull() ?: 0
+                        val targetProfile = if (profileId != 0) {
+                            manager?.getProfile(profileId)
+                        } else {
+                            null
+                        } ?: manager?.getProfile(0) ?: profiles.getOrNull(2) ?: profiles.first()
+
+                        showInputControls(targetProfile, xServerView!!.getxServer().winHandler, container)
+                    }
+                }
+                areControlsVisible = !areControlsVisible
+            }
+
+            QuickMenuAction.EDIT_CONTROLS -> {
+                PostHog.capture(event = "edit_controls_in_game")
+                keepPausedForEditor = true
+
+                // Get or create profile for this container
+                val manager = PluviaApp.inputControlsManager ?: InputControlsManager(context)
+                val allProfiles = manager.getProfiles(false)
+
+                val profileIdStr = container.getExtra("profileId", "0")
+                val profileId = profileIdStr.toIntOrNull() ?: 0
+
+                var activeProfile = if (profileId != 0) {
+                    manager.getProfile(profileId)
+                } else {
+                    null
+                }
+
+                // If no custom profile exists, create one automatically
+                if (activeProfile == null) {
+                    val sourceProfile = manager.getProfile(0)
+                        ?: allProfiles.firstOrNull { it.id == 2 }
+                        ?: allProfiles.firstOrNull()
+
+                    if (sourceProfile != null) {
+                        try {
+                            // Create game-specific profile by duplicating Profile 0
+                            activeProfile = manager.duplicateProfile(sourceProfile)
+
+                            // Rename to game name
+                            val gameName = currentAppInfo?.name ?: container.name
+                            activeProfile.setName("$gameName - Controls")
+                            activeProfile.save()
+
+                            // Associate with container using extraData and save
+                            container.putExtra("profileId", activeProfile.id.toString())
+                            container.saveData()
+
+                            // Apply the new profile to InputControlsView
+                            PluviaApp.inputControlsView?.setProfile(activeProfile)
+                        } catch (e: Exception) {
+                            Timber.e(e, "Failed to auto-create profile for container %s", container.name)
+                            // Fallback to existing profile
+                            activeProfile = sourceProfile
+                        }
+                    }
+                }
+
+                // Enable edit mode and show controls if not visible
+                if (activeProfile != null) {
+                    // Capture snapshot of element positions before entering edit mode
+                    val profile = PluviaApp.inputControlsView?.profile
+                    if (profile != null) {
+                        val snapshot = mutableMapOf<com.winlator.inputcontrols.ControlElement, Pair<Int, Int>>()
+                        profile.elements.forEach { element ->
+                            snapshot[element] = Pair(element.x.toInt(), element.y.toInt())
+                        }
+                        elementPositionsSnapshot = snapshot
+                    }
+
+                    isEditMode = true
+                    PluviaApp.inputControlsView?.setEditMode(true)
+                    PluviaApp.inputControlsView?.let { icView ->
+                        // Wait for view to be laid out before loading elements
+                        icView.post {
+                            activeProfile.loadElements(icView)
+                        }
+                    }
+
+                    if (!areControlsVisible) {
+                        showInputControls(activeProfile, xServerView!!.getxServer().winHandler, container)
+                        areControlsVisible = true
+                    }
+                }
+            }
+
+            QuickMenuAction.EDIT_PHYSICAL_CONTROLLER -> {
+                PostHog.capture(event = "edit_physical_controller_from_menu")
+                keepPausedForEditor = true
+                showPhysicalControllerDialog = true
+            }
+
+            QuickMenuAction.EXIT_GAME -> {
+                PostHog.capture(
+                    event = "game_closed",
+                    properties = mapOf(
+                        "game_name" to ContainerUtils.resolveGameName(appId),
+                        "game_store" to ContainerUtils.extractGameSourceFromContainerId(appId).name,
+                    ),
+                )
+                imeInputReceiver?.hideKeyboard()
+                // Resume processes before exiting so they can receive SIGTERM cleanly.
+                forceResumeIfSuspended()
+                exit(xServerView!!.getxServer().winHandler, PluviaApp.xEnvironment, frameRating, currentAppInfo, container, appId, onExit, navigateBack)
             }
         }
     }
@@ -431,184 +656,22 @@ fun XServerScreen(
             return@gameBack
         }
 
+        if (showQuickMenu) {
+            dismissOverlayMenu()
+            return@gameBack
+        }
+
         Timber.i("BackHandler")
 
         // Suspend game and audio while the navigation overlay is visible.
-        PluviaApp.xEnvironment?.onPause()
-        isOverlayPaused = true
-        PluviaApp.isOverlayPaused = true
+        pauseForOverlayIfAllowed()
         keyboardRequestedFromOverlay = false
 
-        val navDialog = NavigationDialog(
-            context,
-            object : NavigationDialog.NavigationListener {
-                override fun onNavigationItemSelected(itemId: Int) {
-                    when (itemId) {
-                        NavigationDialog.ACTION_KEYBOARD -> {
-                            keyboardRequestedFromOverlay = true
-                            val anchor = view // use the same composable root view
-                            val c = if (Build.VERSION.SDK_INT >= 30)
-                                anchor.windowInsetsController else null
+        val controllerManager = ControllerManager.getInstance()
+        controllerManager.scanForDevices()
+        hasPhysicalController = controllerManager.getDetectedDevices().isNotEmpty()
 
-                            anchor.post {
-                                if (anchor.windowToken == null) return@post
-                                val show = {
-                                    PostHog.capture(event = "onscreen_keyboard_enabled")
-                                    val isExternalDisplaySession =
-                                        (anchor.display?.displayId ?: Display.DEFAULT_DISPLAY) != Display.DEFAULT_DISPLAY
-
-                                    if (isExternalDisplaySession) {
-                                        imeInputReceiver?.showKeyboard() ?: imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
-                                    } else {
-                                        imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
-                                    }
-                                }
-                                if (Build.VERSION.SDK_INT > 29 && c != null) {
-                                    anchor.postDelayed({ show() }, 500)  // Pixel/Android-12+ quirk
-                                } else {
-                                    show()
-                                }
-                            }
-                        }
-
-                        NavigationDialog.ACTION_INPUT_CONTROLS -> {
-                            if (areControlsVisible){
-                                PostHog.capture(event = "onscreen_controller_disabled")
-                                hideInputControls();
-                            } else {
-                                PostHog.capture(event = "onscreen_controller_enabled")
-                                val manager = PluviaApp.inputControlsManager
-                                val profiles = manager?.getProfiles(false) ?: listOf()
-                                if (profiles.isNotEmpty()) {
-                                    // Use current profile (custom or Profile 0)
-                                    val profileIdStr = container.getExtra("profileId", "0")
-                                    val profileId = profileIdStr.toIntOrNull() ?: 0
-                                    val targetProfile = if (profileId != 0) {
-                                        manager?.getProfile(profileId)
-                                    } else {
-                                        null
-                                    } ?: manager?.getProfile(0) ?: profiles.getOrNull(2) ?: profiles.first()
-
-                                    showInputControls(targetProfile, xServerView!!.getxServer().winHandler, container)
-                                }
-                            }
-                            areControlsVisible = !areControlsVisible
-                        }
-
-                        NavigationDialog.ACTION_EDIT_CONTROLS -> {
-                            PostHog.capture(event = "edit_controls_in_game")
-
-                            // Get or create profile for this container
-                            val manager = PluviaApp.inputControlsManager ?: InputControlsManager(context)
-                            val allProfiles = manager.getProfiles(false)
-
-                            val profileIdStr = container.getExtra("profileId", "0")
-                            val profileId = profileIdStr.toIntOrNull() ?: 0
-
-                            var activeProfile = if (profileId != 0) {
-                                manager.getProfile(profileId)
-                            } else {
-                                null
-                            }
-
-                            // If no custom profile exists, create one automatically
-                            if (activeProfile == null) {
-                                val sourceProfile = manager.getProfile(0)
-                                    ?: allProfiles.firstOrNull { it.id == 2 }
-                                    ?: allProfiles.firstOrNull()
-
-                                if (sourceProfile != null) {
-                                    try {
-                                        // Create game-specific profile by duplicating Profile 0
-                                        activeProfile = manager.duplicateProfile(sourceProfile)
-
-                                        // Rename to game name
-                                        val gameName = currentAppInfo?.name ?: container.name
-                                        activeProfile.setName("$gameName - Controls")
-                                        activeProfile.save()
-
-                                        // Associate with container using extraData and save
-                                        container.putExtra("profileId", activeProfile.id.toString())
-                                        container.saveData()
-
-                                        // Apply the new profile to InputControlsView
-                                        PluviaApp.inputControlsView?.setProfile(activeProfile)
-                                    } catch (e: Exception) {
-                                        Timber.e(e, "Failed to auto-create profile for container %s", container.name)
-                                        // Fallback to existing profile
-                                        activeProfile = sourceProfile
-                                    }
-                                }
-                            }
-
-                            // Enable edit mode and show controls if not visible
-                            if (activeProfile != null) {
-                                // Capture snapshot of element positions before entering edit mode
-                                val profile = PluviaApp.inputControlsView?.profile
-                                if (profile != null) {
-                                    val snapshot = mutableMapOf<com.winlator.inputcontrols.ControlElement, Pair<Int, Int>>()
-                                    profile.elements.forEach { element ->
-                                        snapshot[element] = Pair(element.x.toInt(), element.y.toInt())
-                                    }
-                                    elementPositionsSnapshot = snapshot
-                                }
-
-                                isEditMode = true
-                                PluviaApp.inputControlsView?.setEditMode(true)
-                                PluviaApp.inputControlsView?.let { icView ->
-                                    // Wait for view to be laid out before loading elements
-                                    icView.post {
-                                        activeProfile.loadElements(icView)
-                                    }
-                                }
-
-                                if (!areControlsVisible) {
-                                    showInputControls(activeProfile, xServerView!!.getxServer().winHandler, container)
-                                    areControlsVisible = true
-                                }
-                            }
-                        }
-
-                        NavigationDialog.ACTION_EDIT_PHYSICAL_CONTROLLER -> {
-                            PostHog.capture(event = "edit_physical_controller_from_menu")
-                            showPhysicalControllerDialog = true
-                        }
-
-                        NavigationDialog.ACTION_EXIT_GAME -> {
-                            if (currentAppInfo != null) {
-                                PostHog.capture(
-                                    event = "game_closed",
-                                    properties = mapOf(
-                                        "game_name" to currentAppInfo.name,
-                                    ),
-                                )
-                            } else {
-                                PostHog.capture(event = "game_closed")
-                            }
-                            imeInputReceiver?.hideKeyboard()
-                            // Resume processes before exiting so they can receive SIGTERM cleanly.
-                            PluviaApp.xEnvironment?.onResume()
-                            isOverlayPaused = false
-                            PluviaApp.isOverlayPaused = false
-                            exit(xServerView!!.getxServer().winHandler, PluviaApp.xEnvironment, frameRating, currentAppInfo, container, onExit, navigateBack)
-                        }
-                    }
-                }
-            }
-        )
-        // Resume game when the overlay closes via back press, outside tap, or any non-exit item.
-        navDialog.setOnDismissListener {
-            if (!keyboardRequestedFromOverlay) {
-                imeInputReceiver?.hideKeyboard()
-            }
-            keyboardRequestedFromOverlay = false
-            if (PluviaApp.isOverlayPaused) {
-                PluviaApp.xEnvironment?.onResume()
-                isOverlayPaused = false
-                PluviaApp.isOverlayPaused = false
-            }
-        }
-        navDialog.show()
+        showQuickMenu = true
     }
 
     DisposableEffect(container) {
@@ -617,54 +680,85 @@ fun XServerScreen(
             Timber.d("XServerScreen leaving, clearing back action")
             imeInputReceiver?.hideKeyboard()
             imeInputReceiver = null
+            if (!SteamService.keepAlive) {
+                PluviaApp.clearActiveSuspendState()
+            } else if (!manualResumeMode) {
+                PluviaApp.isOverlayPaused = false
+            }
             registerBackAction { }
-        }   // reset when screen leaves
+        }   // preserve suspend state across activity recreation while a game is still running
     }
 
     DisposableEffect(lifecycleOwner, container) {
         val onActivityDestroyed: (AndroidEvent.ActivityDestroyed) -> Unit = {
             Timber.i("onActivityDestroyed")
-            exit(xServerView!!.getxServer().winHandler, PluviaApp.xEnvironment, frameRating, currentAppInfo, container, onExit, navigateBack)
+            exit(xServerView!!.getxServer().winHandler, PluviaApp.xEnvironment, frameRating, currentAppInfo, container, appId, onExit, navigateBack)
         }
         val onKeyEvent: (AndroidEvent.KeyEvent) -> Boolean = {
             val isKeyboard = Keyboard.isKeyboardDevice(it.event.device)
             val isGamepad = ExternalController.isGameController(it.event.device)
+            val waitingForManualResume =
+                manualResumeMode &&
+                    PluviaApp.isOverlayPaused &&
+                    !showQuickMenu &&
+                    !keepPausedForEditor
             // logD("onKeyEvent(${it.event.device.sources})\n\tisGamepad: $isGamepad\n\tisKeyboard: $isKeyboard\n\t${it.event}")
 
-            var handled = false
-            if (isGamepad) {
-                handled = physicalControllerHandler?.onKeyEvent(it.event) == true
-                if (!handled) handled = PluviaApp.inputControlsView?.onKeyEvent(it.event) == true
-                // Final fallback to WinHandler passthrough
-                if (!handled) handled = xServerView!!.getxServer().winHandler.onKeyEvent(it.event)
+            if (waitingForManualResume && isGamepad) {
+                when (it.event.keyCode) {
+                    KeyEvent.KEYCODE_BUTTON_A,
+                    KeyEvent.KEYCODE_BUTTON_START -> {
+                        if (it.event.action == KeyEvent.ACTION_DOWN && it.event.repeatCount == 0) {
+                            resumeFromManualButton()
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            } else if (showQuickMenu && isGamepad) {
+                // Let Compose focus system handle gamepad navigation/selection while menu is visible.
+                false
+            } else {
+                var handled = false
+                if (isGamepad) {
+                    handled = physicalControllerHandler?.onKeyEvent(it.event) == true
+                    if (!handled) handled = PluviaApp.inputControlsView?.onKeyEvent(it.event) == true
+                    // Final fallback to WinHandler passthrough
+                    if (!handled) handled = xServerView!!.getxServer().winHandler.onKeyEvent(it.event)
+                }
+                if (!handled && isKeyboard) {
+                    handled = keyboard?.onKeyEvent(it.event) == true
+                }
+                handled
             }
-            if (!handled && isKeyboard) {
-                handled = keyboard?.onKeyEvent(it.event) == true
-            }
-            handled
         }
         val onMotionEvent: (AndroidEvent.MotionEvent) -> Boolean = {
             val isGamepad = ExternalController.isGameController(it.event?.device)
 
-            var handled = false
-            if (isGamepad && it.event != null) {
-                handled = physicalControllerHandler?.onGenericMotionEvent(it.event!!) == true
-                if (!handled) handled = PluviaApp.inputControlsView?.onGenericMotionEvent(it.event) == true
-                // Final fallback to WinHandler passthrough
-                if (!handled) handled = xServerView!!.getxServer().winHandler.onGenericMotionEvent(it.event)
+            if (showQuickMenu && isGamepad) {
+                // Let Compose consume any gamepad motion while menu is visible.
+                false
+            } else {
+                var handled = false
+                if (isGamepad && it.event != null) {
+                    handled = physicalControllerHandler?.onGenericMotionEvent(it.event!!) == true
+                    if (!handled) handled = PluviaApp.inputControlsView?.onGenericMotionEvent(it.event) == true
+                    // Final fallback to WinHandler passthrough
+                    if (!handled) handled = xServerView!!.getxServer().winHandler.onGenericMotionEvent(it.event)
+                }
+                if (!handled) {
+                    handled = PluviaApp.touchpadView?.onExternalMouseEvent(it.event) == true
+                }
+                handled
             }
-            if (!handled) {
-                handled = PluviaApp.touchpadView?.onExternalMouseEvent(it.event) == true
-            }
-            handled
         }
         val onGuestProgramTerminated: (AndroidEvent.GuestProgramTerminated) -> Unit = {
             Timber.i("onGuestProgramTerminated")
-            exit(xServerView!!.getxServer().winHandler, PluviaApp.xEnvironment, frameRating, currentAppInfo, container, onExit, navigateBack)
+            exit(xServerView!!.getxServer().winHandler, PluviaApp.xEnvironment, frameRating, currentAppInfo, container, appId, onExit, navigateBack)
         }
         val onForceCloseApp: (SteamEvent.ForceCloseApp) -> Unit = {
             Timber.i("onForceCloseApp")
-            exit(xServerView!!.getxServer().winHandler, PluviaApp.xEnvironment, frameRating, currentAppInfo, container, onExit, navigateBack)
+            exit(xServerView!!.getxServer().winHandler, PluviaApp.xEnvironment, frameRating, currentAppInfo, container, appId, onExit, navigateBack)
         }
         val debugCallback = Callback<String> { outputLine ->
             Timber.i(outputLine ?: "")
@@ -687,9 +781,10 @@ fun XServerScreen(
         }
     }
 
-    val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
+    val isPortrait = container.isPortraitMode
     // var launchedView by rememberSaveable { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxSize()) {
+        key(isPortrait) {
         AndroidView(
         modifier = Modifier
             .fillMaxSize()
@@ -716,9 +811,9 @@ fun XServerScreen(
             },
         factory = { context ->
             Timber.i("Creating XServerView and XServer")
-            val isPortrait = context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
             val dm = context.resources.displayMetrics
-            val controlsHeightPortrait = dm.widthPixels * 9 / 16
+            val screenWidth = if (isPortrait) minOf(dm.widthPixels, dm.heightPixels) else dm.widthPixels
+            val controlsHeightPortrait = screenWidth * 9 / 16
             val mainRoot = if (isPortrait) {
                 LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
@@ -751,7 +846,7 @@ fun XServerScreen(
                 PluviaApp.touchpadView = TouchpadView(context, getxServer(), PrefManager.getBoolean("capture_pointer_on_external_mouse", true))
                 frameLayout.addView(PluviaApp.touchpadView)
                 PluviaApp.touchpadView?.setMoveCursorToTouchpoint(PrefManager.getBoolean("move_cursor_to_touchpoint", false))
-                
+
                 // Add invisible IME receiver to capture system keyboard input when keyboard is on external display
                 val imeDisplayContext = context.display?.let { display ->
                     context.createDisplayContext(display)
@@ -771,7 +866,7 @@ fun XServerScreen(
                 }
                 frameLayout.addView(imeReceiver)
                 imeInputReceiver = imeReceiver
-                
+
                 getxServer().winHandler = WinHandler(getxServer(), this)
                 win32AppWorkarounds = Win32AppWorkarounds(getxServer())
                 touchMouse = TouchMouse(getxServer())
@@ -783,8 +878,11 @@ fun XServerScreen(
                         renderer.forceFullscreenWMClass = Paths.get(container.executablePath).name
                     }
                 }
-                getxServer().windowManager.addOnWindowModificationListener(
-                    object : WindowManager.OnWindowModificationListener {
+                // Remove any previous listener before adding a new one (handles key(isPortrait) recreation)
+                windowModificationListener?.let {
+                    getxServer().windowManager.removeOnWindowModificationListener(it)
+                }
+                val wmListener = object : WindowManager.OnWindowModificationListener {
                         private fun changeFrameRatingVisibility(window: Window, property: Property?) {
                             if (frameRating == null) return
                             if (property != null) {
@@ -847,8 +945,9 @@ fun XServerScreen(
                             startExitWatchForUnmappedGameWindow(window)
                             onWindowUnmapped?.invoke(window)
                         }
-                    },
-                )
+                    }
+                getxServer().windowManager.addOnWindowModificationListener(wmListener)
+                windowModificationListener = wmListener
 
                 if (PluviaApp.xEnvironment == null) {
                     // Launch all blocking wine setup operations on a background thread to avoid blocking main thread
@@ -871,6 +970,9 @@ fun XServerScreen(
                                 PluviaApp.touchpadView?.setTouchscreenMouseDisabled(true)
                             } else if (container.isTouchscreenMode()) {
                                 PluviaApp.touchpadView?.setTouchscreenMode(true)
+                                // Apply per-game gesture configuration
+                                val gestureConfig = app.gamenative.data.TouchGestureConfig.fromJson(container.getGestureConfig())
+                                PluviaApp.touchpadView?.setGestureConfig(gestureConfig)
                             }
                             Timber.d("WinHandler configured: preferredInputApi=%s, dinputMapperType=0x%02x", PreferredInputApi.values()[container.inputType], container.dinputMapperType)
                             // Timber.d("1 Container drives: ${container.drives}")
@@ -971,6 +1073,17 @@ fun XServerScreen(
                                 onGameLaunchError,
                                 navigateBack,
                             )
+                            if (!PluviaApp.isActivityInForeground && !neverSuspend) {
+                                PluviaApp.xEnvironment?.onPause()
+                                if (manualResumeMode) {
+                                    view.post {
+                                        PluviaApp.isOverlayPaused = true
+                                        Timber.d("Game paused after environment setup while app was backgrounded (manual resume required)")
+                                    }
+                                } else {
+                                    Timber.d("Game paused after environment setup while app was backgrounded")
+                                }
+                            }
                         } catch (e: Exception) {
                             Timber.e(e, "Error during wine setup operations")
                             onGameLaunchError?.invoke("Failed to setup wine: ${e.message}")
@@ -1047,6 +1160,9 @@ fun XServerScreen(
                 // Set overlay opacity from preferences if needed
                 val opacity = PrefManager.getFloat("controls_opacity", InputControlsView.DEFAULT_OVERLAY_OPACITY)
                 setOverlayOpacity(opacity)
+
+                // Set container-level shooter mode
+                setContainerShooterMode(container.isShooterMode)
             }
             PluviaApp.inputControlsView = icView
 
@@ -1201,8 +1317,14 @@ fun XServerScreen(
         },
         onRelease = { view ->
             gameRoot = null
+            // Remove the WindowManager listener to prevent duplicates on AndroidView recreation
+            windowModificationListener?.let { listener ->
+                xServerView?.getxServer()?.windowManager?.removeOnWindowModificationListener(listener)
+            }
+            windowModificationListener = null
         },
     )
+        }
 
         // Floating toolbar for edit mode (always visible in edit mode)
         if (isEditMode && areControlsVisible) {
@@ -1235,6 +1357,8 @@ fun XServerScreen(
                     PluviaApp.inputControlsView?.post {
                         PluviaApp.inputControlsView?.invalidate()
                     }
+                    keepPausedForEditor = false
+                    resumeIfAllowedAfterOverlay()
                 },
                 onClose = {
                     // Restore element positions from snapshot (cancel behavior)
@@ -1255,6 +1379,8 @@ fun XServerScreen(
                         PluviaApp.inputControlsView?.profile?.save()
                         PluviaApp.inputControlsView?.invalidate()
                     }
+                    keepPausedForEditor = false
+                    resumeIfAllowedAfterOverlay()
                 },
                 onDuplicate = { id ->
                     val manager = PluviaApp.inputControlsManager
@@ -1281,19 +1407,73 @@ fun XServerScreen(
                                     newElement.setText(element.text)
                                     newElement.setIconId(element.iconId.toInt())
                                     newElement.setToggleSwitch(element.isToggleSwitch)
-                                    for (i in 0 until 4) {
+                                    // Copy range button properties — must set binding count
+                                    // BEFORE copying bindings, because setBindingCount resets
+                                    // the bindings array to NONE.
+                                    if (element.type == com.winlator.inputcontrols.ControlElement.Type.RANGE_BUTTON) {
+                                        newElement.setRange(element.range)
+                                        newElement.setOrientation(element.orientation)
+                                        newElement.setBindingCount(element.bindingCount)
+                                        newElement.isScrollLocked = element.isScrollLocked
+                                    }
+                                    for (i in 0 until element.bindingCount) {
                                         newElement.setBindingAt(i, element.getBindingAt(i))
+                                    }
+                                    // Copy shooter mode properties
+                                    if (element.type == com.winlator.inputcontrols.ControlElement.Type.SHOOTER_MODE) {
+                                        newElement.shooterMovementType = element.shooterMovementType
+                                        newElement.shooterLookType = element.shooterLookType
+                                        newElement.shooterLookSensitivity = element.shooterLookSensitivity
+                                        newElement.shooterJoystickSize = element.shooterJoystickSize
                                     }
                                     currentProfile.addElement(newElement)
                                 }
 
                                 icView.invalidate()
-                                android.widget.Toast.makeText(context, context.getString(R.string.toast_controls_reset), android.widget.Toast.LENGTH_SHORT).show()
+                                SnackbarManager.show(context.getString(R.string.toast_controls_reset))
                             }
                         }
                     }
                 }
             )
+        }
+
+        QuickMenu(
+            isVisible = showQuickMenu,
+            onDismiss = dismissOverlayMenu,
+            onItemSelected = onQuickMenuItemSelected,
+            hasPhysicalController = hasPhysicalController,
+        )
+
+        if (manualResumeMode && PluviaApp.isOverlayPaused && !showQuickMenu && !keepPausedForEditor) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .background(
+                            color = androidx.compose.ui.graphics.Color.White,
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                        )
+                        .clickable(onClick = ::resumeFromManualButton),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = stringResource(R.string.resume_game),
+                        tint = androidx.compose.ui.graphics.Color.Black,
+                        modifier = Modifier.size(40.dp),
+                    )
+                }
+            }
         }
     }
 
@@ -1357,7 +1537,11 @@ fun XServerScreen(
 
         if (profile != null) {
             androidx.compose.ui.window.Dialog(
-                onDismissRequest = { showPhysicalControllerDialog = false }
+                onDismissRequest = {
+                    showPhysicalControllerDialog = false
+                    keepPausedForEditor = false
+                    resumeIfAllowedAfterOverlay()
+                }
             ) {
                 androidx.compose.foundation.layout.Box(
                     modifier = Modifier
@@ -1366,7 +1550,11 @@ fun XServerScreen(
                 ) {
                     app.gamenative.ui.component.dialog.PhysicalControllerConfigSection(
                         profile = profile,
-                        onDismiss = { showPhysicalControllerDialog = false },
+                        onDismiss = {
+                            showPhysicalControllerDialog = false
+                            keepPausedForEditor = false
+                            resumeIfAllowedAfterOverlay()
+                        },
                         onSave = {
                             // Ensure controllersLoaded is true before saving
                             // (addController sets the flag even if controller already exists)
@@ -1386,6 +1574,8 @@ fun XServerScreen(
                             }
                             physicalControllerHandler?.setProfile(profile)
                             showPhysicalControllerDialog = false
+                            keepPausedForEditor = false
+                            resumeIfAllowedAfterOverlay()
                         }
                     )
                 }
@@ -1989,6 +2179,8 @@ private fun setupXEnvironment(
     }
     environment.addComponent(guestProgramLauncherComponent)
 
+    environment.addComponent(WineRequestComponent())
+
     FEXCoreManager.ensureAppConfigOverrides(context)
 
     // Moved here, as guestProgramLauncherComponent.environment is setup after addComponent()
@@ -2218,7 +2410,7 @@ private fun getWineStartCommand(
         val installPath = if (appIdInt != null) {
             app.gamenative.service.amazon.AmazonService.getInstallPathByAppId(appIdInt)
         } else null
-        
+
         if (installPath.isNullOrEmpty()) {
             Timber.tag("XServerScreen").e("Cannot launch: Amazon game not installed")
             return "\"explorer.exe\""
@@ -2486,7 +2678,7 @@ private fun getSteamlessTarget(
     return "$drive:\\${executablePath}"
 }
 
-private fun exit(winHandler: WinHandler?, environment: XEnvironment?, frameRating: FrameRating?, appInfo: SteamApp?, container: Container, onExit: () -> Unit, navigateBack: () -> Unit) {
+private fun exit(winHandler: WinHandler?, environment: XEnvironment?, frameRating: FrameRating?, appInfo: SteamApp?, container: Container, appId: String, onExit: () -> Unit, navigateBack: () -> Unit) {
     Timber.i("Exit called")
 
     // Prevent duplicate PostHog events when multiple exit triggers fire simultaneously
@@ -2494,7 +2686,8 @@ private fun exit(winHandler: WinHandler?, environment: XEnvironment?, frameRatin
         PostHog.capture(
             event = "game_exited",
             properties = mapOf(
-                "game_name" to appInfo?.name.toString(),
+                "game_name" to ContainerUtils.resolveGameName(appId),
+                "game_store" to ContainerUtils.extractGameSourceFromContainerId(appId).name,
                 "session_length" to (frameRating?.sessionLengthSec ?: 0),
                 "avg_fps" to (frameRating?.avgFPS ?: 0.0),
                 "container_config" to container.containerJson,
@@ -2509,9 +2702,11 @@ private fun exit(winHandler: WinHandler?, environment: XEnvironment?, frameRatin
         container.saveData()
     }
 
+    PluviaApp.touchpadView?.releasePointerCapture()
     winHandler?.stop()
     environment?.stopEnvironmentComponents()
     SteamService.keepAlive = false
+    PluviaApp.clearActiveSuspendState()
     // AppUtils.restartApplication(this)
     // PluviaApp.xServerState = null
     // PluviaApp.xServer = null
@@ -3414,7 +3609,7 @@ private fun extractGraphicsDriverFiles(
         } else if (graphicsDriver == "virgl") {
             envVars.put("GALLIUM_DRIVER", "virpipe")
             envVars.put("VIRGL_NO_READBACK", "true")
-            envVars.put("VIRGL_SERVER_PATH", UnixSocketConfig.VIRGL_SERVER_PATH)
+            envVars.put("VIRGL_SERVER_PATH", imageFs.getRootDir().getPath() + UnixSocketConfig.VIRGL_SERVER_PATH)
             envVars.put("MESA_EXTENSION_OVERRIDE", "-GL_EXT_vertex_array_bgra")
             envVars.put("MESA_GL_VERSION_OVERRIDE", "3.1")
             envVars.put("vblank_mode", "0")

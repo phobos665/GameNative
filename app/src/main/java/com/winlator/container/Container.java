@@ -19,6 +19,7 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.util.Iterator;
+import java.util.Locale;
 
 public class Container {
     public enum XrControllerMapping {
@@ -58,6 +59,12 @@ public class Container {
     public static final byte STARTUP_SELECTION_NORMAL = 0;
     public static final byte STARTUP_SELECTION_ESSENTIAL = 1;
     public static final byte STARTUP_SELECTION_AGGRESSIVE = 2;
+
+    // Process suspend policy for runtime behavior while in-game.
+    public static final String SUSPEND_POLICY_AUTO = "auto";
+    public static final String SUSPEND_POLICY_NEVER = "never";
+    public static final String SUSPEND_POLICY_MANUAL = "manual";
+
     public static final String STEAM_TYPE_NORMAL = "normal";
     public static final String STEAM_TYPE_LIGHT = "light";
     public static final String STEAM_TYPE_ULTRALIGHT = "ultralight";
@@ -119,6 +126,10 @@ public class Container {
     private boolean disableMouseInput = false;
     // Touchscreen mode
     private boolean touchscreenMode = false;
+    // Shooter mode
+    private boolean shooterMode = true;
+    // Serialised JSON gesture configuration (used when touchscreenMode is true)
+    private String gestureConfig = "";
     // External display input handling
     private String externalDisplayMode = DEFAULT_EXTERNAL_DISPLAY_MODE;
     // Swap game/input between internal and external displays
@@ -137,6 +148,10 @@ public class Container {
     private boolean useLegacyDRM = false;
 
     private boolean unpackFiles = false;
+
+    private String suspendPolicy = SUSPEND_POLICY_MANUAL;
+
+    private boolean portraitMode = false;
 
     private String containerVariant = DEFAULT_VARIANT;
 
@@ -661,6 +676,12 @@ public class Container {
             data.put("disableMouseInput", disableMouseInput);
             // Touchscreen mode flag
             data.put("touchscreenMode", touchscreenMode);
+            // Shooter mode flag
+            data.put("shooterMode", shooterMode);
+            // Gesture configuration JSON
+            if (gestureConfig != null && !gestureConfig.isEmpty()) {
+                data.put("gestureConfig", gestureConfig);
+            }
             data.put("externalDisplayMode", externalDisplayMode);
             data.put("externalDisplaySwap", externalDisplaySwap);
             data.put("useDRI3", useDRI3);
@@ -682,6 +703,10 @@ public class Container {
 
             // Unpack Files setting
             data.put("unpackFiles", unpackFiles);
+
+            // Process suspend policy setting
+            data.put("suspendPolicy", suspendPolicy);
+            data.put("portraitMode", portraitMode);
 
             if (!WineInfo.isMainWineVersion(wineVersion)) data.put("wineVersion", wineVersion);
             FileUtils.writeString(getConfigFile(), data.toString());
@@ -839,6 +864,12 @@ public class Container {
                 case "touchscreenMode" :
                     setTouchscreenMode(data.getBoolean(key));
                     break;
+                case "shooterMode" :
+                    setShooterMode(data.getBoolean(key));
+                    break;
+                case "gestureConfig" :
+                    setGestureConfig(data.optString(key, ""));
+                    break;
                 case "externalDisplayMode" :
                     setExternalDisplayMode(data.getString(key));
                     break;
@@ -865,6 +896,12 @@ public class Container {
                     break;
                 case "unpackFiles":
                     this.unpackFiles = data.getBoolean(key);
+                    break;
+                case "suspendPolicy":
+                    setSuspendPolicy(data.getString(key));
+                    break;
+                case "portraitMode":
+                    this.portraitMode = data.getBoolean(key);
                     break;
             }
         }
@@ -953,6 +990,35 @@ public class Container {
         this.unpackFiles = unpackFiles;
     }
 
+    public static String normalizeSuspendPolicy(String suspendPolicy) {
+        String normalized = (suspendPolicy == null) ? "" : suspendPolicy.toLowerCase(Locale.ROOT);
+        switch (normalized) {
+            case SUSPEND_POLICY_NEVER:
+                return SUSPEND_POLICY_NEVER;
+            case SUSPEND_POLICY_MANUAL:
+                return SUSPEND_POLICY_MANUAL;
+            case SUSPEND_POLICY_AUTO:
+            default:
+                return SUSPEND_POLICY_AUTO;
+        }
+    }
+
+    public String getSuspendPolicy() {
+        return normalizeSuspendPolicy(suspendPolicy);
+    }
+
+    public void setSuspendPolicy(String suspendPolicy) {
+        this.suspendPolicy = normalizeSuspendPolicy(suspendPolicy);
+    }
+
+    public boolean isPortraitMode() {
+        return portraitMode;
+    }
+
+    public void setPortraitMode(boolean portraitMode) {
+        this.portraitMode = portraitMode;
+    }
+
     public String getContainerJson() {
         String content = FileUtils.readString(getConfigFile());
         if (content == null) {
@@ -992,6 +1058,24 @@ public class Container {
 
     public void setTouchscreenMode(boolean touchscreenMode) {
         this.touchscreenMode = touchscreenMode;
+    }
+
+    // Shooter mode
+    public boolean isShooterMode() {
+        return shooterMode;
+    }
+
+    public void setShooterMode(boolean shooterMode) {
+        this.shooterMode = shooterMode;
+    }
+
+    // Gesture configuration JSON
+    public String getGestureConfig() {
+        return gestureConfig != null ? gestureConfig : "";
+    }
+
+    public void setGestureConfig(String gestureConfig) {
+        this.gestureConfig = gestureConfig != null ? gestureConfig : "";
     }
 
     // External display mode

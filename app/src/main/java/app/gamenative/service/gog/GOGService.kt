@@ -11,6 +11,7 @@ import app.gamenative.data.LaunchInfo
 import app.gamenative.data.LibraryItem
 import app.gamenative.events.AndroidEvent
 import app.gamenative.PluviaApp
+import app.gamenative.ui.util.SnackbarManager
 import app.gamenative.service.NotificationHelper
 import app.gamenative.utils.ContainerUtils
 import dagger.hilt.android.AndroidEntryPoint
@@ -305,7 +306,7 @@ class GOGService : Service() {
             instance.activeDownloads[gameId] = downloadInfo
 
             // Launch download in service scope so it runs independently
-            instance.scope.launch {
+            val job = instance.scope.launch {
                 try {
                     Timber.d("[Download] Starting download for game $gameId")
                     val commonRedistDir = File(installPath, "_CommonRedist")
@@ -322,41 +323,20 @@ class GOGService : Service() {
                         downloadInfo.setProgress(-1.0f)
                         downloadInfo.setActive(false)
 
-                        // Show failure toast
-                        withContext(Dispatchers.Main) {
-                            android.widget.Toast.makeText(
-                                context,
-                                "Download failed: ${error?.message ?: "Unknown error"}",
-                                android.widget.Toast.LENGTH_LONG,
-                            ).show()
-                        }
+                        SnackbarManager.show("Download failed: ${error?.message ?: "Unknown error"}")
                     } else {
                         Timber.i("[Download] Completed successfully for game $gameId")
                         downloadInfo.setProgress(1.0f)
                         downloadInfo.setActive(false)
 
-                        // Show success toast
-                        withContext(Dispatchers.Main) {
-                            android.widget.Toast.makeText(
-                                context,
-                                "Download completed successfully!",
-                                android.widget.Toast.LENGTH_SHORT,
-                            ).show()
-                        }
+                        SnackbarManager.show("Download completed successfully!")
                     }
                 } catch (e: Exception) {
                     Timber.e(e, "[Download] Exception for game $gameId")
                     downloadInfo.setProgress(-1.0f)
                     downloadInfo.setActive(false)
 
-                    // Show error toast
-                    withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(
-                            context,
-                            "Download error: ${e.message ?: "Unknown error"}",
-                            android.widget.Toast.LENGTH_LONG,
-                        ).show()
-                    }
+                    SnackbarManager.show("Download error: ${e.message ?: "Unknown error"}")
                 } finally {
                     // Remove from activeDownloads for both success and failure
                     // so UI knows download is complete and to prevent stale entries
@@ -364,6 +344,7 @@ class GOGService : Service() {
                     Timber.d("[Download] Finished for game $gameId, progress: ${downloadInfo.getProgress()}, active: ${downloadInfo.isActive()}")
                 }
             }
+            downloadInfo.setDownloadJob(job)
 
             return Result.success(downloadInfo)
         }

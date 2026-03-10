@@ -1,6 +1,5 @@
 package app.gamenative.ui.screen.settings
 
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,6 +16,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import app.gamenative.CrashHandler
 import coil.annotation.ExperimentalCoilApi
@@ -30,6 +30,7 @@ import com.alorma.compose.settings.ui.SettingsGroup
 import com.alorma.compose.settings.ui.SettingsMenuLink
 import com.alorma.compose.settings.ui.SettingsSwitch
 import app.gamenative.PrefManager
+import app.gamenative.ui.util.SnackbarManager
 import app.gamenative.ui.theme.settingsTileColorsAlt
 import com.winlator.PrefManager as WinlatorPrefManager
 import kotlinx.coroutines.Dispatchers
@@ -44,14 +45,18 @@ import app.gamenative.ui.component.dialog.WineDebugChannelsDialog
 @Composable
 fun SettingsGroupDebug() {
     val context = LocalContext.current
-    // initialize preference managers
-    PrefManager.init(context)
-    WinlatorPrefManager.init(context)
+    val isPreview = LocalInspectionMode.current
+    if (!isPreview) {
+        PrefManager.init(context)
+        WinlatorPrefManager.init(context)
+    }
 
     // Load Wine debug channels and prepare selection state
     var allWineChannels by remember { mutableStateOf<List<String>>(emptyList()) }
     var showChannelsDialog by remember { mutableStateOf(false) }
-    var selectedWineChannels by remember { mutableStateOf(PrefManager.wineDebugChannels.split(",")) }
+    var selectedWineChannels by remember { mutableStateOf(
+        if (isPreview) emptyList() else PrefManager.wineDebugChannels.split(",")
+    ) }
     LaunchedEffect(Unit) {
         // Read the list of channels from assets
         val json = context.assets.open("wine_debug_channels.json").bufferedReader().use { it.readText() }
@@ -65,7 +70,9 @@ fun SettingsGroupDebug() {
         currentSelection = selectedWineChannels,
         onSave = { newSelection ->
             selectedWineChannels = newSelection
-            PrefManager.wineDebugChannels = newSelection.joinToString(",")
+            if (!isPreview) {
+                PrefManager.wineDebugChannels = newSelection.joinToString(",")
+            }
             showChannelsDialog = false
         },
         onDismiss = { showChannelsDialog = false }
@@ -74,8 +81,12 @@ fun SettingsGroupDebug() {
     /* Crash Log stuff */
     var showLogcatDialog by rememberSaveable { mutableStateOf(false) }
     // states for debug toggles
-    var enableWineDebugPref by rememberSaveable { mutableStateOf(PrefManager.enableWineDebug) }
-    var enableBox86Logs by rememberSaveable { mutableStateOf(WinlatorPrefManager.getBoolean("enable_box86_64_logs", false)) }
+    var enableWineDebugPref by rememberSaveable {
+        mutableStateOf(if (isPreview) false else PrefManager.enableWineDebug)
+    }
+    var enableBox86Logs by rememberSaveable { mutableStateOf(
+        if (isPreview) false else WinlatorPrefManager.getBoolean("enable_box86_64_logs", false)
+    ) }
     var latestCrashFile: File? by rememberSaveable { mutableStateOf(null) }
     LaunchedEffect(Unit) {
         val crashDir = File(context.getExternalFilesDir(null), "crash_logs")
@@ -97,7 +108,7 @@ fun SettingsGroupDebug() {
                 }
             }
         } catch (e: Exception) {
-            Toast.makeText(context, "Failed to save logcat to destination", Toast.LENGTH_SHORT).show()
+            SnackbarManager.show("Failed to save logcat to destination")
         }
     }
 
@@ -113,7 +124,7 @@ fun SettingsGroupDebug() {
                 }
             }
         } catch (e: Exception) {
-            Toast.makeText(context, context.getString(R.string.toast_failed_log_save), Toast.LENGTH_SHORT).show()
+            SnackbarManager.show(context.getString(R.string.toast_failed_log_save))
         }
     }
 
@@ -149,7 +160,7 @@ fun SettingsGroupDebug() {
                 }
             }
         } catch (e: Exception) {
-            Toast.makeText(context, "Failed to save Wine log to destination", Toast.LENGTH_SHORT).show()
+            SnackbarManager.show("Failed to save Wine log to destination")
         }
     }
 
@@ -166,7 +177,7 @@ fun SettingsGroupDebug() {
         )
     }
 
-    SettingsGroup(title = { Text(text = stringResource(R.string.settings_debug_title)) }) {
+    SettingsGroup() {
         SettingsMenuLink(
             colors = settingsTileColors(),
             title = { Text(text = stringResource(R.string.settings_save_logcat_title)) },
@@ -177,7 +188,14 @@ fun SettingsGroupDebug() {
         SettingsMenuLink(
             colors = settingsTileColors(),
             title = { Text(text = stringResource(R.string.settings_debug_wine_channels_title)) },
-            subtitle = { Text(text = if (selectedWineChannels.isNotEmpty()) selectedWineChannels.joinToString(",") else "No channels selected") },
+            subtitle = {
+                Text(
+                    text = if (selectedWineChannels.isNotEmpty() && selectedWineChannels.any { it.isNotBlank() })
+                        selectedWineChannels.filter { it.isNotBlank() }.joinToString(",")
+                    else
+                        stringResource(R.string.settings_debug_no_channels_selected)
+                )
+            },
             onClick = { showChannelsDialog = true },
         )
         SettingsSwitch(
@@ -187,7 +205,9 @@ fun SettingsGroupDebug() {
             subtitle = { Text(text = stringResource(R.string.settings_debug_wine_logs_subtitle)) },
             onCheckedChange = {
                 enableWineDebugPref = it
-                PrefManager.enableWineDebug = it
+                if (!isPreview) {
+                    PrefManager.enableWineDebug = it
+                }
             },
         )
         SettingsSwitch(
@@ -197,19 +217,21 @@ fun SettingsGroupDebug() {
             subtitle = { Text(text = stringResource(R.string.settings_debug_box_logs_subtitle)) },
             onCheckedChange = {
                 enableBox86Logs = it
-                WinlatorPrefManager.putBoolean("enable_box86_64_logs", it)
+                if (!isPreview) {
+                    WinlatorPrefManager.putBoolean("enable_box86_64_logs", it)
+                }
             },
         )
         SettingsMenuLink(
             colors = settingsTileColors(),
             title = { Text(text = stringResource(R.string.settings_debug_view_crash_title)) },
             subtitle = {
-                val text = if (latestCrashFile != null) {
-                    "Shows the most recent crash log"
-                } else {
-                    "No recent crash logs found"
-                }
-                Text(text = text)
+                Text(
+                    text = if (latestCrashFile != null)
+                        stringResource(R.string.settings_debug_view_crash_subtitle)
+                    else
+                        stringResource(R.string.settings_debug_no_crash_logs)
+                )
             },
             enabled = latestCrashFile != null,
             onClick = { showLogcatDialog = true },
@@ -219,12 +241,12 @@ fun SettingsGroupDebug() {
             colors = settingsTileColors(),
             title = { Text(text = stringResource(R.string.settings_debug_view_log_title)) },
             subtitle = {
-                val text = if (latestWineLogFile != null) {
-                    "Shows the latest Wine/Box64 debug log"
-                } else {
-                    "No Wine debug logs found"
-                }
-                Text(text = text)
+                Text(
+                    text = if (latestWineLogFile != null)
+                        stringResource(R.string.settings_debug_view_log_subtitle)
+                    else
+                        stringResource(R.string.settings_debug_no_wine_logs)
+                )
             },
             enabled = latestWineLogFile != null,
             onClick = { showWineLogDialog = true },
@@ -237,7 +259,7 @@ fun SettingsGroupDebug() {
                     (context as ComponentActivity).finishAffinity()
                 },
                 onClick = {
-                    Toast.makeText(context, "Long click to activate", Toast.LENGTH_SHORT).show()
+                    SnackbarManager.show("Long click to activate")
                 },
             ),
             colors = settingsTileColorsDebug(),
@@ -254,7 +276,7 @@ fun SettingsGroupDebug() {
                     (context as ComponentActivity).finishAffinity()
                 },
                 onClick = {
-                    Toast.makeText(context, "Long click to activate", Toast.LENGTH_SHORT).show()
+                    SnackbarManager.show("Long click to activate")
                 },
             ),
             colors = settingsTileColorsDebug(),
@@ -270,7 +292,7 @@ fun SettingsGroupDebug() {
                     context.imageLoader.memoryCache?.clear()
                 },
                 onClick = {
-                    Toast.makeText(context, "Long click to activate", Toast.LENGTH_SHORT).show()
+                    SnackbarManager.show("Long click to activate")
                 },
             ),
             colors = settingsTileColorsDebug(),

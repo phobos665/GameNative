@@ -31,6 +31,8 @@ data class LibraryItem(
     val isShared: Boolean = false,
     val gameSource: GameSource = GameSource.STEAM,
     val compatibilityStatus: GameCompatibilityStatus? = null,
+    val sizeBytes: Long = 0L,
+    val isInstalled: Boolean = false,
 ) {
     val clientIconUrl: String
         get() = when (gameSource) {
