@@ -760,8 +760,8 @@
     <string name="settings_controller_order_title">Controller Order</string>
     <string name="settings_controller_order_subtitle">Assign physical controllers to player slots (P1–P4)</string>
     <string name="settings_controller_order_description">Assign each connected controller to a player slot. Changes take effect on the next game launch.</string>
-    <string name="settings_controller_rebind_title">Rebind Buttons</string>
-    <string name="settings_controller_rebind_subtitle">Remap controller buttons to gamepad, keyboard, or mouse actions</string>
+    <string name="settings_controller_rebind_title">Controller Settings</string>
+    <string name="settings_controller_rebind_subtitle">Remap controller bindings and assign controllers to players</string>
     <string name="settings_controller_rebind_pick_player">Select Controller to Rebind</string>
     <string name="settings_controller_rebind_player_entry">Player %d — %s</string>
     <string name="settings_controller_rebind_no_controllers">No controllers connected.\nConnect a controller and try again.</string>
