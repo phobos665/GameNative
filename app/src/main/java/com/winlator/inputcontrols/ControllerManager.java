@@ -4,6 +4,8 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.hardware.input.InputManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.util.SparseArray;
 import android.view.InputDevice;
@@ -34,6 +36,8 @@ public class ControllerManager {
     private Context context;
     private SharedPreferences preferences;
     private InputManager inputManager;
+    private boolean initialized = false;
+    private InputManager.InputDeviceListener inputDeviceListener;
 
     // This list will hold all physical game controllers detected by Android.
     private final List<InputDevice> detectedDevices = new ArrayList<>();
@@ -57,6 +61,31 @@ public class ControllerManager {
         this.context = context.getApplicationContext();
         this.preferences = PreferenceManager.getDefaultSharedPreferences(this.context);
         this.inputManager = (InputManager) this.context.getSystemService(Context.INPUT_SERVICE);
+        if (!initialized) {
+            initialized = true;
+            inputDeviceListener = new InputManager.InputDeviceListener() {
+                @Override
+                public void onInputDeviceAdded(int deviceId) {
+                    scanForDevices();
+                    InputDevice device = inputManager.getInputDevice(deviceId);
+                    if (device != null && !device.isVirtual() && isGameController(device)) {
+                        OnDeviceChangeListener listener = deviceChangeListener;
+                        if (listener != null) listener.onControllerConnected(deviceId);
+                    }
+                }
+                @Override
+                public void onInputDeviceRemoved(int deviceId) {
+                    scanForDevices();
+                    OnDeviceChangeListener listener = deviceChangeListener;
+                    if (listener != null) listener.onControllerDisconnected(deviceId);
+                }
+                @Override
+                public void onInputDeviceChanged(int deviceId) {
+                    scanForDevices();
+                }
+            };
+            this.inputManager.registerInputDeviceListener(inputDeviceListener, new Handler(Looper.getMainLooper()));
+        }
 
         // On startup, we load saved settings and scan for connected devices.
         loadAssignments();
@@ -288,4 +317,18 @@ public class ControllerManager {
         if (slotIndex < 0 || slotIndex >= 4) return false;
         return enabledSlots[slotIndex];
     }
+
+    // --- Hot-plug listener ---
+
+    public interface OnDeviceChangeListener {
+        void onControllerConnected(int deviceId);
+        void onControllerDisconnected(int deviceId);
+    }
+
+    private OnDeviceChangeListener deviceChangeListener;
+
+    public void setDeviceChangeListener(OnDeviceChangeListener listener) {
+        this.deviceChangeListener = listener;
+    }
+
 }

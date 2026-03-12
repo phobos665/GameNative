@@ -45,8 +45,6 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 
-import timber.log.Timber;
-
 public class WinHandler {
 
     private static final String TAG = "WinHandler";
@@ -118,6 +116,27 @@ public class WinHandler {
         this.xServerView = xServerView;
         this.controllerManager = ControllerManager.getInstance();
         this.activity = xServerView.getContext();
+        this.controllerManager.setDeviceChangeListener(new ControllerManager.OnDeviceChangeListener() {
+            @Override
+            public void onControllerConnected(int deviceId) {
+                Log.d(TAG, "controller connected deviceId=%d, refreshing mappings", deviceId);
+                refreshControllerMappings();
+            }
+
+            @Override
+            public void onControllerDisconnected(int deviceId) {
+                Log.d(TAG, "controller disconnected deviceId=%d", deviceId);
+                if (currentController != null && currentController.getDeviceId() == deviceId) {
+                    currentController = null;
+                }
+                for (int i = 0; i < extraControllers.length; i++) {
+                    if (extraControllers[i] != null && extraControllers[i].getDeviceId() == deviceId) {
+                        extraControllers[i] = null;
+                        Log.d(TAG, "cleared P%d slot on disconnect", i + 2);
+                    }
+                }
+            }
+        });
     }
 
     public void refreshControllerMappings() {
@@ -529,6 +548,7 @@ public class WinHandler {
                 raf.setLength(64);
                 gamepadBuffer = raf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, 64);
                 gamepadBuffer.order(ByteOrder.LITTLE_ENDIAN);
+                gamepadBuffer.put(new byte[64]); // zero on every start to clear stale rumble bytes
                 Log.i(TAG, "Successfully created and mapped gamepad file for Player 1");
             }
             for (int i = 0; i < extraGamepadBuffers.length; i++) {
@@ -538,6 +558,7 @@ public class WinHandler {
                     raf.setLength(64);
                     extraGamepadBuffers[i] = raf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, 64);
                     extraGamepadBuffers[i].order(ByteOrder.LITTLE_ENDIAN);
+                    extraGamepadBuffers[i].put(new byte[64]); // zero on every start to clear stale rumble bytes
                     Log.i(TAG, "Successfully created and mapped gamepad file for Player " + (i + 2));
                 }
             }

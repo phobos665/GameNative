@@ -768,6 +768,7 @@
     <string name="controller_order_player_slot">Player %d</string>
     <string name="controller_order_assigned_controller">Controller</string>
     <string name="controller_order_unassigned">Unassigned</string>
+    <string name="player_slot_label">Player</string>
     <string name="controller_order_no_devices">No controllers detected. Connect a controller and reopen this dialog.</string>
 
     <!-- Settings: Debug Group -->

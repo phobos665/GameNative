@@ -593,9 +593,6 @@ internal fun PhysicalControllerConfigSection(
     }
 }
 
-/**
- * Horizontal row of P1–P4 selector chips with a device-assignment dropdown for the selected slot.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlayerSlotSelector(
@@ -614,8 +611,10 @@ private fun PlayerSlotSelector(
 
     val unassignedLabel = stringResource(R.string.controller_order_unassigned)
     val deviceLabels = listOf(unassignedLabel) + detectedDevices.map { it.name ?: it.id.toString() }
+    val playerLabels = listOf("P1", "P2", "P3", "P4")
 
-    var dropdownExpanded by remember { mutableStateOf(false) }
+    var playerDropdownExpanded by remember { mutableStateOf(false) }
+    var controllerDropdownExpanded by remember { mutableStateOf(false) }
 
     // Recalculate the current assignment index whenever the selected slot changes
     val assignedDevice = controllerManager.getAssignedDeviceForSlot(selectedSlot)
@@ -625,57 +624,76 @@ private fun PlayerSlotSelector(
             if (idx >= 0) idx + 1 else 0
         } else 0
     }
-    var selectedIndex by remember(selectedSlot, detectedDevices.size) { mutableIntStateOf(currentIndex) }
+    var selectedDeviceIndex by remember(selectedSlot, detectedDevices.size) { mutableIntStateOf(currentIndex) }
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // P1–P4 chips
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            for (slot in 0 until 4) {
-                FilterChip(
-                    selected = selectedSlot == slot,
-                    onClick = { onSlotSelected(slot) },
-                    label = {
-                        Text(
-                            text = "P${slot + 1}",
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-
-        // Device assignment dropdown for the currently selected slot
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Player slot dropdown
         ExposedDropdownMenuBox(
-            expanded = dropdownExpanded,
-            onExpandedChange = { dropdownExpanded = it },
-            modifier = Modifier.fillMaxWidth(),
+            expanded = playerDropdownExpanded,
+            onExpandedChange = { playerDropdownExpanded = it },
+            modifier = Modifier.weight(0.35f),
         ) {
             OutlinedTextField(
                 modifier = Modifier
                     .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                     .fillMaxWidth(),
                 readOnly = true,
-                value = deviceLabels.getOrElse(selectedIndex) { unassignedLabel },
+                value = playerLabels[selectedSlot],
                 onValueChange = {},
-                label = { Text(stringResource(R.string.controller_order_assigned_controller)) },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
+                label = { Text(stringResource(R.string.player_slot_label)) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = playerDropdownExpanded) },
                 colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
                 singleLine = true,
             )
             ExposedDropdownMenu(
-                expanded = dropdownExpanded,
-                onDismissRequest = { dropdownExpanded = false },
+                expanded = playerDropdownExpanded,
+                onDismissRequest = { playerDropdownExpanded = false },
+            ) {
+                playerLabels.forEachIndexed { idx, label ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = {
+                            playerDropdownExpanded = false
+                            onSlotSelected(idx)
+                        },
+                        contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                    )
+                }
+            }
+        }
+
+        // Device assignment dropdown
+        ExposedDropdownMenuBox(
+            expanded = controllerDropdownExpanded,
+            onExpandedChange = { controllerDropdownExpanded = it },
+            modifier = Modifier.weight(0.65f),
+        ) {
+            OutlinedTextField(
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+                readOnly = true,
+                value = deviceLabels.getOrElse(selectedDeviceIndex) { unassignedLabel },
+                onValueChange = {},
+                label = { Text(stringResource(R.string.controller_order_assigned_controller)) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = controllerDropdownExpanded) },
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                singleLine = true,
+            )
+            ExposedDropdownMenu(
+                expanded = controllerDropdownExpanded,
+                onDismissRequest = { controllerDropdownExpanded = false },
             ) {
                 deviceLabels.forEachIndexed { idx, label ->
                     DropdownMenuItem(
                         text = { Text(label) },
                         onClick = {
-                            selectedIndex = idx
-                            dropdownExpanded = false
+                            selectedDeviceIndex = idx
+                            controllerDropdownExpanded = false
                             if (idx == 0) {
                                 controllerManager.unassignSlot(selectedSlot)
                             } else {
@@ -1017,41 +1035,49 @@ private fun PlayerSlotSelectorPreview(
 ) {
     val unassignedLabel = stringResource(R.string.controller_order_unassigned)
     val deviceLabels = listOf(unassignedLabel) + deviceNames
+    val playerLabels = listOf("P1", "P2", "P3", "P4")
     var currentSlot by remember { mutableIntStateOf(selectedSlot) }
-    var selectedIndex by remember(currentSlot) {
+    var selectedDeviceIndex by remember(currentSlot) {
         mutableIntStateOf(if (currentSlot < deviceNames.size) currentSlot + 1 else 0)
     }
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            for (slot in 0 until 4) {
-                FilterChip(
-                    selected = currentSlot == slot,
-                    onClick = { currentSlot = slot },
-                    label = {
-                        Text(
-                            text = "P${slot + 1}",
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Player slot dropdown (preview — non-interactive)
         ExposedDropdownMenuBox(
             expanded = false,
             onExpandedChange = {},
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.weight(0.35f),
         ) {
             OutlinedTextField(
                 modifier = Modifier
                     .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                     .fillMaxWidth(),
                 readOnly = true,
-                value = deviceLabels.getOrElse(selectedIndex) { unassignedLabel },
+                value = playerLabels[currentSlot],
+                onValueChange = {},
+                label = { Text(stringResource(R.string.player_slot_label)) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = false) },
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                singleLine = true,
+            )
+        }
+
+        // Controller dropdown (preview — non-interactive)
+        ExposedDropdownMenuBox(
+            expanded = false,
+            onExpandedChange = {},
+            modifier = Modifier.weight(0.65f),
+        ) {
+            OutlinedTextField(
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+                readOnly = true,
+                value = deviceLabels.getOrElse(selectedDeviceIndex) { unassignedLabel },
                 onValueChange = {},
                 label = { Text(stringResource(R.string.controller_order_assigned_controller)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = false) },
