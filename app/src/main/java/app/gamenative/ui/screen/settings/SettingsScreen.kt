@@ -121,6 +121,15 @@ private fun SettingsScreenContent(
             ) {
                 Spacer(modifier = Modifier.height(8.dp))
 
+                                // Controller Section
+                SettingsSection(
+                    title = stringResource(R.string.settings_controller_title),
+                    icon = Icons.Default.Gamepad,
+                    iconTint = PluviaTheme.colors.accentPink,
+                ) {
+                     SettingsGroupController()
+                }
+
                 // Emulation section
                 SettingsSection(
                     title = stringResource(R.string.settings_emulation_title),
@@ -142,15 +151,6 @@ private fun SettingsScreenContent(
                         onAppTheme = onAppTheme,
                         onPaletteStyle = onPaletteStyle,
                     )
-                }
-
-                // Controller Section
-                SettingsSection(
-                    title = stringResource(R.string.settings_interface_title),
-                    icon = Icons.Default.Palette,
-                    iconTint = PluviaTheme.colors.accentPurple,
-                ) {
-                     SettingsGroupController()
                 }
 
                 // Info section

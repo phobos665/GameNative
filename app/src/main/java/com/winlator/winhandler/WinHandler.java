@@ -828,7 +828,7 @@ public class WinHandler {
                 ec = ExternalController.getController(deviceId);
                 if (ec != null) {
                     extraControllers[idx] = ec;
-                    Timber.d("WinHandler: adopted P%d controller %s(#%d)", slot + 1, ec.getName(), ec.getDeviceId());
+                    Log.d("WinHandler: adopted P%d controller %s(#%d)", slot + 1, ec.getName(), ec.getDeviceId());
                 }
             }
             return new SlotTarget(extraControllers[idx], extraGamepadBuffers[idx], slot);
@@ -845,7 +845,7 @@ public class WinHandler {
             if (adopted != null && "*".equals(adopted.getId())) {
                 this.currentController = adopted;
                 ec = adopted;
-                Timber.d("WinHandler: adopted P1 controller %s(#%d)", adopted.getName(), adopted.getDeviceId());
+                Log.d(TAG, "adopted P1 controller %s(#%d)", adopted.getName(), adopted.getDeviceId());
             }
         }
         return new SlotTarget(this.currentController, gamepadBuffer, slot);
