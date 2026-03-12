@@ -113,6 +113,7 @@ import `in`.dragonbra.javasteam.util.log.LogListener
 import `in`.dragonbra.javasteam.util.log.LogManager
 import java.io.Closeable
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.lang.NullPointerException
@@ -1123,10 +1124,11 @@ class SteamService : Service(), IChallengeUrlChanged {
                 try {
                     fetchFile(fallbackUrl, dest, onProgress)
                 } catch (e2: Exception) {
-                    withContext(Dispatchers.Main) {
-                        val msg = "Download failed with ${e2.message ?: e2.toString()}. Please disable VPN or try a different network."
-                        android.widget.Toast.makeText(context.applicationContext, msg, android.widget.Toast.LENGTH_LONG).show()
-                    }
+                    dest.delete()
+                    throw IOException(
+                        "Failed to download $fileName. Please check your network connection or try a VPN.",
+                        e2,
+                    )
                 }
             }
         }
@@ -2452,26 +2454,28 @@ class SteamService : Service(), IChallengeUrlChanged {
 
                 isLoggingOut = true
 
-                performLogOffDuties()
+                performLogOffDuties(clearCloudSyncState = true)
 
                 val steamUser = instance!!._steamUser!!
                 steamUser.logOff()
             }
         }
 
-        private fun clearUserData() {
+        private fun clearUserData(clearCloudSyncState: Boolean = false) {
             PrefManager.clearPreferences()
 
-            clearDatabase()
+            clearDatabase(clearCloudSyncState = clearCloudSyncState)
         }
 
-        fun clearDatabase() {
+        fun clearDatabase(clearCloudSyncState: Boolean = false) {
             with(instance!!) {
                 scope.launch {
                     db.withTransaction {
                         appDao.deleteAll()
-                        changeNumbersDao.deleteAll()
-                        fileChangeListsDao.deleteAll()
+                        if (clearCloudSyncState) {
+                            changeNumbersDao.deleteAll()
+                            fileChangeListsDao.deleteAll()
+                        }
                         licenseDao.deleteAll()
                         encryptedAppTicketDao.deleteAll()
                         downloadingAppInfoDao.deleteAll()
@@ -2480,10 +2484,10 @@ class SteamService : Service(), IChallengeUrlChanged {
             }
         }
 
-        private fun performLogOffDuties() {
+        private fun performLogOffDuties(clearCloudSyncState: Boolean = false) {
             val username = PrefManager.username
 
-            clearUserData()
+            clearUserData(clearCloudSyncState = clearCloudSyncState)
 
             val event = SteamEvent.LoggedOut(username)
             PluviaApp.events.emit(event)
@@ -2987,7 +2991,11 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         notificationHelper.notify("Disconnected...")
 
-        if (isLoggingOut || callback.result == EResult.LogonSessionReplaced) {
+        if (isLoggingOut) {
+            performLogOffDuties(clearCloudSyncState = true)
+
+            scope.launch { stop() }
+        } else if (callback.result == EResult.LogonSessionReplaced) {
             performLogOffDuties()
 
             scope.launch { stop() }
