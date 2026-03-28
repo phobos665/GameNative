@@ -130,6 +130,7 @@ class EpicDownloadManager @Inject constructor(
 
             // Parse manifest binary to get chunks and files
             val manifest = EpicManifest.readAll(manifestData.manifestBytes)
+            val buildVersion = manifest.meta?.buildVersion ?: ""
 
             // Use container language (same as GOG) to select install tags: required + optional language files.
             val selectedTags = EpicConstants.containerLanguageToEpicInstallTags(containerLanguage)
@@ -347,9 +348,11 @@ class EpicDownloadManager @Inject constructor(
                     isInstalled = true,
                     installPath = installPath,
                     installSize = totalInstalledSize,
+                    version = buildVersion,
+                    hasUpdate = false,
                 )
                 epicManager.updateGame(updatedGame)
-                Timber.tag("Epic").i("Updated database: game marked as installed")
+                Timber.tag("Epic").i("Updated database: game marked as installed with version $buildVersion")
             } catch (e: Exception) {
                 Timber.tag("Epic").e(e, "Failed to update database for game ${game.id}")
                 // Don't fail the entire download for DB issues

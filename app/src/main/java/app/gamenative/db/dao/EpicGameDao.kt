@@ -31,8 +31,17 @@ interface EpicGameDao {
     @Delete
     suspend fun delete(game: EpicGame)
 
-    @Query("UPDATE epic_games SET is_installed = 0, install_path='',install_size = 0 WHERE id = :appId")
+    @Query("UPDATE epic_games SET is_installed = 0, install_path='', install_size = 0, has_update = 0 WHERE id = :appId")
     suspend fun uninstall(appId: Int)
+
+    @Query("UPDATE epic_games SET has_update = :hasUpdate WHERE id = :appId")
+    suspend fun setUpdateAvailable(appId: Int, hasUpdate: Boolean)
+
+    @Query("SELECT * FROM epic_games WHERE is_installed = 1")
+    suspend fun getInstalledGamesList(): List<EpicGame>
+
+    @Query("SELECT * FROM epic_games WHERE is_installed = 1 AND has_update = 1 ORDER BY title ASC")
+    fun getGamesWithUpdates(): Flow<List<EpicGame>>
 
     @Query("DELETE FROM epic_games WHERE id = :appId")
     suspend fun deleteById(appId: Int)
@@ -102,6 +111,8 @@ interface EpicGameDao {
                     installSize = existingGame.installSize,
                     lastPlayed = existingGame.lastPlayed,
                     playTime = existingGame.playTime,
+                    version = existingGame.version,
+                    hasUpdate = existingGame.hasUpdate,
                 )
             } else {
                 newGame

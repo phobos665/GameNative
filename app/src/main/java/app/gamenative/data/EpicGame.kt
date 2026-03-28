@@ -47,6 +47,9 @@ data class EpicGame(
     @ColumnInfo("version")
     val version: String = "",
 
+    @ColumnInfo(name = "has_update", defaultValue = "0")
+    val hasUpdate: Boolean = false,
+
     @ColumnInfo("executable")
     val executable: String = "",
 
