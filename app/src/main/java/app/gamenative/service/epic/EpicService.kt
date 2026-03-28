@@ -468,6 +468,71 @@ class EpicService : Service() {
             // Return the DownloadInfo immediately so caller can track progress
             return Result.success(downloadInfo)
         }
+            
+        // Updates Game with delta-strategy
+        // Only updates what is required, deletes any unneseccsary files.
+        fun updateGame(
+            context: Context,
+            appId: Int,
+            containerLanguage: String = "en-US",
+        ): Result<DownloadInfo> {
+            val instance = getInstance() ?: return Result.failure(Exception("Service not available"))
+
+            val game = runBlocking { instance.epicManager.getGameById(appId) }
+                ?: return Result.failure(Exception("Game not found for appId: $appId"))
+
+            if (!game.isInstalled || game.installPath.isEmpty()) {
+                return Result.failure(Exception("Game is not installed"))
+            }
+
+    
+            if (instance.activeDownloads.containsKey(appId)) {
+                Timber.tag("Epic").w("Download already in progress for $appId")
+                return Result.success(instance.activeDownloads[appId]!!)
+            }
+
+            val downloadInfo = DownloadInfo(
+                jobCount = 1,
+                gameId = appId,
+                downloadingAppIds = CopyOnWriteArrayList<Int>(),
+            )
+
+            instance.activeDownloads[appId] = downloadInfo
+            downloadInfo.setActive(true)
+
+            val job = instance.scope.launch {
+                try {
+                    Timber.tag("Epic").i("Starting update for game: ${game.title}")
+                    val result = instance.epicDownloadManager.updateGame(
+                        context,
+                        game,
+                        downloadInfo,
+                        containerLanguage,
+                    )
+                    if (result.isSuccess) {
+                        Timber.i("Update Completed successfully for game $appId")
+                        downloadInfo.setProgress(1.0f)
+                        downloadInfo.setActive(false)
+                        SnackbarManager.show("${game.title} updated successfully!")
+                    } else {
+                        val error = result.exceptionOrNull()
+                        Timber.e(error, "Update Failed for game $appId")
+                        downloadInfo.setProgress(-1.0f)
+                        downloadInfo.setActive(false)
+                        SnackbarManager.show("Update failed: ${error?.message ?: "Unknown error"}")
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "Update Error for game $appId")
+                    downloadInfo.setProgress(-1.0f)
+                    downloadInfo.setActive(false)
+                    SnackbarManager.show("Update error: ${e.message ?: "Unknown error"}")
+                } finally {
+                    instance.activeDownloads.remove(appId)
+                }
+            }
+            downloadInfo.setDownloadJob(job)
+            return Result.success(downloadInfo)
+        }
 
         suspend fun refreshSingleGame(appId: Int, context: Context): Result<EpicGame?> {
             // For now, just get from database
