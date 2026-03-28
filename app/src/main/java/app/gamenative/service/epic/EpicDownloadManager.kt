@@ -358,6 +358,9 @@ class EpicDownloadManager @Inject constructor(
                 // Don't fail the entire download for DB issues
             }
 
+            // Save manifest bytes to check diff when updating
+            saveManifestToDisk(installPath, manifestData.manifestBytes)
+
             MarkerUtils.removeMarker(installPath, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
             MarkerUtils.addMarker(installPath, Marker.DOWNLOAD_COMPLETE_MARKER)
 
@@ -1082,4 +1085,323 @@ class EpicDownloadManager @Inject constructor(
         if (dir.isFile) return 1
         return dir.listFiles()?.sumOf { countFiles(it) } ?: 0
     }
+
+    /** Returns the path where the installed manifest is stored for a given install directory. */
+    fun manifestFileFor(installPath: String): File =
+        File(installPath, ".epic/manifest.bin")
+
+    /** Saves manifest bytes alongside the game so future updates can diff against them. */
+    private fun saveManifestToDisk(installPath: String, manifestBytes: ByteArray) {
+        try {
+            val dest = manifestFileFor(installPath)
+            dest.parentFile?.mkdirs()
+            dest.writeBytes(manifestBytes)
+            Timber.tag("Epic").d("Manifest saved to ${dest.path} (${manifestBytes.size} bytes)")
+        } catch (e: Exception) {
+            Timber.tag("Epic").w(e, "Failed to save manifest to disk — update diff will fall back to full install")
+        }
+    }
+
+    /**
+     * Deletes files in [installPath] that are NOT listed in [manifest].
+     * Files that belong to the manifest are left on disk so they can be overwritten
+     * (or skipped entirely) by the subsequent [downloadGame] call.
+     * The `.epic/` meta-directory is always preserved, as are any paths whose relative
+     * prefix matches an entry in [protectedRelativePrefixes] (used to protect save data
+     * stored inside the install directory via the `{InstallDir}` CloudSaveFolder variable).
+     */
+    private fun deleteOrphanFiles(
+        installPath: String,
+        manifest: app.gamenative.service.epic.manifest.EpicManifest,
+        protectedRelativePrefixes: Set<String> = emptySet(),
+    ) {
+        try {
+            val installDir = File(installPath)
+            if (!installDir.exists()) return
+            val manifestFilenames = manifest.fileManifestList?.elements
+                ?.map { it.filename.replace('\\', '/') }
+                ?.toHashSet()
+                ?: emptySet<String>()
+            installDir.walkTopDown()
+                .filter { it.isFile }
+                .forEach { file ->
+                    val relative = file.relativeTo(installDir).path.replace('\\', '/')
+                    if (relative.startsWith(".epic/")) return@forEach
+                    if (protectedRelativePrefixes.any { relative.startsWith(it) }) return@forEach
+                    if (relative !in manifestFilenames) {
+                        file.delete()
+                        Timber.tag("Epic").d("Removed orphan file: $relative")
+                    }
+                }
+        } catch (e: Exception) {
+            Timber.tag("Epic").w(e, "Failed to delete orphan files in: $installPath")
+        }
+    }
+
+    /**
+     * Returns the set of relative path prefixes (forward-slash separated) that this game
+     * stores save data under, IF those saves live inside the install directory.
+     *
+     * Epic's `CloudSaveFolder` uses `{InstallDir}` to anchor saves inside the install dir.
+     * For example `{InstallDir}/Saves/` → returns `{"Saves/"}` so those files are not
+     * treated as orphans during an update. If the variable is absent (saves are in the Wine
+     * prefix or elsewhere) an empty set is returned.
+     *
+     * If the resolved sub-path is empty (the entire install dir is the save root) this also
+     * returns an empty set and orphan deletion is skipped at the call site.
+     */
+    private fun saveRelativePrefixes(game: EpicGame): Set<String> {
+        val folder = game.saveFolder
+        val marker = "{installdir}"
+        val idx = folder.lowercase().indexOf(marker)
+        if (idx == -1) return emptySet()
+        val relative = folder.substring(idx + marker.length)
+            .trimStart('/', '\\')
+            .replace('\\', '/')
+            .let { if (it.isNotEmpty() && !it.endsWith("/")) "$it/" else it }
+        return if (relative.isEmpty()) emptySet() else setOf(relative)
+    }
+
+    /**
+     * Update an already-installed Epic game to the latest version.
+     *
+     * Fetches the new manifest, compares to old manifest and only downloads new files that have changed.
+     * Will remove any unneeded files that are no longer present in the new manifest, unless they are protected by being listed
+     * If no local manifest exists the function removes the files and does a full replacement via DownloadGame (Will persist save data)
+     *
+     */
+    suspend fun updateGame(
+        context: Context,
+        game: EpicGame,
+        downloadInfo: DownloadInfo,
+        containerLanguage: String = EpicConstants.EPIC_FALLBACK_CONTAINER_LANGUAGE,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val installPath = game.installPath
+        if (!game.isInstalled || installPath.isEmpty()) {
+            return@withContext Result.failure(Exception("Game is not installed"))
+        }
+
+        try {
+            val gameId = game.id
+            MarkerUtils.addMarker(installPath, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+            app.gamenative.PluviaApp.events.emitJava(
+                app.gamenative.events.AndroidEvent.DownloadStatusChanged(gameId, true),
+            )
+
+            // Grab manifest
+            downloadInfo.updateStatusMessage("Checking for changes...")
+            val manifestResult = epicManager.fetchManifestFromEpic(
+                context,
+                game.namespace,
+                game.catalogId,
+                game.appName,
+            )
+            if (manifestResult.isFailure) {
+                return@withContext Result.failure(
+                    manifestResult.exceptionOrNull() ?: Exception("Failed to fetch manifest"),
+                )
+            }
+
+            val manifestData = manifestResult.getOrNull()!!
+            val newManifest = app.gamenative.service.epic.manifest.EpicManifest.readAll(manifestData.manifestBytes)
+            val buildVersion = newManifest.meta?.buildVersion ?: ""
+
+            // Grab old manifest if exists for game
+            val savedManifestFile = manifestFileFor(installPath)
+            val oldManifest = if (savedManifestFile.exists()) {
+                try {
+                    app.gamenative.service.epic.manifest.ManifestUtils.loadFromFile(savedManifestFile)
+                } catch (e: Exception) {
+                    Timber.tag("Epic").w(e, "Failed to parse local manifest — will remove orphan files and fall back to full reinstall")
+                    null
+                }
+            } else {
+                Timber.tag("Epic").w("No local manifest found for ${game.title} — will remove orphan files and fall back to full reinstall")
+                null
+            }
+
+            // Do a full re-download of the game if no manifest exists (Persist Saves)
+            if (oldManifest == null) {
+                val saveFolderUsesInstallDir = game.saveFolder.lowercase().contains("{installdir}")
+                if (saveFolderUsesInstallDir) {
+                    val saveProtected = saveRelativePrefixes(game)
+                    if (saveProtected.isEmpty()) {
+                        // saveFolder resolves to the install-dir root — saves could be anywhere,
+                        // so skip orphan deletion to avoid data loss.
+                        Timber.tag("Epic").w("Save folder resolves to install-dir root for ${game.title} — skipping orphan deletion")
+                    } else {
+                        deleteOrphanFiles(installPath, newManifest, saveProtected)
+                    }
+                } else {
+                    // Saves live outside the install dir (Wine prefix, AppData, etc.) — safe.
+                    deleteOrphanFiles(installPath, newManifest)
+                }
+                MarkerUtils.removeMarker(installPath, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+                app.gamenative.PluviaApp.events.emitJava(
+                    app.gamenative.events.AndroidEvent.DownloadStatusChanged(gameId, false),
+                )
+                return@withContext downloadGame(
+                    context = context,
+                    game = game,
+                    installPath = installPath,
+                    downloadInfo = downloadInfo,
+                    containerLanguage = containerLanguage,
+                    dlcIds = emptyList(),
+                )
+            }
+
+            // If exists, compare the two and only download and remove diffed files
+            val comparison = app.gamenative.service.epic.manifest.ManifestUtils.compareManifests(oldManifest, newManifest)
+            Timber.tag("Epic").i("Update diff for ${game.title}: $comparison")
+
+            // If no changes, update manifest and return early
+            if (!comparison.hasChanges) {
+                Timber.tag("Epic").i("${game.title} is already up to date at $buildVersion")
+                epicManager.updateGame(game.copy(version = buildVersion, hasUpdate = false))
+                saveManifestToDisk(installPath, manifestData.manifestBytes)
+                MarkerUtils.removeMarker(installPath, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+                MarkerUtils.addMarker(installPath, Marker.DOWNLOAD_COMPLETE_MARKER)
+                downloadInfo.updateStatusMessage("Already up to date")
+                downloadInfo.setProgress(1.0f)
+                downloadInfo.setActive(false)
+                downloadInfo.emitProgressChange()
+                app.gamenative.PluviaApp.events.emitJava(
+                    app.gamenative.events.AndroidEvent.LibraryInstallStatusChanged(gameId),
+                )
+                return@withContext Result.success(Unit)
+            }
+
+            // 
+            val selectedTags = EpicConstants.containerLanguageToEpicInstallTags(containerLanguage)
+            // Files that need work: added + modified, filtered to the user's selected install tags
+            val allChangedFiles = comparison.added + comparison.modified.map { it.second }
+            val filesToDownload = allChangedFiles.filter { file ->
+                file.installTags.isEmpty() || selectedTags.any { it in file.installTags }
+            }
+            val deltaChunks = app.gamenative.service.epic.manifest.ManifestUtils
+                .getRequiredChunksForFileList(newManifest, filesToDownload)
+
+            val totalDownloadSize = deltaChunks.sumOf { it.fileSize }
+
+            // TODO: Fix the CDN auth for epicgamescdn.
+            val cdnUrls = manifestData.cdnUrls.filter {
+                !it.baseUrl.startsWith("https://cloudflare.epicgamescdn.com")
+            }
+            val chunkDir = newManifest.getChunkDir()
+
+            Timber.tag("Epic").i(
+                "Update plan for ${game.title}: " +
+                    "${filesToDownload.size} files to update/add, " +
+                    "${comparison.removed.size} files to remove, " +
+                    "${app.gamenative.service.epic.manifest.ManifestUtils.formatBytes(totalDownloadSize)} to download",
+            )
+
+            downloadInfo.setTotalExpectedBytes(totalDownloadSize)
+            downloadInfo.updateStatusMessage("Downloading update...")
+
+            val chunkCacheDir = File(installPath, ".chunks")
+            chunkCacheDir.mkdirs()
+
+            var downloadedChunks = 0
+            val totalChunks = deltaChunks.size
+
+            deltaChunks.chunked(MAX_PARALLEL_DOWNLOADS).forEach { chunkBatch ->
+                if (!downloadInfo.isActive()) {
+                    return@withContext Result.failure(Exception("Download cancelled"))
+                }
+
+                val results = chunkBatch.map { chunk ->
+                    async {
+                        downloadChunkWithRetry(chunk, chunkCacheDir, chunkDir, cdnUrls, downloadInfo)
+                    }
+                }.awaitAll()
+
+                results.firstOrNull { it.isFailure }?.let { failed ->
+                    return@withContext Result.failure(
+                        failed.exceptionOrNull() ?: Exception("Failed to download chunk"),
+                    )
+                }
+
+                downloadedChunks += chunkBatch.size
+                downloadInfo.setProgress(downloadedChunks.toFloat() / totalChunks * 0.9f) // reserve 10% for assembly
+                downloadInfo.updateStatusMessage("Downloading update ($downloadedChunks/$totalChunks chunks)")
+                downloadInfo.emitProgressChange()
+            }
+
+            // Assemble new files
+            downloadInfo.updateStatusMessage("Applying update...")
+            val installDir = File(installPath)
+            var assembledFiles = 0
+            val totalFiles = filesToDownload.size
+
+            filesToDownload.chunked(4).forEach { fileBatch ->
+                val assembleResults = fileBatch.map { fileManifest ->
+                    async { assembleFile(fileManifest, chunkCacheDir, installDir) }
+                }.awaitAll()
+
+                assembleResults.firstOrNull { it.isFailure }?.let { failed ->
+                    return@withContext Result.failure(
+                        failed.exceptionOrNull() ?: Exception("Failed to assemble file"),
+                    )
+                }
+
+                assembledFiles += fileBatch.size
+                downloadInfo.setProgress(0.9f + assembledFiles.toFloat() / totalFiles * 0.1f)
+                downloadInfo.updateStatusMessage("Applying update ($assembledFiles/$totalFiles files)")
+            }
+
+            chunkCacheDir.deleteRecursively()
+
+            // Delete old files that are no longer require via manifest
+            comparison.removed.forEach { removedFile ->
+                val target = File(installDir, removedFile.filename)
+                if (target.exists()) {
+                    target.delete()
+                    Timber.tag("Epic").d("Removed obsolete file: ${removedFile.filename}")
+                }
+            }
+
+            // Persist new manifest and update DB
+            saveManifestToDisk(installPath, manifestData.manifestBytes)
+
+            val newInstallSize = installDir.walkTopDown()
+                .filter { it.isFile && !it.name.startsWith(".epic") }
+                .sumOf { it.length() }
+
+            epicManager.updateGame(
+                game.copy(
+                    version = buildVersion,
+                    hasUpdate = false,
+                    installSize = newInstallSize,
+                ),
+            )
+
+            MarkerUtils.removeMarker(installPath, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+            MarkerUtils.addMarker(installPath, Marker.DOWNLOAD_COMPLETE_MARKER)
+
+            downloadInfo.updateStatusMessage("Update complete")
+            downloadInfo.setProgress(1.0f)
+            downloadInfo.setActive(false)
+            downloadInfo.emitProgressChange()
+
+            app.gamenative.PluviaApp.events.emitJava(
+                app.gamenative.events.AndroidEvent.LibraryInstallStatusChanged(gameId),
+            )
+
+            Timber.tag("Epic").i("Update completed for ${game.title} → $buildVersion")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Timber.tag("Epic").e(e, "Update failed for ${game.title}: ${e.message}")
+            MarkerUtils.removeMarker(installPath, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+            downloadInfo.updateStatusMessage("Update failed: ${e.message}")
+            downloadInfo.setProgress(-1.0f)
+            downloadInfo.setActive(false)
+            Result.failure(e)
+        } finally {
+            app.gamenative.PluviaApp.events.emitJava(
+                app.gamenative.events.AndroidEvent.DownloadStatusChanged(game.id, false),
+            )
+        }
+    }
 }
+
