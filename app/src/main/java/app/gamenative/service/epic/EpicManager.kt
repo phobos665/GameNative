@@ -1000,7 +1000,7 @@ class EpicManager @Inject constructor(
                 .get()
                 .build()
 
-            val assetMap: EpicAssetList[] = httpClient.newCall(request).execute().use { response ->
+            val assetMap: Map<String, String> = httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     return@withContext Result.failure(Exception("Asset list request failed: ${response.code}"))
                 }
@@ -1008,18 +1008,12 @@ class EpicManager @Inject constructor(
                 if (body.isNullOrEmpty()) {
                     return@withContext Result.failure(Exception("Empty asset list response"))
                 }
-                // Comes through as a EpicAssetList[]
-                val assetListJson = JSONArray(body) 
+                val assetListJson = JSONArray(body)
                 buildMap {
                     for (i in 0 until assetListJson.length()) {
                         val item = assetListJson.getJSONObject(i)
                         val appName = item.optString("appName", "")
-                        val buildVersion = item.optString("labelName", "")
                         val buildVersion = item.optString("buildVersion", "")
-                        val buildVersion = item.optString("catalogItemId", "")
-                        val buildVersion = item.optString("namespace", "")
-                        val buildVersion = item.optString("assetId", "")
-                        
                         if (appName.isNotEmpty() && buildVersion.isNotEmpty()) {
                             put(appName, buildVersion)
                         }
