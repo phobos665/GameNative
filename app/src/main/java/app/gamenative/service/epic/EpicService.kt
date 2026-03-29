@@ -468,7 +468,18 @@ class EpicService : Service() {
             // Return the DownloadInfo immediately so caller can track progress
             return Result.success(downloadInfo)
         }
-            
+
+        fun checkUpdateForGame(context: Context, appId: Int): Result<Boolean> {
+            val instance = getInstance() ?: return Result.failure(Exception("Service not available"))
+            var hasUpdate = false
+            try {
+                hasUpdate = runBlocking { instance.epicManager.forceCheckUpdateForGame(context, appId).getOrThrow() }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to check for updates for game $appId")
+            }
+            return Result.success(hasUpdate)
+        }
+
         // Updates Game with delta-strategy
         // Only updates what is required, deletes any unneseccsary files.
         fun updateGame(
@@ -485,7 +496,7 @@ class EpicService : Service() {
                 return Result.failure(Exception("Game is not installed"))
             }
 
-    
+
             if (instance.activeDownloads.containsKey(appId)) {
                 Timber.tag("Epic").w("Download already in progress for $appId")
                 return Result.success(instance.activeDownloads[appId]!!)

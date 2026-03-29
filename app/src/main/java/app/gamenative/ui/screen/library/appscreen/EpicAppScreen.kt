@@ -26,19 +26,11 @@ import app.gamenative.service.epic.EpicService
 import app.gamenative.ui.data.AppMenuOption
 import app.gamenative.ui.data.GameDisplayInfo
 import app.gamenative.ui.enums.AppOptionMenuType
-import app.gamenative.enums.Marker
-import app.gamenative.utils.ContainerUtils
-import app.gamenative.utils.ContainerUtils.extractGameIdFromContainerId
-import app.gamenative.utils.MarkerUtils
 import com.winlator.container.ContainerData
-import com.winlator.container.ContainerManager
 import com.winlator.core.StringUtils
-import java.io.File
-import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import app.gamenative.ui.util.SnackbarManager
@@ -82,17 +74,6 @@ class EpicAppScreen : BaseAppScreen() {
             }
         }
 
-        fun hideInstallDialog(appId: String) {
-            Timber.tag(TAG).d("hideInstallDialog: appId=$appId")
-            installDialogAppIds.remove(appId)
-        }
-
-        fun shouldShowInstallDialog(appId: String): Boolean {
-            val result = installDialogAppIds.contains(appId)
-            Timber.tag(TAG).d("shouldShowInstallDialog: appId=$appId, result=$result")
-            return result
-        }
-
         // Shared state for game manager dialog - map of gameId to GameManagerDialogState
         private val gameManagerDialogStates = mutableStateMapOf<Int, app.gamenative.ui.component.dialog.state.GameManagerDialogState>()
 
@@ -109,6 +90,21 @@ class EpicAppScreen : BaseAppScreen() {
         fun getGameManagerDialogState(gameId: Int): app.gamenative.ui.component.dialog.state.GameManagerDialogState? {
             return gameManagerDialogStates[gameId]
         }
+
+        // Shared state for update confirmation dialog
+        private val updateDialogGameIds = mutableStateListOf<Int>()
+
+        fun showUpdateDialog(gameId: Int) {
+            Timber.tag(TAG).d("showUpdateDialog: gameId=$gameId")
+            if (!updateDialogGameIds.contains(gameId)) updateDialogGameIds.add(gameId)
+        }
+
+        fun hideUpdateDialog(gameId: Int) {
+            Timber.tag(TAG).d("hideUpdateDialog: gameId=$gameId")
+            updateDialogGameIds.remove(gameId)
+        }
+
+        fun shouldShowUpdateDialog(gameId: Int): Boolean = updateDialogGameIds.contains(gameId)
     }
 
     @Composable
@@ -541,7 +537,29 @@ class EpicAppScreen : BaseAppScreen() {
         if (epicGame?.cloudSaveEnabled == true) {
             options.add(
                 AppMenuOption(
-                    optionType = AppOptionMenuType.ForceCloudSync,
+                    optionType = AppOptionMenuType.Update,
+                    onClick = {
+                        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+                        scope.launch {
+                            try {
+                                val hasUpdate = EpicService.checkUpdateForGame(context, libraryItem.gameId)
+                                    .getOrThrow()
+                                if (hasUpdate) {
+                                    showUpdateDialog(libraryItem.gameId)
+                                } else {
+                                    SnackbarManager.show(context.getString(R.string.epic_no_update_available))
+                                }
+                            } catch (e: Exception) {
+                                Timber.tag(TAG).e(e, "Failed to check for updates")
+                                SnackbarManager.show(context.getString(R.string.epic_cloud_sync_error, e.message ?: ""))
+                            }
+                        }
+                    },
+                ),
+            )
+            options.add(
+                AppMenuOption(
+                    optionType = AppOptionMenuType.ForceCheckUpdates,
                     onClick = {
                         val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
                         scope.launch {
@@ -700,21 +718,29 @@ class EpicAppScreen : BaseAppScreen() {
         Timber.tag(TAG).d("AdditionalDialogs: composing for appId=${libraryItem.appId}")
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
+        val appId = libraryItem.appId
+        val gameId = libraryItem.gameId
 
         // Monitor uninstall dialog state
-        var showUninstallDialog by remember { mutableStateOf(shouldShowUninstallDialog(libraryItem.appId)) }
+        var showUninstallDialog by remember { mutableStateOf(shouldShowUninstallDialog(appId)) }
 
-        LaunchedEffect(libraryItem.appId) {
-            snapshotFlow { shouldShowUninstallDialog(libraryItem.appId) }
+        LaunchedEffect(appId) {
+            snapshotFlow { shouldShowUninstallDialog(appId) }
                 .collect { shouldShow ->
                     Timber.tag(TAG).d("Uninstall dialog state changed: $shouldShow")
                     showUninstallDialog = shouldShow
                 }
         }
 
+        // Monitor update dialog state
+        var showUpdateDialog by remember { mutableStateOf(shouldShowUpdateDialog(gameId)) }
+
+        LaunchedEffect(gameId) {
+            snapshotFlow { shouldShowUpdateDialog(gameId) }
+                .collect { showUpdateDialog = it }
+        }
+
         // Shared install dialog state (from BaseAppScreen)
-        val appId = libraryItem.appId
-        val gameId = libraryItem.gameId
         var installDialogState by remember(appId) {
             mutableStateOf(BaseAppScreen.getInstallDialogState(appId) ?: app.gamenative.ui.component.dialog.state.MessageDialogState(false))
         }
@@ -826,6 +852,45 @@ class EpicAppScreen : BaseAppScreen() {
                             hideUninstallDialog(libraryItem.appId)
                         },
                     ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
+        }
+
+        // Show update confirmation dialog
+        if (showUpdateDialog) {
+            val epicGame = EpicService.getEpicGameOf(gameId)
+            AlertDialog(
+                onDismissRequest = { hideUpdateDialog(gameId) },
+                title = { Text(stringResource(R.string.epic_update_available_title)) },
+                text = {
+                    Text(stringResource(R.string.epic_update_available_message, epicGame?.title ?: libraryItem.name))
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            hideUpdateDialog(gameId)
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    val containerData = loadContainerData(context, libraryItem)
+                                    SnackbarManager.show(context.getString(R.string.epic_update_starting, epicGame?.title ?: libraryItem.name))
+                                    val result = EpicService.updateGame(context, gameId, containerData.language)
+                                    if (result.isFailure) {
+                                        SnackbarManager.show(context.getString(R.string.epic_update_failed, result.exceptionOrNull()?.message ?: ""))
+                                    }
+                                } catch (e: Exception) {
+                                    Timber.tag(TAG).e(e, "Failed to update game $gameId")
+                                    SnackbarManager.show(context.getString(R.string.epic_update_error, e.message ?: ""))
+                                }
+                            }
+                        },
+                    ) {
+                        Text(stringResource(R.string.update))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { hideUpdateDialog(gameId) }) {
                         Text(stringResource(R.string.cancel))
                     }
                 },

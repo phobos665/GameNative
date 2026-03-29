@@ -1073,10 +1073,10 @@ class EpicManager @Inject constructor(
         }
     }
 
-    // Forcecheck updates for a single game. 
+    // Forcecheck updates for a single game.
     suspend fun forceCheckUpdateForGame(context: Context, gameId: Int): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val game = epicGameDao.getGameById(gameId)
+            val game = epicGameDao.getById(gameId)
             if (game == null) {
                 Timber.tag("Epic").d("Game with ID $gameId not found")
                 return@withContext Result.success(false)
@@ -1094,7 +1094,7 @@ class EpicManager @Inject constructor(
             val remoteVersion = remoteVersions[game.appName]
             val hasUpdate = when {
                 remoteVersion == null -> false // not in asset list, skip
-                game.version.isEmpty() -> !skipNoVersion // Will skip if skipNoVersion is true, otherwise treat as update available
+                game.version.isEmpty() -> true // No local version obtained, assume update available
                 else -> remoteVersion != game.version
             }
 
@@ -1102,7 +1102,7 @@ class EpicManager @Inject constructor(
                 epicGameDao.setUpdateAvailable(game.id, hasUpdate)
             }
 
-            if(hasUpdate){ 
+            if(hasUpdate){
                 Timber.tag("Epic").i("Update available for ${game.title}: ${game.version} -> $remoteVersion")
             }
 

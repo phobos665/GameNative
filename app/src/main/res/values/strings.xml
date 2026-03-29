@@ -73,6 +73,12 @@
     <string name="epic_cloud_sync_error">Cloud save sync error: %1$s</string>
     <string name="epic_uninstall_failed">Uninstall failed: %1$s</string>
     <string name="epic_uninstall_error">Uninstall error: %1$s</string>
+    <string name="epic_update_available_title">Update Available</string>
+    <string name="epic_update_available_message">An update is available for %1$s. Would you like to update now?</string>
+    <string name="epic_no_update_available">No updates available</string>
+    <string name="epic_update_starting">Starting update for %1$s…</string>
+    <string name="epic_update_failed">Update failed: %1$s</string>
+    <string name="epic_update_error">Update error: %1$s</string>
     <string name="steam_never">Never</string>
     <string name="steam_continue">Continue</string>
     <string name="header_img_desc">App header image</string>
@@ -81,6 +87,7 @@
     <string name="install_app">Install</string>
     <string name="delete_app">Delete</string>
     <string name="uninstall">Uninstall</string>
+    <string name="update">Update</string>
     <string name="branch">Branch</string>
     <string name="change_branch">Change Branch</string>
     <string name="change_branch_message">Download alternate game versions from Steam using developer-provided branches. Enter access codes to unlock private branches.</string>
