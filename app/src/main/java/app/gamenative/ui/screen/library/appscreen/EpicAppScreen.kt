@@ -559,7 +559,7 @@ class EpicAppScreen : BaseAppScreen() {
             )
             options.add(
                 AppMenuOption(
-                    optionType = AppOptionMenuType.ForceCheckUpdates,
+                    optionType = AppOptionMenuType.Update,
                     onClick = {
                         val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
                         scope.launch {
