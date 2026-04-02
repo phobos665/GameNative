@@ -74,7 +74,7 @@
     <string name="epic_uninstall_failed">Uninstall failed: %1$s</string>
     <string name="epic_uninstall_error">Uninstall error: %1$s</string>
     <string name="epic_update_available_title">Update Available</string>
-    <string name="epic_update_available_message">An update is available for %1$s. Would you like to update now?</string>
+    <string name="epic_update_available_message">An update is available for %1$s. Would you like to update now? \n this will remove any mods you may have.</string>
     <string name="epic_no_update_available">No updates available</string>
     <string name="epic_update_starting">Starting update for %1$s…</string>
     <string name="epic_update_failed">Update failed: %1$s</string>

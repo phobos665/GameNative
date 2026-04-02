@@ -1086,7 +1086,7 @@ class EpicDownloadManager @Inject constructor(
         return dir.listFiles()?.sumOf { countFiles(it) } ?: 0
     }
 
-    /** Returns the path where the installed manifest is stored for a given install directory. */
+    /** Returns the path where the installed manifest is stored for an install directory. */
     fun manifestFileFor(installPath: String): File =
         File(installPath, ".epic/manifest.bin")
 
@@ -1103,16 +1103,12 @@ class EpicDownloadManager @Inject constructor(
     }
 
     /**
-     * Deletes files in [installPath] that are NOT listed in [manifest].
-     * Files that belong to the manifest are left on disk so they can be overwritten
-     * (or skipped entirely) by the subsequent [downloadGame] call.
-     * The `.epic/` meta-directory is always preserved, as are any paths whose relative
-     * prefix matches an entry in [protectedRelativePrefixes] (used to protect save data
-     * stored inside the install directory via the `{InstallDir}` CloudSaveFolder variable).
+     * Deletes files in the install path that arent in the manifest (Excluding cloud save folders)
+     * Note: we should be really careful here as it could delete non-manifest files.
      */
     private fun deleteOrphanFiles(
         installPath: String,
-        manifest: app.gamenative.service.epic.manifest.EpicManifest,
+        manifest: EpicManifest,
         protectedRelativePrefixes: Set<String> = emptySet(),
     ) {
         try {
@@ -1139,18 +1135,9 @@ class EpicDownloadManager @Inject constructor(
     }
 
     /**
-     * Returns the set of relative path prefixes (forward-slash separated) that this game
-     * stores save data under, IF those saves live inside the install directory.
      *
-     * Epic's `CloudSaveFolder` uses `{InstallDir}` to anchor saves inside the install dir.
-     * For example `{InstallDir}/Saves/` → returns `{"Saves/"}` so those files are not
-     * treated as orphans during an update. If the variable is absent (saves are in the Wine
-     * prefix or elsewhere) an empty set is returned.
-     *
-     * If the resolved sub-path is empty (the entire install dir is the save root) this also
-     * returns an empty set and orphan deletion is skipped at the call site.
      */
-    private fun saveRelativePrefixes(game: EpicGame): Set<String> {
+    private fun getProtectedRelativeFolders(game: EpicGame): Set<String> {
         val folder = game.saveFolder
         val marker = "{installdir}"
         val idx = folder.lowercase().indexOf(marker)
@@ -1203,7 +1190,7 @@ class EpicDownloadManager @Inject constructor(
             }
 
             val manifestData = manifestResult.getOrNull()!!
-            val newManifest = app.gamenative.service.epic.manifest.EpicManifest.readAll(manifestData.manifestBytes)
+            val newManifest = EpicManifest.readAll(manifestData.manifestBytes)
             val buildVersion = newManifest.meta?.buildVersion ?: ""
 
             // Grab old manifest if exists for game
@@ -1224,7 +1211,7 @@ class EpicDownloadManager @Inject constructor(
             if (oldManifest == null) {
                 val saveFolderUsesInstallDir = game.saveFolder.lowercase().contains("{installdir}")
                 if (saveFolderUsesInstallDir) {
-                    val saveProtected = saveRelativePrefixes(game)
+                    val saveProtected = getProtectedRelativeFolders(game)
                     if (saveProtected.isEmpty()) {
                         // saveFolder resolves to the install-dir root — saves could be anywhere,
                         // so skip orphan deletion to avoid data loss.
@@ -1251,7 +1238,7 @@ class EpicDownloadManager @Inject constructor(
             }
 
             // If exists, compare the two and only download and remove diffed files
-            val comparison = app.gamenative.service.epic.manifest.ManifestUtils.compareManifests(oldManifest, newManifest)
+            val comparison = ManifestUtils.compareManifests(oldManifest, newManifest)
             Timber.tag("Epic").i("Update diff for ${game.title}: $comparison")
 
             // If no changes, update manifest and return early
@@ -1271,14 +1258,14 @@ class EpicDownloadManager @Inject constructor(
                 return@withContext Result.success(Unit)
             }
 
-            // 
+            //
             val selectedTags = EpicConstants.containerLanguageToEpicInstallTags(containerLanguage)
             // Files that need work: added + modified, filtered to the user's selected install tags
             val allChangedFiles = comparison.added + comparison.modified.map { it.second }
             val filesToDownload = allChangedFiles.filter { file ->
                 file.installTags.isEmpty() || selectedTags.any { it in file.installTags }
             }
-            val deltaChunks = app.gamenative.service.epic.manifest.ManifestUtils
+            val deltaChunks = ManifestUtils
                 .getRequiredChunksForFileList(newManifest, filesToDownload)
 
             val totalDownloadSize = deltaChunks.sumOf { it.fileSize }
@@ -1293,7 +1280,7 @@ class EpicDownloadManager @Inject constructor(
                 "Update plan for ${game.title}: " +
                     "${filesToDownload.size} files to update/add, " +
                     "${comparison.removed.size} files to remove, " +
-                    "${app.gamenative.service.epic.manifest.ManifestUtils.formatBytes(totalDownloadSize)} to download",
+                    "${ManifestUtils.formatBytes(totalDownloadSize)} to download",
             )
 
             downloadInfo.setTotalExpectedBytes(totalDownloadSize)
