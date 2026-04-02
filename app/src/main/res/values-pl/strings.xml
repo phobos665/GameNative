@@ -1027,6 +1027,8 @@
     <!-- PluviaMain: Save Conflicts -->
     <string name="main_save_conflict_title">Konflikt zapisu</string>
     <string name="main_save_conflict_message">Istnieje nowy zapis zdalny i nowy zapis lokalny. Który chcesz zachować?\n\nZapis lokalny:\n\t%1$s\nZapis zdalny:\n\t%2$s</string>
+    <string name="main_save_conflict_upgrade_v1_title">Wybierz wersję zapisu</string>
+    <string name="main_save_conflict_upgrade_v1_message">Naprawiliśmy obsługę ścieżek zapisów w chmurze dla tej gry i wykryliśmy różnice między zapisem lokalnym a zapisem w chmurze. Wybierz, którą wersję zachować.\n\nZapis lokalny:\n\t%1$s\nZapis w chmurze:\n\t%2$s</string>
     <string name="main_keep_local">Zachowaj lokalny</string>
     <string name="main_keep_remote">Zachowaj zdalny</string>
 
@@ -1351,4 +1353,15 @@
     <string name="install_failed_message">Nie udało się zainstalować plików systemowych. Spróbuj ponownie. Jeśli problem będzie się powtarzał, spróbuj innej sieci lub użyj VPN.</string>
     <string name="settings_interface_swap_face_buttons_title">Zamień przyciski akcji</string>
     <string name="settings_interface_swap_face_buttons_subtitle">Zamień ikony przycisków A↔B i X↔Y</string>
+
+    <!-- Workshop -->
+    <string name="workshop_checking_mods">Sprawdzanie modów z Warsztatu…</string>
+    <string name="workshop_update_title">Aktualizacje modów z Warsztatu</string>
+    <string name="workshop_update_prompt">%1$s MB aktualizacji modów dostępnych. Pobrać teraz czy pominąć?</string>
+    <string name="workshop_download_btn">Pobierz</string>
+    <string name="workshop_skip_btn">Pomiń</string>
+    <string name="workshop_downloading">Pobieranie modów z Warsztatu (%1$d/%2$d)</string>
+    <string name="workshop_processing">Przetwarzanie modów…</string>
+    <string name="workshop_failed_count">Nie udało się zaktualizować %1$d modów z Warsztatu</string>
+    <string name="workshop_download_failed">Pobieranie nie powiodło się</string>
 </resources>

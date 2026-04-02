@@ -53,7 +53,7 @@ const val DATABASE_NAME = "pluvia.db"
         DownloadingAppInfo::class,
         SteamUnlockedBranch::class,
     ],
-    version = 16,
+    version = 19,
     // For db migration, visit https://developer.android.com/training/data-storage/room/migrating-db-versions for more information
     exportSchema = true, // It is better to handle db changes carefully, as GN is getting much more users.
     autoMigrations = [
@@ -64,8 +64,14 @@ const val DATABASE_NAME = "pluvia.db"
         AutoMigration(from = 11, to = 12),
         AutoMigration(from = 12, to = 13), // Added amazon_games table
         AutoMigration(from = 13, to = 14), // Added GOG background image column
-        AutoMigration(from = 14, to = 15),
-        AutoMigration(from = 15, to = 16), // Epic Update version
+        AutoMigration(from = 14, to = 15), // Added branch columns and steam_unlocked_branch table
+        AutoMigration(from = 15, to = 16), // Added ufs_parse_version to steam_app
+        // AutoMigration(from = 16, to = 17),
+        // Disabled auto-migration due to duplicated column in previous version (upstream PR #1048)
+        // duplicate column name: ufs_parse_version (code 1 SQLITE_ERROR)
+        // v16 users will fallback to destructive migration (only cached Steam data, re-fetched on login)
+        AutoMigration(from = 17, to = 18), // Added workshop_mods, enabled_workshop_item_ids, workshop_download_pending to steam_app
+        AutoMigration(from = 18, to = 19), // Epic Games update (has_update field)
     ]
 )
 @TypeConverters(

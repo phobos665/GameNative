@@ -56,6 +56,8 @@ import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.MarkerUtils
 import app.gamenative.utils.SteamUtils
 import app.gamenative.utils.StorageUtils
+import app.gamenative.workshop.WorkshopManager
+import app.gamenative.NetworkMonitor
 import com.google.android.play.core.splitcompat.SplitCompat
 import com.posthog.PostHog
 import com.winlator.container.ContainerData
@@ -69,6 +71,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import app.gamenative.ui.component.dialog.GameManagerDialog
+import app.gamenative.ui.component.dialog.WorkshopManagerDialog
 import app.gamenative.ui.theme.PluviaTheme
 import app.gamenative.ui.screen.library.GameMigrationDialog
 import app.gamenative.ui.component.dialog.state.GameManagerDialogState
@@ -168,6 +171,20 @@ class SteamAppScreen : BaseAppScreen() {
 
         fun getGameManagerDialogState(gameId: Int): GameManagerDialogState? {
             return gameManagerDialogStates[gameId]
+        }
+
+        private val workshopDialogVisible = mutableStateMapOf<Int, Boolean>()
+
+        fun showWorkshopDialog(gameId: Int) {
+            workshopDialogVisible[gameId] = true
+        }
+
+        fun hideWorkshopDialog(gameId: Int) {
+            workshopDialogVisible.remove(gameId)
+        }
+
+        fun isWorkshopDialogVisible(gameId: Int): Boolean {
+            return workshopDialogVisible[gameId] == true
         }
 
         private val branchDialogVisibleIds = mutableStateListOf<Int>()
@@ -447,6 +464,19 @@ class SteamAppScreen : BaseAppScreen() {
         super.onRunContainerClick(context, libraryItem, onClickPlay)
     }
 
+    /** Resumes a paused workshop download for [gameId], if one exists. */
+    private fun resumeWorkshopDownload(gameId: Int, context: Context) {
+        val appDao = SteamService.instance?.appDao
+        CoroutineScope(Dispatchers.IO).launch {
+            val enabledIds = WorkshopManager.parseEnabledIds(
+                appDao?.getEnabledWorkshopItemIds(gameId),
+            )
+            if (enabledIds.isNotEmpty()) {
+                WorkshopManager.startWorkshopDownload(gameId, enabledIds, context)
+            }
+        }
+    }
+
     override fun onDownloadInstallClick(
         context: Context,
         libraryItem: LibraryItem,
@@ -470,6 +500,8 @@ class SteamAppScreen : BaseAppScreen() {
                     dismissBtnText = context.getString(R.string.no),
                 ),
             )
+        } else if (SteamService.workshopPausedApps.remove(gameId)) {
+            resumeWorkshopDownload(gameId, context)
         } else if (SteamService.hasPartialDownload(gameId)) {
             CoroutineScope(Dispatchers.IO).launch {
                 SteamService.downloadApp(gameId)
@@ -494,6 +526,8 @@ class SteamAppScreen : BaseAppScreen() {
 
         if (downloadInfo != null) {
             downloadInfo.cancel()
+        } else if (SteamService.workshopPausedApps.remove(gameId)) {
+            resumeWorkshopDownload(gameId, context)
         } else {
             CoroutineScope(Dispatchers.IO).launch {
                 SteamService.downloadApp(gameId)
@@ -664,6 +698,12 @@ class SteamAppScreen : BaseAppScreen() {
                             visible = true,
                         )
                     )
+                }
+            ),
+            AppMenuOption(
+                AppOptionMenuType.ManageWorkshop,
+                onClick = {
+                    showWorkshopDialog(gameId)
                 }
             ),
             AppMenuOption(
@@ -991,6 +1031,7 @@ class SteamAppScreen : BaseAppScreen() {
                         )
                         val downloadInfo = SteamService.getAppDownloadInfo(gameId)
                         downloadInfo?.cancel()
+                        SteamService.workshopPausedApps.remove(gameId)
                         CoroutineScope(Dispatchers.IO).launch {
                             SteamService.deleteApp(gameId)
                             PluviaApp.events.emit(AndroidEvent.LibraryInstallStatusChanged(gameId))
@@ -1188,6 +1229,63 @@ class SteamAppScreen : BaseAppScreen() {
                     hideGameManagerDialog(gameId)
                 }
             )
+        }
+
+        var workshopDialogShown by remember(gameId) {
+            mutableStateOf(isWorkshopDialogVisible(gameId))
+        }
+        LaunchedEffect(gameId) {
+            snapshotFlow { isWorkshopDialogVisible(gameId) }
+                .collect { workshopDialogShown = it }
+        }
+
+        if (workshopDialogShown) {
+            val appDao = remember { SteamService.instance?.appDao }
+            var currentEnabledIds by remember { mutableStateOf<Set<Long>?>(null) }
+
+            LaunchedEffect(gameId) {
+                val idsString = withContext(Dispatchers.IO) {
+                    appDao?.getEnabledWorkshopItemIds(gameId)
+                }
+                currentEnabledIds = WorkshopManager.parseEnabledIds(idsString)
+            }
+
+            val loadedIds = currentEnabledIds
+            if (loadedIds != null) {
+                WorkshopManagerDialog(
+                    visible = true,
+                    currentEnabledIds = loadedIds,
+                    onGetDisplayInfo = { context ->
+                        return@WorkshopManagerDialog getGameDisplayInfo(context, libraryItem)
+                    },
+                    onSave = { enabledIds ->
+                        hideWorkshopDialog(gameId)
+                        val idsString = enabledIds.joinToString(",")
+                        CoroutineScope(Dispatchers.IO).launch {
+                            appDao?.updateWorkshopState(gameId, enabledIds.isNotEmpty(), idsString)
+                            if (enabledIds.isNotEmpty()
+                                && SteamService.isAppInstalled(gameId)
+                                && NetworkMonitor.hasInternet.value
+                            ) {
+                                WorkshopManager.startWorkshopDownload(gameId, enabledIds, context)
+                            } else if (enabledIds.isEmpty() && SteamService.isAppInstalled(gameId)) {
+                                // User deselected all mods — remove downloaded files and symlinks
+                                val gameRootDir = File(SteamService.getAppDirPath(gameId))
+                                val gameName = SteamService.getAppInfoOf(gameId)?.name ?: ""
+                                WorkshopManager.deleteWorkshopMods(
+                                    context = context,
+                                    containerId = gameId.toString(),
+                                    gameRootDir = gameRootDir,
+                                    gameName = gameName,
+                                )
+                            }
+                        }
+                    },
+                    onDismissRequest = {
+                        hideWorkshopDialog(gameId)
+                    }
+                )
+            }
         }
 
         // Branch change dialog

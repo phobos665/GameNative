@@ -54,7 +54,9 @@ import app.gamenative.utils.LicenseSerializer
 import app.gamenative.utils.MarkerUtils
 import app.gamenative.utils.Net
 import app.gamenative.utils.SteamUtils
+import app.gamenative.utils.CURRENT_UFS_PARSE_VERSION
 import app.gamenative.utils.generateSteamApp
+import app.gamenative.workshop.WorkshopManager
 import com.winlator.container.Container
 import com.winlator.xenvironment.ImageFs
 import dagger.hilt.android.AndroidEntryPoint
@@ -337,7 +339,10 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         private val downloadJobs = ConcurrentHashMap<Int, DownloadInfo>()
 
-        private fun notifyDownloadStarted(appId: Int) {
+        /** Apps with a workshop download that was paused (cancelled) by the user. */
+        val workshopPausedApps: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+
+        internal fun notifyDownloadStarted(appId: Int) {
             PluviaApp.events.emit(AndroidEvent.DownloadStatusChanged(appId, true))
         }
 
@@ -345,7 +350,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             PluviaApp.events.emit(AndroidEvent.DownloadStatusChanged(appId, false))
         }
 
-        private fun removeDownloadJob(appId: Int) {
+        fun removeDownloadJob(appId: Int) {
             val removed = downloadJobs.remove(appId)
             if (removed != null) {
                 notifyDownloadStopped(appId)
@@ -354,6 +359,8 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         /** Returns true if there is an incomplete download on disk (no complete marker). */
         fun hasPartialDownload(appId: Int): Boolean {
+            if (workshopPausedApps.contains(appId)) return true
+
             val downloadingApp = getDownloadingAppInfoOf(appId)
             if (downloadingApp != null) {
                 return true
@@ -595,6 +602,10 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         fun getAppDownloadInfo(appId: Int): DownloadInfo? {
             return downloadJobs[appId]
+        }
+
+        fun setAppDownloadInfo(appId: Int, info: DownloadInfo) {
+            downloadJobs[appId] = info
         }
 
         fun getActiveDownloads(): Map<Int, DownloadInfo> = HashMap(downloadJobs)
@@ -1125,6 +1136,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             val appDirPath = getAppDirPath(appId)
             MarkerUtils.removeMarker(appDirPath, Marker.DOWNLOAD_COMPLETE_MARKER)
             // Remove from DB
+            workshopPausedApps.remove(appId)
             with(instance!!) {
                 scope.launch {
                     db.withTransaction {
@@ -1132,6 +1144,7 @@ class SteamService : Service(), IChallengeUrlChanged {
                         changeNumbersDao.deleteByAppId(appId)
                         fileChangeListsDao.deleteByAppId(appId)
                         downloadingAppInfoDao.deleteApp(appId)
+                        appDao.clearWorkshopState(appId)
 
                         val indirectDlcAppIds = getDownloadableDlcAppsOf(appId).orEmpty().map { it.id }
                         indirectDlcAppIds.forEach { dlcAppId ->
@@ -3412,6 +3425,11 @@ class SteamService : Service(), IChallengeUrlChanged {
                 notificationHelper.notify("Connected")
 
                 _loginResult = LoginResult.Success
+
+                // Resume any workshop downloads that were interrupted
+                scope.launch {
+                    resumePendingWorkshopDownloads()
+                }
             }
 
             else -> {
@@ -3427,6 +3445,41 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         val event = SteamEvent.LogonEnded(PrefManager.username, _loginResult)
         PluviaApp.events.emit(event)
+    }
+
+    private suspend fun resumePendingWorkshopDownloads() {
+        if (PrefManager.downloadOnWifiOnly && !hasWifiOrEthernet) {
+            Timber.i("Skipping pending workshop downloads — WiFi-only mode and no WiFi")
+            return
+        }
+
+        val dao = appDao ?: return
+        val pendingAppIds = dao.getAppsWithPendingWorkshopDownloads()
+        if (pendingAppIds.isEmpty()) return
+
+        Timber.i("Resuming ${pendingAppIds.size} pending workshop download(s)")
+        val context = this@SteamService
+        for (appId in pendingAppIds) {
+            // If the game is no longer installed, the pending flag is stale — clear it.
+            if (!isAppInstalled(appId)) {
+                Timber.i("App $appId no longer installed, clearing stale workshop state")
+                dao.clearWorkshopState(appId)
+                continue
+            }
+
+            // Skip if a download is already running for this app
+            if (getAppDownloadInfo(appId) != null) continue
+
+            val enabledIds = WorkshopManager.parseEnabledIds(
+                dao.getEnabledWorkshopItemIds(appId),
+            )
+            if (enabledIds.isEmpty()) {
+                dao.setWorkshopDownloadPending(appId, false)
+                continue
+            }
+
+            WorkshopManager.startWorkshopDownload(appId, enabledIds, context)
+        }
     }
 
     private fun onLoggedOff(callback: LoggedOffCallback) {
@@ -3738,14 +3791,23 @@ class SteamService : Service(), IChallengeUrlChanged {
 
                             // TODO maybe apps with -1 for the ownerAccountId can be stripped with necessities and name.
 
-                            if (app.changeNumber != appFromDb?.lastChangeNumber) {
-                                app.keyValues.generateSteamApp().copy(
+                            val ufsParseVersionOutdated = appFromDb != null && appFromDb.ufsParseVersion < CURRENT_UFS_PARSE_VERSION
+
+                            if (app.changeNumber != appFromDb?.lastChangeNumber || ufsParseVersionOutdated) {
+                                val newApp = app.keyValues.generateSteamApp().copy(
                                     packageId = packageId,
                                     ownerAccountId = ownerAccountId,
                                     receivedPICS = true,
                                     lastChangeNumber = app.changeNumber,
                                     licenseFlags = packageFromDb?.licenseFlags ?: EnumSet.noneOf(ELicenseFlags::class.java),
                                 )
+                                if (ufsParseVersionOutdated && newApp.ufs.saveFilePatterns.any { it.uploadRoot != it.root || it.uploadPath != it.path }) {
+                                    // UFS path logic changed and this app has rootoverrides — clear
+                                    // the file cache so the next sync detects the mismatch and
+                                    // prompts the user to choose between local and cloud saves.
+                                    fileChangeListsDao.deleteByAppId(app.id)
+                                }
+                                newApp
                             } else {
                                 null
                             }

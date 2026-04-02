@@ -838,6 +838,8 @@
     <!-- TODO: Revisão manual - PluviaMain: Conflitos de save -->
     <string name="main_save_conflict_title">Conflito de save</string>
     <string name="main_save_conflict_message">Há um novo save remoto e um novo save local, qual você gostaria de manter?\n\nSave local:\n\t%1$s\nSave remoto:\n\t%2$s</string>
+    <string name="main_save_conflict_upgrade_v1_title">Escolher versão do save</string>
+    <string name="main_save_conflict_upgrade_v1_message">Corrigimos o tratamento dos caminhos de save na nuvem deste jogo e encontramos diferenças entre o save local e o da nuvem. Escolha qual versão manter.\n\nSave local:\n\t%1$s\nSave na nuvem:\n\t%2$s</string>
     <string name="main_keep_local">Manter local</string>
     <string name="main_keep_remote">Manter remoto</string>
 
@@ -1218,4 +1220,15 @@
     <string name="install_failed_message">Os arquivos do sistema não puderam ser instalados. Tente novamente. Se o problema persistir, tente uma rede diferente ou use uma VPN.</string>
     <string name="settings_interface_swap_face_buttons_title">Trocar botões de ação</string>
     <string name="settings_interface_swap_face_buttons_subtitle">Troca os ícones dos botões A↔B e X↔Y</string>
+
+    <!-- Workshop -->
+    <string name="workshop_checking_mods">Verificando mods da Oficina…</string>
+    <string name="workshop_update_title">Atualizações de mods da Oficina</string>
+    <string name="workshop_update_prompt">%1$s MB de atualizações de mods disponíveis. Baixar agora ou pular?</string>
+    <string name="workshop_download_btn">Baixar</string>
+    <string name="workshop_skip_btn">Pular</string>
+    <string name="workshop_downloading">Baixando mods da Oficina (%1$d/%2$d)</string>
+    <string name="workshop_processing">Processando mods…</string>
+    <string name="workshop_failed_count">%1$d mod(s) da Oficina não puderam ser atualizados</string>
+    <string name="workshop_download_failed">Falha no download</string>
 </resources>

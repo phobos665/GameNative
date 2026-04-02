@@ -23,6 +23,7 @@ import app.gamenative.db.dao.EpicGameDao
 import app.gamenative.db.dao.AmazonGameDao
 import app.gamenative.service.DownloadService
 import app.gamenative.service.SteamService
+import app.gamenative.service.amazon.AmazonArtwork
 import app.gamenative.service.amazon.AmazonService
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGService
@@ -574,6 +575,8 @@ class LibraryViewModel @Inject constructor(
             val amazonEntries = filteredAmazonGames
                 .filter { passesCompatibleFilter(it.title) }
                 .map { game ->
+                val layoutHero = AmazonArtwork.layoutHeroFromProductJson(game.productJson)
+                    .ifEmpty { game.heroUrl.ifEmpty { game.artUrl } }
                 LibraryEntry(
                     item = LibraryItem(
                         index = 0,
@@ -581,8 +584,9 @@ class LibraryViewModel @Inject constructor(
                         name = game.title,
                         iconHash = game.artUrl,
                         capsuleImageUrl = game.artUrl,
-                        headerImageUrl = game.heroUrl.ifEmpty { game.artUrl },
-                        heroImageUrl = game.heroUrl.ifEmpty { game.artUrl },
+                        headerImageUrl = layoutHero,
+                        heroImageUrl = layoutHero.ifEmpty { game.artUrl },
+                        gridHeroImageScale = AmazonArtwork.GRID_HERO_ZOOM_SCALE,
                         isShared = false,
                         gameSource = GameSource.AMAZON,
                     ),
