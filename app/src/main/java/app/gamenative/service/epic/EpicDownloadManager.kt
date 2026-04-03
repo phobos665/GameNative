@@ -1197,7 +1197,7 @@ class EpicDownloadManager @Inject constructor(
             val savedManifestFile = manifestFileFor(installPath)
             val oldManifest = if (savedManifestFile.exists()) {
                 try {
-                    app.gamenative.service.epic.manifest.ManifestUtils.loadFromFile(savedManifestFile)
+                    ManifestUtils.loadFromFile(savedManifestFile)
                 } catch (e: Exception) {
                     Timber.tag("Epic").w(e, "Failed to parse local manifest — will remove orphan files and fall back to full reinstall")
                     null
@@ -1241,6 +1241,11 @@ class EpicDownloadManager @Inject constructor(
             val comparison = ManifestUtils.compareManifests(oldManifest, newManifest)
             Timber.tag("Epic").i("Update diff for ${game.title}: $comparison")
 
+            if(!comparison.hasChanges){
+               Timber.tag("Epic").i("${game.title} is already up to date at $buildVersion")
+
+            }
+
             // If no changes, update manifest and return early
             if (!comparison.hasChanges) {
                 Timber.tag("Epic").i("${game.title} is already up to date at $buildVersion")
@@ -1258,7 +1263,6 @@ class EpicDownloadManager @Inject constructor(
                 return@withContext Result.success(Unit)
             }
 
-            //
             val selectedTags = EpicConstants.containerLanguageToEpicInstallTags(containerLanguage)
             // Files that need work: added + modified, filtered to the user's selected install tags
             val allChangedFiles = comparison.added + comparison.modified.map { it.second }

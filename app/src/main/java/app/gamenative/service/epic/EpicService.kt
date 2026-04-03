@@ -440,23 +440,19 @@ class EpicService : Service() {
 
                     if (result.isSuccess) {
                         Timber.i("[Download] Completed successfully for game $gameId")
-                        downloadInfo.setProgress(1.0f)
-                        downloadInfo.setActive(false)
+                        downloadInfo.completeDownload()
 
                         SnackbarManager.show("Download completed successfully!")
                     } else {
                         val error = result.exceptionOrNull()
                         Timber.e(error, "[Download] Failed for game $gameId")
-                        downloadInfo.setProgress(-1.0f)
-                        downloadInfo.setActive(false)
+                        downloadInfo.failDownload()
 
                         SnackbarManager.show("Download failed: ${error?.message ?: "Unknown error"}")
                     }
                 } catch (e: Exception) {
                     Timber.e(e, "[Download] Exception for game $gameId")
-                    downloadInfo.setProgress(-1.0f)
-                    downloadInfo.setActive(false)
-
+                    downloadInfo.failDownload()
                     SnackbarManager.show("Download error: ${e.message ?: "Unknown error"}")
                 } finally {
                     instance.activeDownloads.remove(appId)
@@ -496,7 +492,6 @@ class EpicService : Service() {
                 return Result.failure(Exception("Game is not installed"))
             }
 
-
             if (instance.activeDownloads.containsKey(appId)) {
                 Timber.tag("Epic").w("Download already in progress for $appId")
                 return Result.success(instance.activeDownloads[appId]!!)
@@ -522,20 +517,17 @@ class EpicService : Service() {
                     )
                     if (result.isSuccess) {
                         Timber.i("Update Completed successfully for game $appId")
-                        downloadInfo.setProgress(1.0f)
-                        downloadInfo.setActive(false)
+                        downloadInfo.completeDownload()
                         SnackbarManager.show("${game.title} updated successfully!")
                     } else {
                         val error = result.exceptionOrNull()
                         Timber.e(error, "Update Failed for game $appId")
-                        downloadInfo.setProgress(-1.0f)
-                        downloadInfo.setActive(false)
+                        downloadInfo.failDownload()
                         SnackbarManager.show("Update failed: ${error?.message ?: "Unknown error"}")
                     }
                 } catch (e: Exception) {
                     Timber.e(e, "Update Error for game $appId")
-                    downloadInfo.setProgress(-1.0f)
-                    downloadInfo.setActive(false)
+                    downloadInfo.failDownload()
                     SnackbarManager.show("Update error: ${e.message ?: "Unknown error"}")
                 } finally {
                     instance.activeDownloads.remove(appId)
@@ -592,7 +584,7 @@ class EpicService : Service() {
         fun getAccountId(): String? {
             return try {
                 val context = getInstance()?.applicationContext ?: return null
-                val credentialsResult = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+                val credentialsResult = runBlocking(Dispatchers.IO) {
                     EpicAuthManager.getStoredCredentials(context)
                 }
                 credentialsResult.getOrNull()?.accountId

@@ -1073,7 +1073,7 @@ class EpicManager @Inject constructor(
         }
     }
 
-    // Forcecheck updates for a single game.
+    // Force-check updates for a single game.
     suspend fun forceCheckUpdateForGame(context: Context, gameId: Int): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
             val game = epicGameDao.getById(gameId)

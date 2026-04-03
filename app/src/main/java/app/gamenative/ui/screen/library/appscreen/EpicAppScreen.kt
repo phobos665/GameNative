@@ -534,7 +534,28 @@ class EpicAppScreen : BaseAppScreen() {
 
         // Add cloud sync option if game supports cloud saves
         val epicGame = EpicService.getEpicGameOf(libraryItem.gameId)
-        if (epicGame?.cloudSaveEnabled == true) {
+            options.add(
+                AppMenuOption(
+                    optionType = AppOptionMenuType.VerifyFiles,
+                    onClick = {
+                        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+                        scope.launch {
+                            try {
+                                val hasUpdate = EpicService.checkUpdateForGame(context, libraryItem.gameId)
+                                    .getOrThrow()
+                                // if (hasUpdate) {
+                                    showUpdateDialog(libraryItem.gameId)
+                                // } else {
+                                        //   SnackbarManager.show(context.getString(R.string.epic_no_update_available))
+                                // }
+                            } catch (e: Exception) {
+                                Timber.tag(TAG).e(e, "Failed to check for updates")
+                                SnackbarManager.show(context.getString(R.string.epic_cloud_sync_error, e.message ?: ""))
+                            }
+                        }
+                    },
+                ),
+            )
             options.add(
                 AppMenuOption(
                     optionType = AppOptionMenuType.Update,
@@ -557,35 +578,36 @@ class EpicAppScreen : BaseAppScreen() {
                     },
                 ),
             )
-            options.add(
-                AppMenuOption(
-                    optionType = AppOptionMenuType.Update,
-                    onClick = {
-                        val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-                        scope.launch {
-                            try {
-                                SnackbarManager.show(context.getString(R.string.epic_cloud_sync_starting))
+            if (epicGame?.cloudSaveEnabled == true) {
+                options.add(
+                    AppMenuOption(
+                        optionType = AppOptionMenuType.Update,
+                        onClick = {
+                            val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+                            scope.launch {
+                                try {
+                                    SnackbarManager.show(context.getString(R.string.epic_cloud_sync_starting))
 
-                                val result = withContext(Dispatchers.IO) {
-                                    EpicCloudSavesManager.syncCloudSaves(
-                                        context,
-                                        libraryItem.gameId,
-                                        preferredAction = "download", // Force download for testing
+                                    val result = withContext(Dispatchers.IO) {
+                                        EpicCloudSavesManager.syncCloudSaves(
+                                            context,
+                                            libraryItem.gameId,
+                                            preferredAction = "download", // Force download for testing
+                                        )
+                                    }
+
+                                    SnackbarManager.show(
+                                        if (result) context.getString(R.string.epic_cloud_sync_success) else context.getString(R.string.epic_cloud_sync_failed),
                                     )
+                                } catch (e: Exception) {
+                                    Timber.tag(TAG).e(e, "[Cloud Saves] Sync failed")
+                                    SnackbarManager.show(context.getString(R.string.epic_cloud_sync_error, e.message ?: ""))
                                 }
-
-                                SnackbarManager.show(
-                                    if (result) context.getString(R.string.epic_cloud_sync_success) else context.getString(R.string.epic_cloud_sync_failed),
-                                )
-                            } catch (e: Exception) {
-                                Timber.tag(TAG).e(e, "[Cloud Saves] Sync failed")
-                                SnackbarManager.show(context.getString(R.string.epic_cloud_sync_error, e.message ?: ""))
                             }
-                        }
-                    },
-                ),
-            )
-        }
+                        },
+                    ),
+                )
+            }
 
         return options
     }

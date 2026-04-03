@@ -308,4 +308,20 @@ data class DownloadInfo(
             Timber.e(e, "Failed to clear persisted bytes downloaded from $appDirPath")
         }
     }
+
+    /**
+     * Helper function to fail download
+     */
+    fun failDownload(){
+        this.setProgress(-1.0f) // Indicate progress failure
+        this.setActive(false)
+    }
+
+    /**
+     * Helper function to mark download as complete
+     */
+    fun completeDownload() {
+        this.setProgress(1.0f) // Indicate progress complete
+        this.setActive(false)
+    }
 }
