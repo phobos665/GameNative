@@ -2815,8 +2815,91 @@ class SteamService : Service(), IChallengeUrlChanged {
             val schemaArray = userStats.schema.toByteArray()
             val generator = StatsAchievementsGenerator()
             val result = generator.generateStatsAchievements(schemaArray, configDirectory)
-            cachedAchievements = result.achievements
+
+            // Build blockId -> unlockTimestamps map from the server-side achievement block data.
+            // The schema VDF only contains achievement definitions; earned state lives here.
+            val blockUnlockTimes = mutableMapOf<Int, List<Long>>()
+            for (block in userStats.achievementBlocks ?: emptyList()) {
+                val blockId = (block.achievementId as? Number)?.toInt() ?: continue
+                val times = (block.unlockTime ?: emptyList<Any>()).map { (it as? Number)?.toLong() ?: 0L }
+                blockUnlockTimes[blockId] = times
+            }
+
+            Timber.tag("GenerateAchievements").d(
+                "[appId=$appId] Before merge — ${result.achievements.size} achievements from schema. " +
+                    "blockUnlockTimes keys=${blockUnlockTimes.keys.toList()}"
+            )
+            result.achievements.forEach { ach ->
+                Timber.tag("GenerateAchievements").d(
+                    "[appId=$appId] BEFORE | name=${ach.name} unlocked=${ach.unlocked} unlockTimestamp=${ach.unlockTimestamp}"
+                )
+            }
+
+            cachedAchievements = if (blockUnlockTimes.isNotEmpty()) {
+                result.achievements.map { ach ->
+                    val (blockId, bitIndex) = result.nameToBlockBit[ach.name] ?: return@map ach
+                    val unlockTimes = blockUnlockTimes[blockId] ?: return@map ach
+                    val timestamp = unlockTimes.getOrNull(bitIndex) ?: 0L
+                    if (timestamp != 0L) {
+                        ach.copy(unlocked = true, unlockTimestamp = timestamp.toInt())
+                    } else {
+                        ach.copy(unlocked = false)
+                    }
+                }
+            } else {
+                result.achievements
+            }
+
+            Timber.tag("GenerateAchievements").d(
+                "[appId=$appId] After merge — ${cachedAchievements!!.size} achievements. " +
+                    "blockUnlockTimes was ${if (blockUnlockTimes.isEmpty()) "empty (no earned data)" else "populated"}"
+            )
+            cachedAchievements!!.forEach { ach ->
+                Timber.tag("GenerateAchievements").d(
+                    "[appId=$appId] AFTER  | name=${ach.name} unlocked=${ach.unlocked} unlockTimestamp=${ach.unlockTimestamp}"
+                )
+            }
+
             cachedAchievementsAppId = appId
+
+            // Write earned state to the GSE save-format achievements.json so the emulator
+            // starts with the correct earned/earned_time values pre-populated from Steam.
+            // We merge with any existing file to avoid downgrading achievements already earned
+            // locally (earned: true → false should never happen).
+            val gseSaveDirs = getGseSaveDirs(instance!!, appId)
+            for (gseDir in gseSaveDirs) {
+                try {
+                    if (!gseDir.exists()) gseDir.mkdirs()
+                    val achFile = File(gseDir, "achievements.json")
+                    val existing = if (achFile.exists()) {
+                        try {
+                            JSONObject(achFile.readText(Charsets.UTF_8))
+                        } catch (e: Exception) {
+                            Timber.w(e, "Failed to parse existing GSE achievements.json in ${gseDir.absolutePath}, starting fresh")
+                            JSONObject()
+                        }
+                    } else {
+                        JSONObject()
+                    }
+
+                    for (ach in cachedAchievements!!) {
+                        val entry = existing.optJSONObject(ach.name) ?: JSONObject()
+                        val alreadyEarned = entry.optBoolean("earned", false)
+                        if (!alreadyEarned) {
+                            entry.put("earned", ach.unlocked == true)
+                            entry.put("earned_time", ach.unlockTimestamp?.toLong() ?: 0L)
+                        }
+                        existing.put(ach.name, entry)
+                    }
+
+                    achFile.writeText(existing.toString(2), Charsets.UTF_8)
+                    Timber.tag("GenerateAchievements").d(
+                        "[appId=$appId] Wrote GSE save achievements.json to ${gseDir.absolutePath}"
+                    )
+                } catch (e: Exception) {
+                    Timber.e(e, "[appId=$appId] Failed to write GSE save achievements.json to ${gseDir.absolutePath}")
+                }
+            }
 
             val nameToBlockBit = result.nameToBlockBit
             Timber.d("nameToBlockBit size=${nameToBlockBit.size} for appId=$appId")

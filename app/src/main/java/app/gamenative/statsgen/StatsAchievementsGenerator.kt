@@ -2,10 +2,27 @@ package app.gamenative.statsgen
 
 import org.json.JSONArray
 import org.json.JSONObject
+import timber.log.Timber
 import java.io.File
 
 class StatsAchievementsGenerator {
     private val vdfParser = VdfParser()
+
+    private fun serializeMapToJson(map: Map<*, *>): String {
+        val sb = StringBuilder("{")
+        val entries = map.entries.toList()
+        for ((index, entry) in entries.withIndex()) {
+            if (index > 0) sb.append(", ")
+            sb.append("\"${entry.key}\": ")
+            when (val v = entry.value) {
+                is Map<*, *> -> sb.append(serializeMapToJson(v))
+                is Number -> sb.append(v)
+                else -> sb.append("\"${escapeUnicode(v.toString())}\"")
+            }
+        }
+        sb.append("}")
+        return sb.toString()
+    }
 
     private fun escapeUnicode(text: String): String {
         val sb = StringBuilder()
@@ -32,6 +49,8 @@ class StatsAchievementsGenerator {
             if (appData !is Map<*, *>) continue
             val sch = appData as Map<String, Any>
             val statInfo = sch["stats"] as? Map<String, Any> ?: continue
+
+            Timber.tag("StatsAchievementsGenerator").d("[appId=$appId] Raw stats/achievements data: $statInfo")
 
             for ((statKey, statData) in statInfo) {
                 if (statData !is Map<*, *>) continue
@@ -186,6 +205,8 @@ class StatsAchievementsGenerator {
                 outputAch["progress"] = ach.progress
             }
 
+            // We should also fix this up to correctly parse from the stats if this data is missing.
+            // Some games only have the unlock timestamps in the userStats bits.
             ach.unlocked?.let { outputAch["unlocked"] = it }
             ach.unlockTimestamp?.let { outputAch["unlockTimestamp"] = it }
             ach.formattedUnlockTime?.let { outputAch["formattedUnlockTime"] = it }
@@ -251,7 +272,7 @@ class StatsAchievementsGenerator {
 
             val orderedKeys = listOf(
                 "hidden", "displayName", "description", "icon", "icon_gray", "name",
-                "unlocked", "unlockTimestamp", "formattedUnlockTime"
+                "progress", "unlocked", "unlockTimestamp", "formattedUnlockTime"
             )
 
             for ((index, ach) in outputAchievements.withIndex()) {
@@ -282,6 +303,12 @@ class StatsAchievementsGenerator {
                                 } else {
                                     val escapedText = escapeUnicode(value.toString())
                                     jsonBuilder.append("\"$escapedText\"")
+                                }
+                            }
+                            "progress" -> {
+                                if (value is Map<*, *>) {
+                                    @Suppress("UNCHECKED_CAST")
+                                    jsonBuilder.append("    \"$key\": ${serializeMapToJson(value as Map<*, *>)}")
                                 }
                             }
                             "hidden", "unlockTimestamp" -> {
@@ -323,11 +350,13 @@ class StatsAchievementsGenerator {
                 // Define the desired order of properties
                 val orderedKeys = listOf("id", "default", "global", "name", "type")
                 val statMap = stat.toMap()
+                var firstStatKey = true
 
-                for ((keyIndex, key) in orderedKeys.withIndex()) {
+                for (key in orderedKeys) {
                     val value = statMap[key]
                     if (value != null) {
-                        if (keyIndex > 0) jsonBuilder.append(",\n")
+                        if (!firstStatKey) jsonBuilder.append(",\n")
+                        firstStatKey = false
                         jsonBuilder.append("    \"$key\": \"$value\"")
                     }
                 }
