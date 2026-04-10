@@ -27,9 +27,9 @@ def main() -> None:
         print(f"Version {version} already present in arrays.xml — nothing to do.")
         sys.exit(0)
 
-    # Find the fexcore_version_entries block and append the new item before its closing tag.
-    pattern = r'(name="fexcore_version_entries".*?)(</string-array>)'
-    replacement = r'\g<1>        <item>' + version + r'</item>\n    \g<2>'
+    # Find the last </item> in the fexcore_version_entries block and insert after it.
+    pattern = r'(name="fexcore_version_entries".*?</item>)(\s*</string-array>)'
+    replacement = r'\g<1>\n        <item>' + version + r'</item>\g<2>'
     new_content, count = re.subn(pattern, replacement, content, count=1, flags=re.DOTALL)
 
     if count == 0:
