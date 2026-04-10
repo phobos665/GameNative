@@ -83,7 +83,16 @@ def main() -> None:
     version = latest[:4]  # first four digits = YYMM
     tzst_path = f"app/src/main/assets/fexcore/fexcore-{version}.tzst"
     download_url = f"https://raw.githubusercontent.com/StevenMXZ/Winlator-Contents/main/FEXCore/{latest}"
-    already_exists = os.path.isfile(tzst_path)
+
+    # Use arrays.xml as the source of truth — it only contains a version once the
+    # full workflow has completed and committed, unlike the .tzst which can exist
+    # locally from test runs (e.g. act --bind).
+    arrays_xml = "app/src/main/res/values/arrays.xml"
+    try:
+        with open(arrays_xml, "r", encoding="utf-8") as f:
+            already_exists = f"<item>{version}</item>" in f.read()
+    except FileNotFoundError:
+        already_exists = False
 
     if args.gha_output:
         # GitHub Actions mode: write outputs, print minimal log to stdout
