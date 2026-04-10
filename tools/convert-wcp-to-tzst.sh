@@ -42,8 +42,9 @@ xz -dc "$INPUT" \
     | tar -x \
           --strip-components=1 \
           -C "$TMPDIR" \
-          system32/libwow64fex.dll \
-          system32/libarm64ecfex.dll
+          --wildcards \
+          '*/libwow64fex.dll' \
+          '*/libarm64ecfex.dll'
 
 echo "  Repacking as zstd tar..."
 # Use compression level 19 for smallest output (matches prior releases in size range).
