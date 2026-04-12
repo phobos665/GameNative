@@ -39,7 +39,11 @@ class StatsAchievementsGenerator {
         return sb.toString()
     }
 
-    fun generateStatsAchievements(schema: ByteArray, configDirectory: String): ProcessingResult {
+    fun generateStatsAchievements(
+        schema: ByteArray,
+        configDirectory: String,
+        achievementBlocks: Map<Int, List<Long>> = emptyMap(),
+    ): ProcessingResult {
         val parsedSchema = vdfParser.binaryLoads(schema)
         val achievementsOut = mutableListOf<Achievement>()
         val statsOut = mutableListOf<Stat>()
@@ -169,11 +173,32 @@ class StatsAchievementsGenerator {
             }
         }
 
+        // Apply earned state from achievementBlocks if provided.
+        // The schema VDF has no earned data; it comes from userStats.achievementBlocks.
+        val resolvedAchievements: List<Achievement> = if (achievementBlocks.isNotEmpty()) {
+            achievementsOut.map { ach ->
+                val (blockId, bitIndex) = nameToBlockBit[ach.name] ?: return@map ach
+                val timestamp = achievementBlocks[blockId]?.getOrNull(bitIndex) ?: 0L
+                if (timestamp != 0L) {
+                    ach.copy(unlocked = true, unlockTimestamp = timestamp.toInt())
+                } else {
+                    ach.copy(unlocked = false)
+                }
+            }
+        } else {
+            achievementsOut
+        }
+        Timber.tag("StatsAchievementsGenerator").d(
+            "Resolved earned state: ${resolvedAchievements.count { it.unlocked == true }} earned, " +
+                "${resolvedAchievements.count { it.unlocked == false }} not earned, " +
+                "${resolvedAchievements.count { it.unlocked == null }} unknown (no block data)"
+        )
+
         var copyDefaultUnlockedImg = false
         var copyDefaultLockedImg = false
         val outputAchievements = mutableListOf<Map<String, Any>>()
 
-        for (ach in achievementsOut) {
+        for (ach in resolvedAchievements) {
             val outputAch = mutableMapOf<String, Any>()
             outputAch["name"] = ach.name
             outputAch["displayName"] = ach.displayName ?: emptyMap<String, String>()
@@ -368,7 +393,7 @@ class StatsAchievementsGenerator {
         }
 
         return ProcessingResult(
-            achievements = achievementsOut,
+            achievements = resolvedAchievements,
             stats = statsOut,
             copyDefaultUnlockedImg = copyDefaultUnlockedImg,
             copyDefaultLockedImg = copyDefaultLockedImg,

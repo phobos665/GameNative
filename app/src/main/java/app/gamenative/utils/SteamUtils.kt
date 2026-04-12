@@ -891,7 +891,12 @@ object SteamUtils {
         }
 
         val configsIni = settingsDir.resolve("configs.user.ini")
-        val accountName   = PrefManager.username
+
+        // Use their profileName
+        val accountName = SteamService.instance?.localPersona?.value?.name?.takeIf { it.isNotEmpty() }
+            ?: PrefManager.steamUserName.takeIf { it.isNotEmpty() }
+            ?: PrefManager.username
+
         val accountSteamId = SteamService.userSteamId?.convertToUInt64()?.toString()
             ?: PrefManager.steamUserSteamId64.takeIf { it != 0L }?.toString()
             ?: "0"

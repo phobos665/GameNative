@@ -2814,8 +2814,6 @@ class SteamService : Service(), IChallengeUrlChanged {
             val userStats = instance?._steamUserStats!!.getUserStats(appId, steamUser.steamID!!).await()
             val schemaArray = userStats.schema.toByteArray()
             val generator = StatsAchievementsGenerator()
-            val result = generator.generateStatsAchievements(schemaArray, configDirectory)
-
             // Build blockId -> unlockTimestamps map from the server-side achievement block data.
             // The schema VDF only contains achievement definitions; earned state lives here.
             val blockUnlockTimes = mutableMapOf<Int, List<Long>>()
@@ -2824,42 +2822,23 @@ class SteamService : Service(), IChallengeUrlChanged {
                 val times = (block.unlockTime ?: emptyList<Any>()).map { (it as? Number)?.toLong() ?: 0L }
                 blockUnlockTimes[blockId] = times
             }
+            Timber.tag("GenerateAchievements").d(
+                "[appId=$appId] Parsed ${blockUnlockTimes.size} achievement blocks: keys=${blockUnlockTimes.keys.toList()}"
+            )
+
+            val result = generator.generateStatsAchievements(schemaArray, configDirectory, blockUnlockTimes)
 
             Timber.tag("GenerateAchievements").d(
-                "[appId=$appId] Before merge — ${result.achievements.size} achievements from schema. " +
-                    "blockUnlockTimes keys=${blockUnlockTimes.keys.toList()}"
+                "[appId=$appId] ${result.achievements.size} achievements resolved — " +
+                    "${result.achievements.count { it.unlocked == true }} earned"
             )
             result.achievements.forEach { ach ->
                 Timber.tag("GenerateAchievements").d(
-                    "[appId=$appId] BEFORE | name=${ach.name} unlocked=${ach.unlocked} unlockTimestamp=${ach.unlockTimestamp}"
+                    "[appId=$appId] name=${ach.name} unlocked=${ach.unlocked} unlockTimestamp=${ach.unlockTimestamp}"
                 )
             }
 
-            cachedAchievements = if (blockUnlockTimes.isNotEmpty()) {
-                result.achievements.map { ach ->
-                    val (blockId, bitIndex) = result.nameToBlockBit[ach.name] ?: return@map ach
-                    val unlockTimes = blockUnlockTimes[blockId] ?: return@map ach
-                    val timestamp = unlockTimes.getOrNull(bitIndex) ?: 0L
-                    if (timestamp != 0L) {
-                        ach.copy(unlocked = true, unlockTimestamp = timestamp.toInt())
-                    } else {
-                        ach.copy(unlocked = false)
-                    }
-                }
-            } else {
-                result.achievements
-            }
-
-            Timber.tag("GenerateAchievements").d(
-                "[appId=$appId] After merge — ${cachedAchievements!!.size} achievements. " +
-                    "blockUnlockTimes was ${if (blockUnlockTimes.isEmpty()) "empty (no earned data)" else "populated"}"
-            )
-            cachedAchievements!!.forEach { ach ->
-                Timber.tag("GenerateAchievements").d(
-                    "[appId=$appId] AFTER  | name=${ach.name} unlocked=${ach.unlocked} unlockTimestamp=${ach.unlockTimestamp}"
-                )
-            }
-
+            cachedAchievements = result.achievements
             cachedAchievementsAppId = appId
 
             // Write earned state to the GSE save-format achievements.json so the emulator
