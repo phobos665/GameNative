@@ -1,7 +1,9 @@
 package app.gamenative.statsgen
 
+import `in`.dragonbra.javasteam.steam.handlers.steamuserstats.callback.UserStatsCallback
 import org.json.JSONArray
 import org.json.JSONObject
+import timber.log.Timber
 import java.io.File
 
 class StatsAchievementsGenerator {
@@ -22,7 +24,7 @@ class StatsAchievementsGenerator {
         return sb.toString()
     }
 
-    fun generateStatsAchievements(schema: ByteArray, configDirectory: String): ProcessingResult {
+    fun parseStatsAchievements(schema: ByteArray): ParsedSchemaData {
         val parsedSchema = vdfParser.binaryLoads(schema)
         val achievementsOut = mutableListOf<Achievement>()
         val statsOut = mutableListOf<Stat>()
@@ -149,6 +151,57 @@ class StatsAchievementsGenerator {
                 }
             }
         }
+
+        return ParsedSchemaData(
+            achievements = achievementsOut,
+            stats = statsOut,
+            nameToBlockBit = nameToBlockBit,
+        )
+    }
+
+    // Takes the achievement and parses the matched timestamp for the earned achievement from Expanded Achievements
+    internal fun setEarnedAchievements(
+        parsedData: ParsedSchemaData,
+        userStats: UserStatsCallback,
+    ): ParsedSchemaData {
+        val expandedAchievements = userStats.getExpandedAchievements() // Get timestamps from here
+
+        if(expandedAchievements.isEmpty()) return parsedData
+
+            Timber.d("generateAchievements: Got Expanded Achievements and applying timestamps")
+
+            val unlockedAchievements: Map<String, Pair<Int, String>> = expandedAchievements
+                .filter { it.isUnlocked }
+                .mapNotNull { block ->
+                    val name = block.name ?: return@mapNotNull null
+                    name to Pair(block.unlockTimestamp, block.getFormattedUnlockTime().orEmpty())
+                }
+                .toMap()
+            Timber.d("generateAchievements: ${unlockedAchievements.size}")
+            return applyEarnedStateToAchievements(parsedData, unlockedAchievements)
+    }
+
+    // Apply timestamp and unlocked state to unlockedAchievements.
+    internal fun applyEarnedStateToAchievements(parsedData: ParsedSchemaData, unlockedAchievements: Map<String, Pair<Int, String>>): ParsedSchemaData {
+        if (unlockedAchievements.isEmpty()) return parsedData
+        val updatedAchievements = parsedData.achievements.map { ach ->
+            val unlockInfo = unlockedAchievements[ach.name]
+            if (unlockInfo != null) {
+                ach.copy(
+                    unlocked = true,
+                    unlockTimestamp = unlockInfo.first,
+                    formattedUnlockTime = unlockInfo.second,
+                )
+            } else {
+                ach
+            }
+        }
+        return parsedData.copy(achievements = updatedAchievements)
+    }
+
+    fun createStatsAchievementFiles(parsedData: ParsedSchemaData, configDirectory: String): ProcessingResult {
+        val achievementsOut = parsedData.achievements
+        val statsOut = parsedData.stats
 
         var copyDefaultUnlockedImg = false
         var copyDefaultLockedImg = false
@@ -343,7 +396,13 @@ class StatsAchievementsGenerator {
             stats = statsOut,
             copyDefaultUnlockedImg = copyDefaultUnlockedImg,
             copyDefaultLockedImg = copyDefaultLockedImg,
-            nameToBlockBit = nameToBlockBit,
+            nameToBlockBit = parsedData.nameToBlockBit,
         )
+    }
+
+    fun generateStatsAchievements(schema: ByteArray, userStats: UserStatsCallback, configDirectory: String): ProcessingResult {
+        val parsedData = parseStatsAchievements(schema)
+        val achievementStatsData = setEarnedAchievements(parsedData, userStats)
+        return createStatsAchievementFiles(achievementStatsData, configDirectory)
     }
 }

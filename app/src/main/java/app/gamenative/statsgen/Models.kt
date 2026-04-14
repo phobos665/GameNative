@@ -23,6 +23,12 @@ data class Stat(
     val min: String? = null
 )
 
+data class ParsedSchemaData(
+    val achievements: List<Achievement>,
+    val stats: List<Stat>,
+    val nameToBlockBit: Map<String, Pair<Int, Int>>,
+)
+
 data class ProcessingResult(
     val achievements: List<Achievement>,
     val stats: List<Stat>,
