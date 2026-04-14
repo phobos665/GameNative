@@ -168,17 +168,18 @@ class StatsAchievementsGenerator {
 
         if(expandedAchievements.isEmpty()) return parsedData
 
-            Timber.d("generateAchievements: Got Expanded Achievements and applying timestamps")
-
-            val unlockedAchievements: Map<String, Pair<Int, String>> = expandedAchievements
-                .filter { it.isUnlocked }
-                .mapNotNull { block ->
-                    val name = block.name ?: return@mapNotNull null
-                    name to Pair(block.unlockTimestamp, block.getFormattedUnlockTime().orEmpty())
-                }
-                .toMap()
-            Timber.d("generateAchievements: ${unlockedAchievements.size}")
-            return applyEarnedStateToAchievements(parsedData, unlockedAchievements)
+        Timber.d("generateAchievements: Got Expanded Achievements and applying timestamps")
+        // Grab unlocked achievements from expanded achievements
+        val unlockedAchievements: Map<String, Pair<Int, String>> = expandedAchievements
+            .filter { it.isUnlocked }
+            .mapNotNull { block ->
+                val name = block.name ?: return@mapNotNull null
+                name to Pair(block.unlockTimestamp, block.getFormattedUnlockTime().orEmpty())
+            }
+            .toMap()
+        Timber.d("generateAchievements: Unlocked achievement count: ${unlockedAchievements.size}")
+        // Apply the earned state & timestamp to achievements:
+        return applyEarnedStateToAchievements(parsedData, unlockedAchievements)
     }
 
     // Apply timestamp and unlocked state to unlockedAchievements.
