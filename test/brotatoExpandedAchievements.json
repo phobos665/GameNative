@@ -1,0 +1,32 @@
+[
+  {
+    "achievementId": 400,
+    "name": "chal_survivor_1",
+    "displayName": "Survivor 1",
+    "description": "Kill 300 enemies",
+    "icon": "27a9be454703c52dc7a98bddc7d8c4a49e643340.jpg",
+    "iconGray": "5c2a4b5dff9020df4856d438c5e8d0df52cf960a.jpg",
+    "hidden": false,
+    "isUnlocked": true,
+    "unlockTimestamp": 1775762756,
+    "formattedUnlockTime": "2026-04-09 20:25:56",
+    "unlockTime": [
+      1775762756
+    ]
+  },
+  {
+    "achievementId": 400,
+    "name": "chal_survivor_2",
+    "displayName": "Survivor 2",
+    "description": "Kill 2000 enemies",
+    "icon": "27a9be454703c52dc7a98bddc7d8c4a49e643340.jpg",
+    "iconGray": "5c2a4b5dff9020df4856d438c5e8d0df52cf960a.jpg",
+    "hidden": false,
+    "isUnlocked": true,
+    "unlockTimestamp": 1775762756,
+    "formattedUnlockTime": "2026-04-09 20:25:56",
+    "unlockTime": [
+      1775762756
+    ]
+  }
+]
