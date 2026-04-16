@@ -1,0 +1,132 @@
+{
+  "achievements": [
+    {
+      "name": "chal_survivor_1",
+      "hidden": 0,
+      "displayName": {
+        "english": "Survivor 1",
+        "token": "chal_survivor_1",
+        "french": "Survivant 1",
+        "japanese": "生き残り 1",
+        "koreana": "생존자 1",
+        "russian": "Выживший 1",
+        "polish": "Ocalały: 1",
+        "spanish": "Supervivencia 1",
+        "brazilian": "Sobrevivência 1",
+        "german": "Überlebender 1",
+        "schinese": "生还者1",
+        "tchinese": "生還者1",
+        "turkish": "Sağ Kalan 1",
+        "italian": "Superstite 1"
+      },
+      "description": {
+        "english": "Kill 300 enemies",
+        "token": "chal_survivor_1_desc",
+        "french": "Tuez 300 ennemis",
+        "japanese": "敵を 300体倒す",
+        "koreana": "300만큼의 적을 처치합니다",
+        "russian": "Убейте не менее 300 врагов.",
+        "polish": "Zabij 300 wrogów",
+        "spanish": "Elimina a 300 enemigos",
+        "brazilian": "Elimine 300 inimigos.",
+        "german": "Töte 300 Gegner",
+        "schinese": "击杀300名敌人",
+        "tchinese": "殺死300個敵人",
+        "turkish": "300 düşman öldür",
+        "italian": "Uccidi 300 nemici."
+      },
+      "icon": "27a9be454703c52dc7a98bddc7d8c4a49e643340.jpg",
+      "iconGray": "5c2a4b5dff9020df4856d438c5e8d0df52cf960a.jpg",
+      "icongray": null,
+      "progress": {
+        "min_val": 0,
+        "max_val": 300,
+        "value": {
+          "operation": "statvalue",
+          "operand1": "enemies_killed"
+        }
+      },
+      "unlocked": null,
+      "unlockTimestamp": null,
+      "formattedUnlockTime": null
+    },
+    {
+      "name": "chal_survivor_2",
+      "hidden": 0,
+      "displayName": {
+        "english": "Survivor 2",
+        "french": "Survivant 2",
+        "token": "chal_survivor_2",
+        "japanese": "生き残り 2",
+        "koreana": "생존자 2",
+        "russian": "Выживший 2",
+        "polish": "Ocalały: 2",
+        "spanish": "Supervivencia 2",
+        "brazilian": "Sobrevivência 2",
+        "german": "Überlebender 2",
+        "schinese": "生还者2",
+        "tchinese": "生還者2",
+        "turkish": "Sağ Kalan 2",
+        "italian": "Superstite 2"
+      },
+      "description": {
+        "english": "Kill 2000 enemies",
+        "french": "Tuez 2000 ennemis",
+        "token": "chal_survivor_2_desc",
+        "japanese": "敵を 2000体倒す",
+        "koreana": "2000만큼의 적을 처치합니다",
+        "russian": "Убейте не менее 2000 врагов.",
+        "polish": "Zabij 2000 wrogów",
+        "spanish": "Elimina a 2000 enemigos",
+        "brazilian": "Elimine 2000 inimigos.",
+        "german": "Töte 2000 Gegner",
+        "schinese": "击杀2000名敌人",
+        "tchinese": "殺死2000個敵人",
+        "turkish": "2000 düşman öldür",
+        "italian": "Uccidi 2000 nemici."
+      },
+      "icon": "27a9be454703c52dc7a98bddc7d8c4a49e643340.jpg",
+      "iconGray": "5c2a4b5dff9020df4856d438c5e8d0df52cf960a.jpg",
+      "icongray": null,
+      "progress": {
+        "min_val": 0,
+        "max_val": 2000,
+        "value": {
+          "operation": "statvalue",
+          "operand1": "enemies_killed"
+        }
+      },
+      "unlocked": null,
+      "unlockTimestamp": null,
+      "formattedUnlockTime": null
+    }
+  ],
+  "stats": [
+    {
+      "id": "1",
+      "name": "enemies_killed",
+      "type": "int",
+      "default": "0",
+      "global": "0",
+      "min": "0"
+    },
+    {
+      "id": "2",
+      "name": "materials_collected",
+      "type": "int",
+      "default": "0",
+      "global": "0",
+      "min": "0"
+    }
+  ],
+  "nameToBlockBit": {
+    "chal_survivor_1": [
+      4,
+      0
+    ],
+    "chal_survivor_2": [
+      4,
+      1
+    ]
+  }
+}

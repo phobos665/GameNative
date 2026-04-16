@@ -1,0 +1,152 @@
+[
+  {
+    "achievementId": 100,
+    "name": "ACH_MOTHER",
+    "displayName": "Mother May I?",
+    "description": "Defeat the Mother of All Demons on The Absolution",
+    "icon": "d4ffe18c23bcf67254f38b972e04284bb0a1927a.jpg",
+    "iconGray": "5712b89d1028e3f622b1ae0b9b348a60a9fbf399.jpg",
+    "hidden": false,
+    "isUnlocked": false,
+    "unlockTimestamp": 0,
+    "formattedUnlockTime": null,
+    "unlockTime": [
+      0
+    ]
+  },
+  {
+    "achievementId": 100,
+    "name": "ACH_WALK_THE_PATH",
+    "displayName": "Walk the Path",
+    "description": "Finish the Lost Levels mission",
+    "icon": "48d6c6fe6f0994c745a8ab0b2f175ce132a2d236.jpg",
+    "iconGray": "4635b04fb5bd84c35eccba0c969d1b78dda19c1a.jpg",
+    "hidden": false,
+    "isUnlocked": false,
+    "unlockTimestamp": 0,
+    "formattedUnlockTime": null,
+    "unlockTime": [
+      0
+    ]
+  },
+  {
+    "achievementId": 100,
+    "name": "ACH_SECRET_SLEUTH",
+    "displayName": "Secret Sleuth",
+    "description": "Discover a secret area",
+    "icon": "423bf6aabeebecc33aa5d21a60a811f0fb224fd7.jpg",
+    "iconGray": "9db813a5d2b84159bdedb28829284b379b7ccb45.jpg",
+    "hidden": false,
+    "isUnlocked": false,
+    "unlockTimestamp": 0,
+    "formattedUnlockTime": null,
+    "unlockTime": [
+      0
+    ]
+  },
+  {
+    "achievementId": 100,
+    "name": "ACH_JUST_CAUSE",
+    "displayName": "My Cause is Just, My Will is Strong",
+    "description": "Find the BFG9000",
+    "icon": "a689c2632746aab698a08c426a7dc9dea6cceb9c.jpg",
+    "iconGray": "32b59eb1fefeab606e572c22f7247f530237bb0c.jpg",
+    "hidden": false,
+    "isUnlocked": false,
+    "unlockTimestamp": 0,
+    "formattedUnlockTime": null,
+    "unlockTime": [
+      0
+    ]
+  },
+  {
+    "achievementId": 100,
+    "name": "ACH_UNHOLY",
+    "displayName": "Unholy Firepower",
+    "description": "Find the Unmaker",
+    "icon": "f2bc296b93e4656f1d94e3b10701b4617c6790d1.jpg",
+    "iconGray": "09c9fc6901cdf2a78cd5b5640ea3133eafa54be6.jpg",
+    "hidden": false,
+    "isUnlocked": false,
+    "unlockTimestamp": 0,
+    "formattedUnlockTime": null,
+    "unlockTime": [
+      0
+    ]
+  },
+  {
+    "achievementId": 100,
+    "name": "ACH_PERSISTENCE",
+    "displayName": "Persistence is the Key",
+    "description": "Acquire all 3 Demon Key Artifacts in the main campaign",
+    "icon": "5e6ee25690e468304b43b70344343c0b7f91ab21.jpg",
+    "iconGray": "a1edd938b1eaf94c0ec2a8ddf10ae3e73ce59bcd.jpg",
+    "hidden": false,
+    "isUnlocked": false,
+    "unlockTimestamp": 0,
+    "formattedUnlockTime": null,
+    "unlockTime": [
+      0
+    ]
+  },
+  {
+    "achievementId": 100,
+    "name": "ACH_RIP_AND_TEAR",
+    "displayName": "Rip and Tear!",
+    "description": "Kill a Cyberdemon",
+    "icon": "98d14a1095c174fe1cbc41be27266a182560f249.jpg",
+    "iconGray": "7554383425d15feaf2c8abd288d409930746a349.jpg",
+    "hidden": false,
+    "isUnlocked": false,
+    "unlockTimestamp": 0,
+    "formattedUnlockTime": null,
+    "unlockTime": [
+      0
+    ]
+  },
+  {
+    "achievementId": 100,
+    "name": "ACH_THAT_WAS_FUN",
+    "displayName": "That was Fun",
+    "description": "Finish a 'Fun' Level",
+    "icon": "d67595691d40f7d015405bffa6b40a0f142956fe.jpg",
+    "iconGray": "37e1fd56916be50aca07e5570577603d2857f3c7.jpg",
+    "hidden": false,
+    "isUnlocked": false,
+    "unlockTimestamp": 0,
+    "formattedUnlockTime": null,
+    "unlockTime": [
+      0
+    ]
+  },
+  {
+    "achievementId": 100,
+    "name": "ACH_HECTIC",
+    "displayName": "RVNH3CT1CD3M0???",
+    "description": "Locate the secret level 'Hectic'",
+    "icon": "5d5a8ec75d6a2db26cac5e4daca7e5c9338cec0b.jpg",
+    "iconGray": "f3f6097cd39727700bd735d8b80a2200c089c74f.jpg",
+    "hidden": false,
+    "isUnlocked": false,
+    "unlockTimestamp": 0,
+    "formattedUnlockTime": null,
+    "unlockTime": [
+      0
+    ]
+  },
+  {
+    "achievementId": 100,
+    "name": "ACH_ESCAPE_ARTIST",
+    "displayName": "Escape Artist",
+    "description": "Finish 'No Escape' on Watch Me Die skill level",
+    "icon": "34fde222c9976c6caf076357f5ed4af30eba0fd4.jpg",
+    "iconGray": "bcb35125a90b7021bade7ff6ce0f4063d30f96f0.jpg",
+    "hidden": false,
+    "isUnlocked": false,
+    "unlockTimestamp": 0,
+    "formattedUnlockTime": null,
+    "unlockTime": [
+      0
+    ]
+  }
+]
