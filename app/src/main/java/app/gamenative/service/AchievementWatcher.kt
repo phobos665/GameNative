@@ -2,6 +2,7 @@ package app.gamenative.service
 
 import android.os.FileObserver
 import app.gamenative.ui.util.AchievementNotificationManager
+import org.json.JSONArray
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,8 +28,32 @@ class AchievementWatcher(
     private var uploadJob: Job? = null
 
     fun start() {
-        // Snapshot all currently earned achievements so we don't notify for
-        // pre-existing unlocks when the game writes its initial achievements.json.
+        // Seed from the steam_settings template (array format with "earned"/"name" fields).
+        // This ensures already-earned achievements are suppressed even on first launch
+        // before Goldberg has written its own save file.
+        if (configDirectory != null) {
+            val templateFile = File(configDirectory, "achievements.json")
+            if (templateFile.exists()) {
+                try {
+                    val arr = JSONArray(templateFile.readText(Charsets.UTF_8))
+                    for (i in 0 until arr.length()) {
+                        val entry = arr.optJSONObject(i) ?: continue
+                        if (entry.optBoolean("earned", false)) {
+                            val name = entry.optString("name", "") 
+                            if (name.isNotEmpty()) {
+                                notifiedNames.add(name)
+                                uploadedNames.add(name)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("achievements").w(e, "Failed to seed from template achievements.json in $configDirectory")
+                }
+            }
+        }
+
+        // Snapshot all currently earned achievements from GSE save dirs (object-keyed format)
+        // so we don't notify for pre-existing unlocks when the game writes its initial achievements.json.
         for (dir in watchDirs) {
             dir.mkdirs()
             val achFile = File(dir, "achievements.json")

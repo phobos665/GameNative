@@ -240,8 +240,8 @@ class StatsAchievementsGenerator {
                 outputAch["progress"] = ach.progress
             }
 
-            ach.unlocked?.let { outputAch["unlocked"] = it }
-            ach.unlockTimestamp?.let { outputAch["unlockTimestamp"] = it }
+            ach.unlocked?.let { outputAch["earned"] = it }
+            ach.unlockTimestamp?.let { outputAch["earn_time"] = it }
             ach.formattedUnlockTime?.let { outputAch["formattedUnlockTime"] = it }
 
             outputAchievements.add(outputAch)
@@ -305,7 +305,7 @@ class StatsAchievementsGenerator {
 
             val orderedKeys = listOf(
                 "hidden", "displayName", "description", "icon", "icon_gray", "name",
-                "unlocked", "unlockTimestamp", "formattedUnlockTime"
+                "earned", "earn_time", "formattedUnlockTime"
             )
 
             for ((index, ach) in outputAchievements.withIndex()) {
@@ -338,10 +338,10 @@ class StatsAchievementsGenerator {
                                     jsonBuilder.append("\"$escapedText\"")
                                 }
                             }
-                            "hidden", "unlockTimestamp" -> {
+                            "hidden", "earn_time" -> {
                                 jsonBuilder.append("    \"$key\": $value")
                             }
-                            "unlocked" -> {
+                            "earned" -> {
                                 jsonBuilder.append("    \"$key\": ${value.toString().lowercase()}")
                             }
                             else -> {
