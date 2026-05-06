@@ -89,8 +89,24 @@ Java_com_winlator_xserver_Drawable_drawBitmap(JNIEnv *env, jclass obj,
     }
 
     int stride = getBitmapBytePad(width);
-    for (int16_t y = 0, x; y < height; y++) {
-        for (x = 0; x < width; x++) *dstDataAddr++ = getBit(srcDataAddr, x) ? WHITE : BLACK;
+    int fullBytes = width >> 3;   /* number of complete 8-pixel bytes per row */
+    int remainder = width & 7;    /* leftover pixels in the last partial byte  */
+
+    for (int16_t y = 0; y < height; y++) {
+        /* Unpack 8 pixels at a time from each source byte */
+        for (int b = 0; b < fullBytes; b++) {
+            uint8_t byte = srcDataAddr[b];
+            for (int bit = 0; bit < 8; bit++) {
+                *dstDataAddr++ = (byte >> bit) & 1 ? WHITE : BLACK;
+            }
+        }
+        /* Handle any remaining pixels when width is not a multiple of 8 */
+        if (remainder) {
+            uint8_t byte = srcDataAddr[fullBytes];
+            for (int bit = 0; bit < remainder; bit++) {
+                *dstDataAddr++ = (byte >> bit) & 1 ? WHITE : BLACK;
+            }
+        }
         srcDataAddr += stride;
     }
 }
