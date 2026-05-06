@@ -89,18 +89,18 @@ Java_com_winlator_xserver_Drawable_drawBitmap(JNIEnv *env, jclass obj,
     }
 
     int stride = getBitmapBytePad(width);
-    int fullBytes = width >> 3;   /* number of complete 8-pixel bytes per row */
-    int remainder = width & 7;    /* leftover pixels in the last partial byte  */
+    int fullBytes = width >> 3;   // number of complete 8-pixel bytes per row
+    int remainder = width & 7;    // leftover pixels in the last partial byte  */
 
     for (int16_t y = 0; y < height; y++) {
-        /* Unpack 8 pixels at a time from each source byte */
+        // Unpack all 8 pixels from full byte
         for (int b = 0; b < fullBytes; b++) {
             uint8_t byte = srcDataAddr[b];
             for (int bit = 0; bit < 8; bit++) {
                 *dstDataAddr++ = (byte >> bit) & 1 ? WHITE : BLACK;
             }
         }
-        /* Handle any remaining pixels when width is not a multiple of 8 */
+        // Handle remainders and grab only first 4 bits (X11 pads out last 4)
         if (remainder) {
             uint8_t byte = srcDataAddr[fullBytes];
             for (int bit = 0; bit < remainder; bit++) {
@@ -380,12 +380,58 @@ Java_com_winlator_xserver_Pixmap_toBitmap(JNIEnv *env, jclass obj, jobject color
         return;
     }
 
-    for (int i = 0, size = info.width * info.height * 4; i < size; i += 4) {
-        pixels[i+2] = colorDataAddr[i+0];
-        pixels[i+1] = colorDataAddr[i+1];
-        pixels[i+0] = colorDataAddr[i+2];
-        pixels[i+3] = maskDataAddr ? maskDataAddr[i+0] : colorDataAddr[i+3];
+    int size = info.width * info.height;
+    uint8_t *src = (uint8_t *)colorDataAddr;
+
+#ifdef __ARM_NEON
+    if (!maskDataAddr) {
+        /* Fast path: no mask — swap R and B channels across 4 pixels at a time.
+         * src layout per pixel: [R, G, B, A]
+         * dst layout per pixel: [B, G, R, A]
+         * vrev32q_u8 reverses the 4 bytes within each 32-bit pixel: RGBA → ABGR,
+         * which maps R→B and B→R with G and A landing in wrong positions.
+         * Instead we use vtbl (byte table lookup) to do an exact per-byte shuffle. */
+        static const uint8_t shuffle[16] = {
+            2, 1, 0, 3,   /* pixel 0: swap bytes 0 and 2 (R↔B), keep 1 (G) and 3 (A) */
+            6, 5, 4, 7,   /* pixel 1 */
+            10, 9, 8, 11, /* pixel 2 */
+            14, 13, 12, 15 /* pixel 3 */
+        };
+        uint8x16_t vShuffle = vld1q_u8(shuffle);
+        int i = 0;
+        for (; i + 3 < size; i += 4) {
+            uint8x16_t vSrc = vld1q_u8(src + i * 4);
+            uint8x16_t vDst = vqtbl1q_u8(vSrc, vShuffle);
+            vst1q_u8(pixels + i * 4, vDst);
+        }
+        /* Scalar cleanup for remaining 0-3 pixels */
+        for (; i < size; i++) {
+            int j = i * 4;
+            pixels[j+0] = src[j+2];
+            pixels[j+1] = src[j+1];
+            pixels[j+2] = src[j+0];
+            pixels[j+3] = src[j+3];
+        }
+    } else {
+        /* Mask path — scalar, same as before */
+        uint8_t *mask = (uint8_t *)maskDataAddr;
+        for (int i = 0; i < size; i++) {
+            int j = i * 4;
+            pixels[j+0] = src[j+2];
+            pixels[j+1] = src[j+1];
+            pixels[j+2] = src[j+0];
+            pixels[j+3] = mask[j];
+        }
     }
+#else
+    for (int i = 0; i < size; i++) {
+        int j = i * 4;
+        pixels[j+0] = src[j+2];
+        pixels[j+1] = src[j+1];
+        pixels[j+2] = src[j+0];
+        pixels[j+3] = maskDataAddr ? ((uint8_t *)maskDataAddr)[j] : src[j+3];
+    }
+#endif
 
     AndroidBitmap_unlockPixels(env, bitmap);
 }
