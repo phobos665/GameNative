@@ -141,6 +141,17 @@ Java_com_winlator_xserver_Drawable_copyAreaOp(JNIEnv *env, jclass obj, jshort sr
         return;
     }
 
+    // Optimsation to skip pixel math and rely on memcpy.
+    if (gcFunction == GCF_COPY) {
+        size_t rowBytes = (size_t)width * 4;
+        for (int16_t y = 0; y < height; y++) {
+            memcpy(dstDataAddr + (dstX + (y + dstY) * dstStride) * 4,
+                   srcDataAddr + (srcX + (y + srcY) * srcStride) * 4,
+                   rowBytes);
+        }
+        return;
+    }
+
     for (int16_t y = 0; y < height; y++) {
         for (int16_t x = 0; x < width; x++) {
             int i = (x + srcX + (y + srcY) * srcStride) * 4;
