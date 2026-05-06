@@ -232,8 +232,16 @@ Java_com_winlator_xserver_Drawable_drawLine(JNIEnv *env, jclass obj, jshort x0, 
     for (int i = 0; i < lineWidth; i++) row32[i] = color32;
 
     while (true) {
-        for (int16_t i = 0; i < lineWidth; i++) {
-            memcpy(dataAddr + (x0 + (i + y0) * stride) * 4, row, rowSize);
+        if(abs(x1 - x0) >= abs(y1 - y0)){
+            // Write row of pixels at once
+            for (int16_t i = 0; i < lineWidth; i++) {
+                memcpy(dataAddr + (x0 + (i + y0) * stride) * 4, row, rowSize);
+            }
+        } else {
+            // Write individual pixels instead
+            for(int16_t i = 0; i < lineWidth; i++){
+                ((uint32_t *)dataAddr)[(x0 + i) + y0 * stride] = color32;
+            }
         }
         if (x0 == x1 && y0 == y1) break;
 
