@@ -157,13 +157,17 @@ Java_com_winlator_xserver_Drawable_copyAreaOp(JNIEnv *env, jclass obj, jshort sr
         return;
     }
 
-    // Optimsation to skip pixel math and rely on memcpy.
+    // Fast path: GCF_COPY is plain pixel blitting — copy only RGB bytes to match
     if (gcFunction == GCF_COPY) {
-        size_t rowBytes = (size_t)width * 4;
         for (int16_t y = 0; y < height; y++) {
-            memcpy(dstDataAddr + (dstX + (y + dstY) * dstStride) * 4,
-                   srcDataAddr + (srcX + (y + srcY) * srcStride) * 4,
-                   rowBytes);
+            for (int16_t x = 0; x < width; x++) {
+                int i = (x + srcX + (y + srcY) * srcStride) * 4;
+                int j = (x + dstX + (y + dstY) * dstStride) * 4;
+                dstDataAddr[j+0] = srcDataAddr[i+0];
+                dstDataAddr[j+1] = srcDataAddr[i+1];
+                dstDataAddr[j+2] = srcDataAddr[i+2];
+                /* byte 3 (alpha) intentionally not copied */
+            }
         }
         return;
     }
@@ -258,15 +262,19 @@ Java_com_winlator_xserver_Drawable_drawLine(JNIEnv *env, jclass obj, jshort x0, 
     uint32_t *row32 = (uint32_t *)row;
     for (int i = 0; i < lineWidth; i++) row32[i] = color32;
 
+    /* Determine dominant direction once before the loop — not per-step,
+     * since x0/y0 change each iteration and would flip the branch mid-line. */
+    bool isHorizontal = abs(x1 - x0) >= abs(y1 - y0);
+
     while (true) {
-        if(abs(x1 - x0) >= abs(y1 - y0)){
-            // Write row of pixels at once
+        if (isHorizontal) {
+            // Horizontal-ish: write a full row of pixels at once
             for (int16_t i = 0; i < lineWidth; i++) {
                 memcpy(dataAddr + (x0 + (i + y0) * stride) * 4, row, rowSize);
             }
         } else {
-            // Write individual pixels instead
-            for(int16_t i = 0; i < lineWidth; i++){
+            // Vertical-ish: write individual pixels
+            for (int16_t i = 0; i < lineWidth; i++) {
                 ((uint32_t *)dataAddr)[(x0 + i) + y0 * stride] = color32;
             }
         }
@@ -383,6 +391,8 @@ Java_com_winlator_xserver_Pixmap_toBitmap(JNIEnv *env, jclass obj, jobject color
     int size = info.width * info.height;
     uint8_t *src = (uint8_t *)colorDataAddr;
 
+// Byte-Swapping using ARM NEON in order to rely on a shuffle table
+// to reduce operations since they're deterministic.
 #ifdef __ARM_NEON
     if (!maskDataAddr) {
         /* Fast path: no mask — swap R and B channels across 4 pixels at a time.
