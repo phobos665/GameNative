@@ -7,6 +7,10 @@
 #include <android/bitmap.h>
 #include <android/log.h>
 
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+#endif
+
 #define WHITE 0xffffff
 #define BLACK 0x000000
 #define printf(...) __android_log_print(ANDROID_LOG_DEBUG, "System.out", __VA_ARGS__);
@@ -168,18 +172,26 @@ Java_com_winlator_xserver_Drawable_fillRect(JNIEnv *env, jclass obj, jshort x, j
     unpackColor(color, rgba);
 
     int rowSize = width * 4;
-    uint8_t *row = malloc(rowSize);
-    if (!row) {
-        printf("Error: Failed to allocate memory for row\n");
-        return;
+    uint8_t stackRow[4096 * 4];
+    uint8_t *row = stackRow;
+    bool heapRow = false;
+    if (width > 4096) {
+        row = malloc(rowSize);
+        if (!row) {
+            printf("Error: Failed to allocate memory for row\n");
+            return;
+        }
+        heapRow = true;
     }
 
-    for (int i = 0; i < rowSize; i += 4) memcpy(row + i, rgba, 4);
+    uint32_t color32 = ((uint32_t)rgba[3] << 24) | ((uint32_t)rgba[2] << 16) | ((uint32_t)rgba[1] << 8) | rgba[0];
+    uint32_t *row32 = (uint32_t *)row;
+    for (int i = 0; i < width; i++) row32[i] = color32;
     for (int16_t i = 0; i < height; i++) {
         memcpy(dataAddr + (x + (i + y) * stride) * 4, row, rowSize);
     }
 
-    free(row);
+    if (heapRow) free(row);
 }
 
 JNIEXPORT void JNICALL
@@ -203,15 +215,21 @@ Java_com_winlator_xserver_Drawable_drawLine(JNIEnv *env, jclass obj, jshort x0, 
     unpackColor(color, rgba);
 
     int rowSize = lineWidth * 4;
-    uint8_t *row = malloc(rowSize);
-    if (!row) {
-        printf("Error: Failed to allocate memory for row\n");
-        return;
+    uint8_t stackRow[4096 * 4];
+    uint8_t *row = stackRow;
+    bool heapRow = false;
+    if (lineWidth > 4096) {
+        row = malloc(rowSize);
+        if (!row) {
+            printf("Error: Failed to allocate memory for row\n");
+            return;
+        }
+        heapRow = true;
     }
 
-    for (int i = 0; i < rowSize; i += 4) {
-        memcpy(row + i, rgba, 4);
-    }
+    uint32_t color32 = ((uint32_t)rgba[3] << 24) | ((uint32_t)rgba[2] << 16) | ((uint32_t)rgba[1] << 8) | rgba[0];
+    uint32_t *row32 = (uint32_t *)row;
+    for (int i = 0; i < lineWidth; i++) row32[i] = color32;
 
     while (true) {
         for (int16_t i = 0; i < lineWidth; i++) {
@@ -230,7 +248,7 @@ Java_com_winlator_xserver_Drawable_drawLine(JNIEnv *env, jclass obj, jshort x0, 
         }
     }
 
-    free(row);
+    if (heapRow) free(row);
 }
 
 JNIEXPORT void JNICALL
@@ -240,22 +258,47 @@ Java_com_winlator_xserver_Drawable_drawAlphaMaskedBitmap(JNIEnv *env, jclass obj
                                                          jbyte backGreen, jbyte backBlue,
                                                          jobject srcData, jobject maskData,
                                                          jobject dstData) {
-    int *srcDataAddr = (*env)->GetDirectBufferAddress(env, srcData);
-    int *maskDataAddr = (*env)->GetDirectBufferAddress(env, maskData);
-    int *dstDataAddr = (*env)->GetDirectBufferAddress(env, dstData);
+    uint32_t *srcDataAddr  = (*env)->GetDirectBufferAddress(env, srcData);
+    uint32_t *maskDataAddr = (*env)->GetDirectBufferAddress(env, maskData);
+    uint32_t *dstDataAddr  = (*env)->GetDirectBufferAddress(env, dstData);
 
     if (!srcDataAddr || !maskDataAddr || !dstDataAddr) {
         printf("Error: NULL buffer address in drawAlphaMaskedBitmap\n");
         return;
     }
 
-    int foreColor = packColor(foreRed, foreGreen, foreBlue);
-    int backColor = packColor(backRed, backGreen, backBlue);
+    uint32_t foreColor = (uint32_t)packColor(foreRed, foreGreen, foreBlue) | 0xff000000u;
+    uint32_t backColor = (uint32_t)packColor(backRed, backGreen, backBlue) | 0xff000000u;
 
     jlong dstLength = (*env)->GetDirectBufferCapacity(env, dstData) / 4;
-    for (int i = 0; i < dstLength; i++) {
-        dstDataAddr[i] = maskDataAddr[i] == WHITE ? (srcDataAddr[i] == WHITE ? foreColor : backColor) | 0xff000000 : 0x00000000;
+    const uint32_t whiteMask = (uint32_t)WHITE;
+#ifdef __ARM_NEON
+    uint32x4_t vFore  = vdupq_n_u32(foreColor);
+    uint32x4_t vBack  = vdupq_n_u32(backColor);
+    uint32x4_t vWhite = vdupq_n_u32(whiteMask);
+    uint32x4_t vZero  = vdupq_n_u32(0u);
+    jlong i = 0;
+    for (; i + 3 < dstLength; i += 4) {
+        uint32x4_t vMask       = vld1q_u32(maskDataAddr + i);
+        uint32x4_t vSrc        = vld1q_u32(srcDataAddr  + i);
+        uint32x4_t maskIsWhite = vceqq_u32(vMask, vWhite);
+        uint32x4_t srcIsWhite  = vceqq_u32(vSrc,  vWhite);
+        uint32x4_t color       = vbslq_u32(srcIsWhite,  vFore, vBack);
+        uint32x4_t result      = vbslq_u32(maskIsWhite, color,  vZero);
+        vst1q_u32(dstDataAddr + i, result);
     }
+    for (; i < dstLength; i++) {
+        dstDataAddr[i] = maskDataAddr[i] == whiteMask
+            ? (srcDataAddr[i] == whiteMask ? foreColor : backColor)
+            : 0u;
+    }
+#else
+    for (jlong i = 0; i < dstLength; i++) {
+        dstDataAddr[i] = maskDataAddr[i] == whiteMask
+            ? (srcDataAddr[i] == whiteMask ? foreColor : backColor)
+            : 0u;
+    }
+#endif
 }
 
 /* replace the whole JNI body */
