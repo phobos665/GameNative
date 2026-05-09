@@ -259,6 +259,7 @@ class EpicDownloadManager @Inject constructor(
                                 manifestData = manifestData,
                                 installPath = installPath,
                                 downloadInfo = downloadInfo,
+                                containerLanguage = containerLanguage,
                             )
 
                             if (dlcResult.isFailure) {
@@ -340,6 +341,7 @@ class EpicDownloadManager @Inject constructor(
         manifestData: EpicManager.ManifestResult,
         installPath: String,
         downloadInfo: DownloadInfo,
+        containerLanguage: String = EpicConstants.EPIC_FALLBACK_CONTAINER_LANGUAGE,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             Timber.tag("Epic").i("Starting download for ${game.title} using pre-fetched manifest")
@@ -352,12 +354,13 @@ class EpicDownloadManager @Inject constructor(
             )
             val manifest = EpicManifest.readAll(manifestData.manifestBytes)
 
-            val chunkDataList = manifest.chunkDataList
+            manifest.chunkDataList
                 ?: return@withContext Result.failure(Exception("No chunk data in manifest"))
-            val fileManifestList = manifest.fileManifestList
+            manifest.fileManifestList
                 ?: return@withContext Result.failure(Exception("No file manifest in manifest"))
 
-            val files = fileManifestList.elements
+            val selectedTags = EpicConstants.containerLanguageToEpicInstallTags(containerLanguage)
+            val files = ManifestUtils.getFilesForSelectedInstallTags(manifest, selectedTags)
             val chunkDir = manifest.getChunkDir()
 
             val fileChunkIds = files.map { f -> f.chunkParts.map { it.guidStr } }
