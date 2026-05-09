@@ -1,8 +1,5 @@
 package com.winlator.alsaserver;
 
-import android.util.Log;
-import com.winlator.alsaserver.ALSAClient;
-
 import com.winlator.sysvshm.SysVSharedMemory;
 import com.winlator.xconnector.Client;
 import com.winlator.xconnector.RequestHandler;
@@ -96,7 +93,7 @@ public class ALSARequestHandler implements RequestHandler {
                 byte channels = inputStream.readByte();
                 ALSAClient.DataType dataType = ALSAClient.DataType.values()[inputStream.readByte()];
                 int sampleRate = inputStream.readInt();
-                int minBufferSize = ALSAClient.latencyMillisToBufferSize(alsaClient.options.latencyMillis, channels, dataType, sampleRate);
+                int minBufferSize = ALSAClient.minBufferSizeInBytes(channels, dataType, sampleRate);
                 lock = outputStream.lock();
                 try {
                     outputStream.writeInt(minBufferSize);

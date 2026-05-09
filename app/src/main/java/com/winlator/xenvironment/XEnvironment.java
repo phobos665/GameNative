@@ -23,6 +23,8 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
     private final Context context;
     private final ImageFs imageFs;
     private final ArrayList<EnvironmentComponent> components = new ArrayList<>();
+    private AudioDeviceCallback audioDeviceCallback;
+    private AudioManager audioManager;
 
     private boolean winetricksRunning = false;
 
@@ -75,11 +77,54 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
 
     public void startEnvironmentComponents() {
         FileUtils.clear(getTmpDir(getContext()));
+        audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        audioDeviceCallback = new AudioDeviceCallback() {
+            @Override
+            public void onAudioDevicesAdded(AudioDeviceInfo[] addedDevices) {
+                if (hasBluetoothAudioDevice(addedDevices)) restartAudioComponents();
+            }
+
+            @Override
+            public void onAudioDevicesRemoved(AudioDeviceInfo[] removedDevices) {
+                if (hasBluetoothAudioDevice(removedDevices)) restartAudioComponents();
+            }
+        };
+        audioManager.registerAudioDeviceCallback(audioDeviceCallback, new Handler(Looper.getMainLooper()));
         for (EnvironmentComponent environmentComponent : this) environmentComponent.start();
     }
 
     public void stopEnvironmentComponents() {
+        if (audioManager != null && audioDeviceCallback != null) {
+            audioManager.unregisterAudioDeviceCallback(audioDeviceCallback);
+            audioDeviceCallback = null;
+        }
         for (EnvironmentComponent environmentComponent : this) environmentComponent.stop();
+    }
+
+    private boolean hasBluetoothAudioDevice(AudioDeviceInfo[] devices) {
+        for (AudioDeviceInfo device : devices) {
+            int type = device.getType();
+            if (type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Restart audio components to pick up any changes and restart the audio server with new audio device if needed
+    private void restartAudioComponents() {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            ALSAServerComponent alsa = getComponent(ALSAServerComponent.class);
+            if (alsa != null) {
+                alsa.stop();
+                alsa.start();
+            }
+            PulseAudioComponent pulse = getComponent(PulseAudioComponent.class);
+            if (pulse != null) {
+                pulse.stop();
+                pulse.start();
+            }
+        });
     }
 
     public void onPause() {
