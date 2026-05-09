@@ -169,15 +169,10 @@ public class ALSAClient {
         return this.bufferSize * this.frameBytes;
     }
 
-    /**
-     * Returns the minimum ALSA period buffer size in bytes for Wine to use.
-     * Computed as a 40 ms window at the given sample rate, rounded up to the nearest 256 frames.
-     * Replaces the old {@code latencyMillisToBufferSize} which depended on the removed Options class.
-     */
+    // Gets the minimum buffer size in bytes for the given audio format parameters. Used by Wine's glibc.
     public static int minBufferSizeInBytes(int channels, DataType dataType, int sampleRate) {
         int frameBytes = channels * dataType.byteCount;
-        // Round up to the next multiple of 256 frames so Wine's period aligns with typical
-        // hardware burst boundaries.
+        // Round up to the next multiple of 256 frames so Wine's period aligns with typical AAudio buffer sizes and avoid underruns.
         int frames = ((sampleRate * 40 / 1000) + 255) & ~255;
         return frames * frameBytes;
     }
