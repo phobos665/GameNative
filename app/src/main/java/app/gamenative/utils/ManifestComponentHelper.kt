@@ -31,6 +31,7 @@ object ManifestComponentHelper {
     data class InstalledContentLists(
         val dxvk: List<String>,
         val vkd3d: List<String>,
+        val d7vk: List<String>,
         val box64: List<String>,
         val wowBox64: List<String>,
         val fexcore: List<String>,
@@ -93,6 +94,9 @@ object ManifestComponentHelper {
                 vkd3d = profilesToDisplay(
                     mgr.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_VKD3D),
                 ),
+                d7vk = profilesToDisplay(
+                    mgr.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_D7VK),
+                ),
                 box64 = profilesToDisplay(
                     mgr.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_BOX64),
                 ),
@@ -113,6 +117,7 @@ object ManifestComponentHelper {
             InstalledContentLists(
                 dxvk = emptyList(),
                 vkd3d = emptyList(),
+                d7vk = emptyList(),
                 box64 = emptyList(),
                 wowBox64 = emptyList(),
                 fexcore = emptyList(),

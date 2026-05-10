@@ -26,6 +26,7 @@ object ManifestContentTypes {
     const val DRIVER = "driver"
     const val DXVK = "dxvk"
     const val VKD3D = "vkd3d"
+    const val D7VK = "d7vk"
     const val BOX64 = "box64"
     const val WOWBOX64 = "wowbox64"
     const val FEXCORE = "fexcore"

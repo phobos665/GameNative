@@ -4189,7 +4189,7 @@ private fun setupWineSystemFiles(
         )
     }
 
-    val needReextract = ALWAYS_REEXTRACT || xServerState.value.dxwrapper != container.getExtra("dxwrapper") || variantChanged || wineVersionChanged
+    val needReextract = ALWAYS_REEXTRACT || xServerState.value.dxwrapper != container.getExtra("dxwrapper") || variantChanged || wineVersionChanged || container.usesUniversalContainer()
 
     Timber.i("needReextract is " + needReextract)
     Timber.i("xServerState.value.dxwrapper is " + xServerState.value.dxwrapper)
@@ -4356,6 +4356,19 @@ private fun extractDXWrapperFiles(
                 "$assetDir/ddraw.tzst", windowsDir, onExtractFileListener,
             )
         }
+        "d7vk" -> {
+            restoreOriginalDllFiles(context, container, containerManager, imageFs, *dlls)
+            val profile: ContentProfile? = contentsManager.getProfileByEntryName(dxwrapper)
+            if (profile != null) {
+                Timber.d("Applying user-defined D7VK content profile: $dxwrapper")
+                contentsManager.applyContent(profile)
+            } else {
+                TarCompressorUtils.extract(
+                    TarCompressorUtils.Type.ZSTD, context.assets,
+                    "dxwrapper/d7vk-${DefaultVersion.D7VK}.tzst", windowsDir, onExtractFileListener,
+                )
+            }
+        }
         "vkd3d" -> {
             Timber.i("Extracting VKD3D D3D12 DLLs for dxwrapper: $dxwrapper")
             val profile: ContentProfile? = contentsManager.getProfileByEntryName(dxwrapper)
@@ -4460,7 +4473,7 @@ private fun restoreOriginalDllFiles(
         }
 
         containerManager.extractContainerPatternFile(
-            container.wineVersion, contentsManager, container.rootDir,
+            container.wineVersion, contentsManager, container.getPrefixRootDir(),
             object : OnExtractFileListener {
                 override fun onExtractFile(file: File, size: Long): File? {
                     val path = file.path

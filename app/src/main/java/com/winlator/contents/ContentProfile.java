@@ -26,6 +26,7 @@ public class ContentProfile {
         CONTENT_TYPE_VIRGL("VirGL"),
         CONTENT_TYPE_DXVK("DXVK"),
         CONTENT_TYPE_VKD3D("VKD3D"),
+        CONTENT_TYPE_D7VK("D7VK"),
         CONTENT_TYPE_BOX64("Box64"),
         CONTENT_TYPE_WOWBOX64("WOWBox64"),
         CONTENT_TYPE_FEXCORE("FEXCore");

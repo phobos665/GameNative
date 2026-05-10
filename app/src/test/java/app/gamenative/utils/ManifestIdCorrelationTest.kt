@@ -123,6 +123,7 @@ class ManifestIdCorrelationTest {
         return when (key.lowercase()) {
             ManifestContentTypes.DXVK -> ContentProfile.ContentType.CONTENT_TYPE_DXVK
             ManifestContentTypes.VKD3D -> ContentProfile.ContentType.CONTENT_TYPE_VKD3D
+            ManifestContentTypes.D7VK -> ContentProfile.ContentType.CONTENT_TYPE_D7VK
             ManifestContentTypes.BOX64 -> ContentProfile.ContentType.CONTENT_TYPE_BOX64
             ManifestContentTypes.WOWBOX64 -> ContentProfile.ContentType.CONTENT_TYPE_WOWBOX64
             ManifestContentTypes.FEXCORE -> ContentProfile.ContentType.CONTENT_TYPE_FEXCORE

@@ -265,6 +265,7 @@ fun ContentsManagerDialog(open: Boolean, onDismiss: () -> Unit) {
                         val allowed = listOf(
                             ContentProfile.ContentType.CONTENT_TYPE_DXVK,
                             ContentProfile.ContentType.CONTENT_TYPE_VKD3D,
+                            ContentProfile.ContentType.CONTENT_TYPE_D7VK,
                             ContentProfile.ContentType.CONTENT_TYPE_BOX64,
                             ContentProfile.ContentType.CONTENT_TYPE_WOWBOX64,
                             ContentProfile.ContentType.CONTENT_TYPE_FEXCORE
