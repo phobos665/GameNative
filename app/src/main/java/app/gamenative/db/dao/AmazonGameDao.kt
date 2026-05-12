@@ -50,6 +50,21 @@ interface AmazonGameDao {
     @Query("SELECT * FROM amazon_games WHERE product_id IN (:productIds)")
     suspend fun getGamesByProductIds(productIds: List<String>): List<AmazonGame>
 
+    @Query(
+        "UPDATE amazon_games SET " +
+            "metacritic_score = :metacriticScore, opencritic_score = :opencriticScore, " +
+            "hltb_main_story = :hltbMainStory, hltb_main_extra = :hltbMainExtra, hltb_completionist = :hltbCompletionist " +
+            "WHERE product_id = :productId",
+    )
+    suspend fun updateScoreAndHltbInfo(
+        productId: String,
+        metacriticScore: Short?,
+        opencriticScore: Short?,
+        hltbMainStory: Float?,
+        hltbMainExtra: Float?,
+        hltbCompletionist: Float?,
+    )
+
     /**
      * Upsert Amazon games while preserving install status and install path.
      * Used when refreshing the library from the Amazon API — we don't want to

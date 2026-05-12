@@ -61,6 +61,20 @@ interface SteamAppDao {
     @Update
     suspend fun update(app: SteamApp)
 
+    @Query(
+        "UPDATE steam_app SET " +
+            "opencritic_score = :opencriticScore, " +
+            "hltb_main_story = :hltbMainStory, hltb_main_extra = :hltbMainExtra, hltb_completionist = :hltbCompletionist " +
+            "WHERE id = :appId",
+    )
+    suspend fun updateScoreAndHltbInfo(
+        appId: Int,
+        opencriticScore: Short?,
+        hltbMainStory: Float?,
+        hltbMainExtra: Float?,
+        hltbCompletionist: Float?,
+    )
+
     // observe change count — triggers re-load without pulling all blobs into one CursorWindow
     @Query(
         "SELECT COUNT(*) FROM steam_app AS app " + OWNED_APPS_WHERE,

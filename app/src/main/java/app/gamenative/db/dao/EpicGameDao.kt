@@ -81,6 +81,22 @@ interface EpicGameDao {
     @Query("SELECT catalog_id FROM epic_games")
     suspend fun getAllCatalogIds(): List<String>
 
+    @Query(
+        "UPDATE epic_games SET " +
+            "metacritic_score = :metacriticScore, " +
+            "opencritic_score = :opencriticScore, " +
+            "hltb_main_story = :hltbMainStory, hltb_main_extra = :hltbMainExtra, hltb_completionist = :hltbCompletionist " +
+            "WHERE app_name = :appName",
+    )
+    suspend fun updateScoreAndHltbInfo(
+        appName: String,
+        metacriticScore: Short?,
+        opencriticScore: Short?,
+        hltbMainStory: Float?,
+        hltbMainExtra: Float?,
+        hltbCompletionist: Float?,
+    )
+
     /**
      * Upsert Epic games while preserving install status and paths
      * This is useful when refreshing the library from Epic/Legendary

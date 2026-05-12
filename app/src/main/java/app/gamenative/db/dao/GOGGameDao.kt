@@ -58,6 +58,22 @@ interface GOGGameDao {
     @Query("SELECT id FROM gog_games")
     suspend fun getAllGameIdsIncludingExcluded(): List<String>
 
+    @Query(
+        "UPDATE gog_games SET " +
+            "metacritic_score = :metacriticScore, " +
+            "opencritic_score = :opencriticScore, " +
+            "hltb_main_story = :hltbMainStory, hltb_main_extra = :hltbMainExtra, hltb_completionist = :hltbCompletionist " +
+            "WHERE id = :gameId",
+    )
+    suspend fun updateScoreAndHltbInfo(
+        gameId: String,
+        metacriticScore: Short?,
+        opencriticScore: Short?,
+        hltbMainStory: Float?,
+        hltbMainExtra: Float?,
+        hltbCompletionist: Float?,
+    )
+
     /**
      * Upsert GOG games while preserving install status and paths
      * This is useful when refreshing the library from GOG API

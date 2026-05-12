@@ -43,6 +43,8 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import app.gamenative.ui.util.SnackbarManager
+import app.gamenative.utils.WikiGameInfoService
+import app.gamenative.data.GameSource
 import timber.log.Timber
 
 // TODO: Verify all tests and do DLC auto-install with base game.
@@ -173,6 +175,18 @@ class EpicAppScreen : BaseAppScreen() {
                         Timber.tag("Epic").e(e, "Failed to fetch install size for ${game.title}")
                     }
                 }
+            }
+        }
+
+        LaunchedEffect(gameId){ 
+            val game = EpicService.getEpicGameOf(gameId)
+            WikiGameInfoService.fetchAndStore(
+                GameSource.EPIC,
+                game?.title ?: libraryItem.name,
+                "",
+            ) { wikiInfo ->
+                // Get back metacritic score and and openCritic and hltb:
+                Timber.tag(TAG).d("Received wiki info for ${libraryItem.name}: metacritic=${wikiInfo.metacritic?.score} openCritic=${wikiInfo.opencritic?.score} hltb=${wikiInfo.hltb?.mainStory}h")
             }
         }
 

@@ -100,6 +100,20 @@ data class AmazonGame(
     /** Raw product JSON kept for manifest lookup, etc. */
     @ColumnInfo("product_json")
     val productJson: String = "",
+
+    // metacritic scores
+    @ColumnInfo(name = "metacritic_score", defaultValue = "NULL")
+    val metacriticScore: Short? = null,
+    @ColumnInfo(name = "opencritic_score", defaultValue = "NULL")
+    val opencriticScore: Short? = null,
+
+    // HowLongToBeat times in hours
+    @ColumnInfo(name = "hltb_main_story", defaultValue = "NULL")
+    val hltbMainStory: Float? = null,
+    @ColumnInfo(name = "hltb_main_extra", defaultValue = "NULL")
+    val hltbMainExtra: Float? = null,
+    @ColumnInfo(name = "hltb_completionist", defaultValue = "NULL")
+    val hltbCompletionist: Float? = null,
 )
 
 /**

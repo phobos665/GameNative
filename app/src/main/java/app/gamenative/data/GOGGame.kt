@@ -71,6 +71,20 @@ data class GOGGame(
 
     @ColumnInfo(name = "exclude", defaultValue = "0")
     val exclude: Boolean = false,
+
+    // Scores
+    @ColumnInfo(name = "metacritic_score", defaultValue = "NULL")
+    val metacriticScore: Short? = null,
+    @ColumnInfo(name = "opencritic_score", defaultValue = "NULL")
+    val opencriticScore: Short? = null,
+
+    // HowLongToBeat times in hours
+    @ColumnInfo(name = "hltb_main_story", defaultValue = "NULL")
+    val hltbMainStory: Float? = null,
+    @ColumnInfo(name = "hltb_main_extra", defaultValue = "NULL")
+    val hltbMainExtra: Float? = null,
+    @ColumnInfo(name = "hltb_completionist", defaultValue = "NULL")
+    val hltbCompletionist: Float? = null,
 ) {
     companion object {
         const val GOG_IMAGE_BASE_URL = "https://images.gog.com/images"

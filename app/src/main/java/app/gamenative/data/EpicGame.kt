@@ -126,6 +126,20 @@ data class EpicGame(
 
     @ColumnInfo("eos_app_id")
     val eosAppId: String = "",
+
+    // Scores
+    @ColumnInfo(name = "metacritic_score", defaultValue = "NULL")
+    val metacriticScore: Short? = null,
+    @ColumnInfo(name = "opencritic_score", defaultValue = "NULL")
+    val opencriticScore: Short? = null,
+
+    // HowLongToBeat times in hours
+    @ColumnInfo(name = "hltb_main_story", defaultValue = "NULL")
+    val hltbMainStory: Float? = null,
+    @ColumnInfo(name = "hltb_main_extra", defaultValue = "NULL")
+    val hltbMainExtra: Float? = null,
+    @ColumnInfo(name = "hltb_completionist", defaultValue = "NULL")
+    val hltbCompletionist: Float? = null,
 ) {
     /**
      * Primary image URL for the game

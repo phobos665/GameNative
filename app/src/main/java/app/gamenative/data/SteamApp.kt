@@ -152,6 +152,17 @@ data class SteamApp(
 
     @ColumnInfo(name = "workshop_download_pending", defaultValue = "0")
     val workshopDownloadPending: Boolean = false,
+
+    @ColumnInfo(name = "opencritic_score", defaultValue = "NULL")
+    val opencriticScore: Short? = null,
+
+    // HowLongToBeat times in hours
+    @ColumnInfo(name = "hltb_main_story", defaultValue = "NULL")
+    val hltbMainStory: Float? = null,
+    @ColumnInfo(name = "hltb_main_extra", defaultValue = "NULL")
+    val hltbMainExtra: Float? = null,
+    @ColumnInfo(name = "hltb_completionist", defaultValue = "NULL")
+    val hltbCompletionist: Float? = null,
 ) {
     val logoUrl: String
         get() = "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/$id/$logoHash.jpg"
