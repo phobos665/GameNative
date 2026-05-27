@@ -80,9 +80,23 @@ object DownloadService {
         return subDir.toMutableList()
     }
 
-    fun getSizeFromStoreDisplay (appId: Int, branch: String = "public"): String {
+    fun getSizeFromStoreDisplay(appId: Int, branch: String = "public"): String {
         val depots = SteamService.getDownloadableDepots(appId)
-        val installBytes = depots.values.sumOf { (it.manifests[branch] ?: it.manifests["public"])?.size ?: 0L }
+        Timber.d("[SizeCalc] appId=$appId branch=$branch totalDepots=${depots.size}")
+        var installBytes = 0L
+        depots.forEach { (depotId, depot) ->
+            val manifest = depot.manifests[branch] ?: depot.manifests["public"]
+            val manifestKeys = depot.manifests.keys.toList()
+            val depotBytes = manifest?.size ?: 0L
+            installBytes += depotBytes
+            Timber.d(
+                "[SizeCalc] depot=$depotId dlcAppId=${depot.dlcAppId} " +
+                    "language='${depot.language}' manifestBranches=$manifestKeys " +
+                    "pickedBranch=${if (depot.manifests.containsKey(branch)) branch else "public(fallback)"} " +
+                    "size=${depotBytes} gid=${manifest?.gid} download=${manifest?.download}",
+            )
+        }
+        Timber.d("[SizeCalc] appId=$appId TOTAL installBytes=$installBytes (${StorageUtils.formatBinarySize(installBytes)})")
         return StorageUtils.formatBinarySize(installBytes)
     }
 

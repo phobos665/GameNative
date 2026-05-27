@@ -1008,13 +1008,25 @@ class SteamAppScreen : BaseAppScreen() {
                     val container = ContainerManager(context).getContainerById("STEAM_$gameId")
                     val language = container?.language ?: PrefManager.containerLanguage
                     val depots = SteamService.getDownloadableDepots(gameId, language)
-                    Timber.i("There are ${depots.size} depots belonging to ${libraryItem.appId}")
                     val branch = SteamService.getInstalledApp(gameId)?.branch ?: "public"
+                    Timber.i("[SizeCalc] gameId=$gameId language=$language branch=$branch totalDepots=${depots.size}")
                     val availableBytes = StorageUtils.getAvailableSpace(SteamService.defaultStoragePath)
-                    val downloadBytes = depots.values.sumOf {
-                        SteamUtils.getDownloadBytes(it.manifests[branch])
+                    var downloadBytes = 0L
+                    var installBytes = 0L
+                    depots.forEach { (depotId, depot) ->
+                        val manifest = depot.manifests[branch] ?: depot.manifests["public"]
+                        val depotDownload = SteamUtils.getDownloadBytes(manifest)
+                        val depotInstall = manifest?.size ?: 0L
+                        downloadBytes += depotDownload
+                        installBytes += depotInstall
+                        Timber.i(
+                            "[SizeCalc] depot=$depotId dlcAppId=${depot.dlcAppId} " +
+                                "language='${depot.language}' allBranches=${depot.manifests.keys} " +
+                                "pickedManifest=${manifest?.gid} " +
+                                "install=${depotInstall} download=${depotDownload}",
+                        )
                     }
-                    val installBytes = depots.values.sumOf { it.manifests[branch]?.size ?: 0 }
+                    Timber.i("[SizeCalc] TOTAL install=$installBytes (${StorageUtils.formatBinarySize(installBytes)}) download=$downloadBytes (${StorageUtils.formatBinarySize(downloadBytes)})")
                     InstallSizeInfo(
                         downloadSize = StorageUtils.formatBinarySize(downloadBytes),
                         installSize = StorageUtils.formatBinarySize(installBytes),
