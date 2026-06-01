@@ -40,7 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.OutlinedTextField
+import app.gamenative.ui.component.NoExtractOutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.CircularProgressIndicator
@@ -71,6 +71,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.tooling.preview.Preview
+import app.gamenative.BuildConfig
 import app.gamenative.R
 import app.gamenative.ui.util.SnackbarManager
 import app.gamenative.ui.component.dialog.state.MessageDialogState
@@ -174,6 +175,7 @@ fun ContainerConfigDialog(
         val audioDrivers = stringArrayResource(R.array.audio_driver_entries).toList()
         val gpuCards = ContainerUtils.getGPUCards(context)
         val presentModes = stringArrayResource(R.array.present_mode_entries).toList()
+        val rendererPresentModes = listOf("fifo", "mailbox")
         val resourceTypes = stringArrayResource(R.array.resource_type_entries).toList()
         val bcnEmulationEntries = stringArrayResource(R.array.bcn_emulation_entries).toList()
         val bcnEmulationTypeEntries = stringArrayResource(R.array.bcn_emulation_type_entries).toList()
@@ -207,7 +209,15 @@ fun ContainerConfigDialog(
         val vortekVersions = stringArrayResource(R.array.vortek_version_entries).toList()
         val adrenoVersions = stringArrayResource(R.array.adreno_version_entries).toList()
         val sd8EliteVersions = stringArrayResource(R.array.sd8elite_version_entries).toList()
+        // glibc is not supported on the modern flavor — hide it from the dropdown.
         val containerVariants = stringArrayResource(R.array.container_variant_entries).toList()
+            .let { variants ->
+                if (BuildConfig.MODERN_ANDROID) {
+                    variants.filterNot { it.equals(Container.GLIBC, ignoreCase = true) }
+                } else {
+                    variants
+                }
+            }
         val bionicWineEntriesBase = stringArrayResource(R.array.bionic_wine_entries).toList()
         val glibcWineEntriesBase = stringArrayResource(R.array.glibc_wine_entries).toList()
         val bionicWineEntriesRef = remember { mutableStateOf(bionicWineEntriesBase) }
@@ -439,6 +449,41 @@ fun ContainerConfigDialog(
                 expectedType = null,
                 onInstalled = onInstalled,
             )
+
+        fun launchSteamAppDownload(appId: Int, label: String, onDownloaded: () -> Unit) {
+            if (manifestInstallInProgress) return
+            val downloadInfo = SteamService.downloadApp(appId) ?: run {
+                onDownloaded()
+                return
+            }
+            manifestInstallInProgress = true
+            showManifestDownloadDialog = true
+            manifestDownloadProgress = downloadInfo.getProgress().coerceIn(0f, 1f)
+            manifestDownloadLabel = label
+            SnackbarManager.show(context.getString(R.string.manifest_downloading_item, label))
+
+            val progressListener: (Float) -> Unit = { progress ->
+                installScope.launch(Dispatchers.Main.immediate) {
+                    manifestDownloadProgress = progress.coerceIn(0f, 1f)
+                }
+            }
+            downloadInfo.addProgressListener(progressListener)
+
+            installScope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        downloadInfo.awaitCompletion(timeoutMs = 7L * 24L * 60L * 60L * 1000L)
+                    }
+                    onDownloaded()
+                } finally {
+                    downloadInfo.removeProgressListener(progressListener)
+                    manifestInstallInProgress = false
+                    showManifestDownloadDialog = false
+                    manifestDownloadProgress = -1f
+                    manifestDownloadLabel = ""
+                }
+            }
+        }
         // Vortek/Adreno graphics driver config (vkMaxVersion, imageCacheSize, exposedDeviceExtensions)
         val vkMaxVersionIndexRef = rememberSaveable { mutableIntStateOf(3) }
         var vkMaxVersionIndex by vkMaxVersionIndexRef
@@ -531,6 +576,8 @@ fun ContainerConfigDialog(
         var wrapperVersionIndex by wrapperVersionIndexRef
         val presentModeIndexRef = rememberSaveable { mutableIntStateOf(0) }
         var presentModeIndex by presentModeIndexRef
+        val rendererPresentModeIndexRef = rememberSaveable { mutableIntStateOf(0) }
+        var rendererPresentModeIndex by rendererPresentModeIndexRef
         val resourceTypeIndexRef = rememberSaveable { mutableIntStateOf(0) }
         var resourceTypeIndex by resourceTypeIndexRef
         val bcnEmulationIndexRef = rememberSaveable { mutableIntStateOf(0) }
@@ -557,12 +604,17 @@ fun ContainerConfigDialog(
             mutableStateOf(cfg.get("adrenotoolsTurnip", "1") != "0")
         }
         var adrenotoolsTurnipChecked by adrenotoolsTurnipCheckedRef
-        LaunchedEffect(config.graphicsDriverConfig) {
+        LaunchedEffect(config.graphicsDriverConfig, config.rendererPresentMode) {
             val cfg = KeyValueSet(config.graphicsDriverConfig)
             val presentMode = cfg.get("presentMode", "mailbox")
             val defaultPresentIdx = presentModes.indexOfFirst { it.equals("mailbox", true) }.takeIf { it >= 0 } ?: 0
             presentModeIndex =
                 presentModes.indexOfFirst { it.equals(presentMode, true) }.let { if (it >= 0) it else defaultPresentIdx }
+
+            val storedRendererPm = config.rendererPresentMode.ifEmpty { "fifo" }
+            val defaultRendererPresentIdx = rendererPresentModes.indexOfFirst { it.equals("fifo", true) }.takeIf { it >= 0 } ?: 0
+            rendererPresentModeIndex =
+                rendererPresentModes.indexOfFirst { it.equals(storedRendererPm, true) }.let { if (it >= 0) it else defaultRendererPresentIdx }
 
             val resourceType = cfg.get("resourceType", "auto")
             val defaultResourceIdx = resourceTypes.indexOfFirst { it.equals("auto", true) }.takeIf { it >= 0 } ?: 0
@@ -739,18 +791,15 @@ fun ContainerConfigDialog(
                 if (context.isVortekLike) "async-1.10.3" else DefaultVersion.DXVK
             } else selectedVersion
             val envSet = EnvVars(config.envVars)
-            // Update dxwrapperConfig version only when DXVK wrapper selected
-            val wrapperIsDxvk = StringUtils.parseIdentifier(dxWrappers[dxWrapperIndex]) == "dxvk"
+            // Update dxwrapperConfig version regardless of wrapper type (allows DXVK config even when VKD3D is selected)
             val kvs = KeyValueSet(config.dxwrapperConfig)
             val currentVersion = kvs.get("version")
-            // Only update if the version actually changed (don't overwrite on initial load if it matches)
-            if (wrapperIsDxvk) {
-                // Check if we need to update - only if current version doesn't match selected version
-                val needsUpdate = currentVersion.isEmpty() ||
-                    (currentVersion != version && StringUtils.parseIdentifier(currentVersion) != StringUtils.parseIdentifier(version))
-                if (needsUpdate) {
-                    kvs.put("version", version)
-                }
+            // Always allow DXVK version updates (removed wrapper type restriction)
+            // Check if we need to update - only if current version doesn't match selected version
+            val needsUpdate = currentVersion.isEmpty() ||
+                (currentVersion != version && StringUtils.parseIdentifier(currentVersion) != StringUtils.parseIdentifier(version))
+            if (needsUpdate) {
+                kvs.put("version", version)
             }
             if (version.contains("async", ignoreCase = true)) {
                 kvs.put("async", "1")
@@ -924,6 +973,7 @@ fun ContainerConfigDialog(
             bionicDriverIndex = bionicDriverIndexRef,
             wrapperVersionIndex = wrapperVersionIndexRef,
             presentModeIndex = presentModeIndexRef,
+            rendererPresentModeIndex = rendererPresentModeIndexRef,
             resourceTypeIndex = resourceTypeIndexRef,
             bcnEmulationIndex = bcnEmulationIndexRef,
             bcnEmulationTypeIndex = bcnEmulationTypeIndexRef,
@@ -962,6 +1012,7 @@ fun ContainerConfigDialog(
             vkd3dVersionsBase = vkd3dVersionsBase,
             audioDrivers = audioDrivers,
             presentModes = presentModes,
+            rendererPresentModes = rendererPresentModes,
             resourceTypes = resourceTypes,
             bcnEmulationEntries = bcnEmulationEntries,
             bcnEmulationTypeEntries = bcnEmulationTypeEntries,
@@ -1025,6 +1076,7 @@ fun ContainerConfigDialog(
                 launchManifestContentInstall(entry, expectedType, onInstalled)
             },
             launchManifestDriverInstall = { entry, onInstalled -> launchManifestDriverInstall(entry, onInstalled) },
+            launchSteamAppDownload = { appId, label, onDownloaded -> launchSteamAppDownload(appId, label, onDownloaded) },
             getStartupSelectionOptions = { getStartupSelectionOptions() },
             launchFolderPicker = {
                 showAddDriveDialogRef.value = false
@@ -1128,7 +1180,7 @@ fun ContainerConfigDialog(
                                 .weight(1f),
                         ) {
                             if (selectedTab == 0) GeneralTabContent(state, nonzeroResolutionError, aspectResolutionError)
-                            if (selectedTab == 1) GraphicsTabContent(state)
+                            if (selectedTab == 1) GraphicsTabContent(state, default)
                             if (selectedTab == 2) EmulationTabContent(state)
                             if (selectedTab == 3) ControllerTabContent(state, default)
                             if (selectedTab == 4) WineTabContent(state)
@@ -1165,6 +1217,7 @@ private fun Preview_ContainerConfigDialog() {
             installPath = "",
             showFPS = false,
             launchRealSteam = false,
+            launchBionicSteam = false,
             allowSteamUpdates = false,
             steamType = "normal",
             cpuList = "0,1,2,3",
@@ -1226,7 +1279,7 @@ internal fun ExecutablePathDropdown(
         onExpandedChange = { expanded = it },
         modifier = modifier
     ) {
-        OutlinedTextField(
+        NoExtractOutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             readOnly = true,

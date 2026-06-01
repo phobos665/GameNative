@@ -17,6 +17,7 @@ import app.gamenative.events.AndroidEvent
 import app.gamenative.events.SteamEvent
 import app.gamenative.ui.enums.Orientation
 import java.util.EnumSet
+import app.gamenative.service.ActiveGameRegistry
 import app.gamenative.service.SteamService
 import app.gamenative.service.epic.EpicCloudSavesManager
 import app.gamenative.ui.data.MainState
@@ -45,6 +46,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 @HiltViewModel
@@ -454,7 +456,7 @@ class MainViewModel @Inject constructor(
                 val container = ContainerUtils.getOrCreateContainer(context, appId)
                 val gameSource = ContainerUtils.extractGameSourceFromContainerId(appId)
                 if (gameSource == GameSource.STEAM) {
-                    if (container.isLaunchRealSteam()) {
+                    if (container.isLaunchRealSteam() || container.isLaunchBionicSteam()) {
                         SteamUtils.restoreSteamApi(context, appId)
                     } else {
                         val offline = _offline.value
@@ -488,6 +490,7 @@ class MainViewModel @Inject constructor(
 
                 val gameId = ContainerUtils.extractGameIdFromContainerId(appId)
                 Timber.tag("Exit").i("Got game id: $gameId")
+                ActiveGameRegistry.clearIfMatches(gameId)
                 SteamService.notifyRunningProcesses()
                 handleExitCloudSync(context, appId, gameId)
 
@@ -500,9 +503,9 @@ class MainViewModel @Inject constructor(
                 // After app closes, check if we need to show the feedback dialog
                 // Show feedback if: first time running this game OR config was changed
                 try {
-                    // Do not show the Feedback form for non-steam games until we can support.
+                    // Show feedback for all stores except custom games.
                     val feedbackGameSource = ContainerUtils.extractGameSourceFromContainerId(appId)
-                    if (feedbackGameSource == GameSource.STEAM) {
+                    if (feedbackGameSource != GameSource.CUSTOM_GAME) {
                         val container = ContainerUtils.getContainer(context, appId)
 
                         val shown = container.getExtra("discord_support_prompt_shown", "false") == "true"
@@ -522,7 +525,7 @@ class MainViewModel @Inject constructor(
                             _uiEvent.send(MainUiEvent.ShowGameFeedbackDialog(appId))
                         }
                     } else {
-                        Timber.d("Non-Steam Game Detected, not showing feedback")
+                        Timber.d("Custom game detected, not showing feedback")
                     }
                 } catch (e: Exception) {
                     Timber.w(e, "Failed to check/update feedback dialog state for $appId")
@@ -586,8 +589,11 @@ class MainViewModel @Inject constructor(
 
         if (gameSource == GameSource.STEAM) {
             try {
+                val container = withContext(Dispatchers.IO) {
+                    ContainerUtils.getContainer(context, appId)
+                }
                 SteamService.closeApp(context, gameId, isOffline.value) { prefix ->
-                    PathType.from(prefix).toAbsPath(context, gameId, SteamService.userSteamId!!.accountID)
+                    PathType.from(prefix).toAbsPath(container, gameId, SteamService.userSteamId!!.accountID)
                 }.await()
             } catch (e: CancellationException) {
                 throw e
@@ -640,15 +646,17 @@ class MainViewModel @Inject constructor(
                         // When launchRealSteam is true, let the real Steam client handle the "game is running" notification
                         val shouldLaunchRealSteam = try {
                             val container = ContainerUtils.getContainer(context, appId)
-                            container.isLaunchRealSteam()
+                            container.isLaunchRealSteam() || container.isLaunchBionicSteam()
                         } catch (e: Exception) {
                             // Container might not exist, default to notifying Steam
                             false
                         }
 
                         if (!shouldLaunchRealSteam) {
+                            ActiveGameRegistry.set(it)
                             SteamService.notifyRunningProcesses(it)
                         } else {
+                            ActiveGameRegistry.clear()
                             Timber.tag("MainViewModel").i("Skipping Steam process notification - real Steam will handle this")
                         }
                     }

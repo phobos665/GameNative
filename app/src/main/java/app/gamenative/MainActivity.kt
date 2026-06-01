@@ -30,6 +30,8 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.intercept.Interceptor
 import coil.request.CachePolicy
+import app.gamenative.BuildConfig
+import app.gamenative.PrefManager
 import app.gamenative.events.AndroidEvent
 import app.gamenative.service.SteamService
 import app.gamenative.service.gog.GOGService
@@ -143,6 +145,12 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+
+        // stale keepAlive from a prior crash/swipe — no container is actually running
+        if (SteamService.keepAlive && PluviaApp.xEnvironment == null) {
+            Timber.w("onCreate: clearing stale keepAlive — no container running")
+            PluviaApp.shutdownEnvironment()
+        }
 
         // Apply immersive mode based on user preference
         applyImmersiveMode()
@@ -265,9 +273,20 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        // emit before super so Compose DisposableEffects (which unregister
+        // listeners during super.onDestroy's lifecycle transition) still fire
+        if (!isChangingConfigurations) {
+            PluviaApp.events.emit(AndroidEvent.ActivityDestroyed)
 
-        PluviaApp.events.emit(AndroidEvent.ActivityDestroyed)
+            // if exit() didn't run (listener already unregistered, race, etc.)
+            // force-clear so the app isn't stuck on next launch
+            if (SteamService.keepAlive) {
+                Timber.w("onDestroy: keepAlive still set after ActivityDestroyed — forcing cleanup")
+                PluviaApp.shutdownEnvironment()
+            }
+        }
+
+        super.onDestroy()
 
         PluviaApp.events.off<AndroidEvent.SetSystemUIVisibility, Unit>(onSetSystemUi)
         PluviaApp.events.off<AndroidEvent.StartOrientator, Unit>(onStartOrientator)
@@ -354,7 +373,9 @@ class MainActivity : ComponentActivity() {
             EpicService.start(this)
         }
 
-        PostHog.capture(event = "app_foregrounded")
+        if (PrefManager.usageAnalyticsEnabled) {
+            PostHog.capture(event = "app_foregrounded")
+        }
     }
 
     override fun onPause() {
@@ -375,7 +396,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        PostHog.capture(event = "app_backgrounded")
+        if (PrefManager.usageAnalyticsEnabled) {
+            PostHog.capture(event = "app_backgrounded")
+        }
         super.onPause()
     }
 
@@ -448,9 +471,17 @@ class MainActivity : ComponentActivity() {
         //  Idealy, compose handles back presses automaticially in which we can override it in certain composables.
         //  Since LibraryScreen uses its own navigation system, this will need to be re-worked accordingly.
         if (!eventDispatched) {
-            if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_DOWN) {
-                if (SteamService.keepAlive){
+            if (event.keyCode == KeyEvent.KEYCODE_BACK && SteamService.keepAlive) {
+                if (event.action == KeyEvent.ACTION_DOWN) {
                     PluviaApp.events.emit(AndroidEvent.BackPressed)
+                    eventDispatched = true
+                } else if (BuildConfig.MODERN_ANDROID && event.action == KeyEvent.ACTION_UP) {
+                    // Modern only: swallow BACK UP so super.dispatchKeyEvent doesn't
+                    // forward it to OnBackPressedDispatcher, which would double-fire
+                    // XServerScreen's BackHandler and immediately dismiss the quick
+                    // menu the DOWN event just opened.
+                    // Legacy must NOT swallow UP — master relies on UP falling through
+                    // so any KeyEvent consumers (controller code, etc.) see it.
                     eventDispatched = true
                 }
             }

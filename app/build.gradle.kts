@@ -30,10 +30,10 @@ room {
 
 android {
     namespace = "app.gamenative"
-    compileSdk = 35
+    compileSdk = 36
 
     // https://developer.android.com/ndk/downloads
-    ndkVersion = "22.1.7171670"
+    ndkVersion = "27.3.13750724"
 
     signingConfigs {
         create("pluvia") {
@@ -50,10 +50,9 @@ android {
         applicationId = "app.gamenative"
 
         minSdk = 26
-        targetSdk = 28
 
-        versionCode = 13
-        versionName = "0.9.0"
+        versionCode = 14
+        versionName = "1.0.0"
 
         buildConfigField("boolean", "GOLD", "false")
         fun secret(name: String) =
@@ -92,6 +91,7 @@ android {
             "pl",      // Polish
             "ru",      // Russian
             "ko",      // Korean
+            "ja",      // Japanese
             // TODO: Add more languages here using the ISO 639-1 locale code with regional qualifiers (e.g., "pt-rPT" for European Portuguese)
         )
 
@@ -105,6 +105,23 @@ android {
             getDefaultProguardFile("proguard-android.txt"),
             "proguard-rules.pro",
         )
+    }
+
+    flavorDimensions += "androidApi"
+    productFlavors {
+        create("legacy") {
+            dimension = "androidApi"
+            targetSdk = 28
+            buildConfigField("boolean", "MODERN_ANDROID", "false")
+            buildConfigField("String", "PRELOAD_BIONIC_SO", "\"libredirect-bionic.so\"")
+        }
+        create("modern") {
+            dimension = "androidApi"
+            minSdk = 29
+            targetSdk = 36
+            buildConfigField("boolean", "MODERN_ANDROID", "true")
+            buildConfigField("String", "PRELOAD_BIONIC_SO", "\"libredirect-bionic-wx.so\"")
+        }
     }
 
     buildTypes {
@@ -179,6 +196,12 @@ android {
         ignoreFormatFailures  = false
     }
 
+    // externalNativeBuild {
+    //    cmake {
+    //        path = file("src/main/cpp/evshim/CMakeLists.txt")
+    //    }
+    // }
+
     // xconnectorpatch is shipped as a prebuilt jniLib because our APK packaging flow
     // does not rebuild native libraries during release creation.
     // externalNativeBuild {
@@ -221,8 +244,8 @@ dependencies {
     // JavaSteam
     val localBuild = false // Change to 'true' needed when building JavaSteam manually
     if (localBuild) {
-        implementation(files("../../JavaSteam/build/libs/javasteam-1.8.0.1-15-SNAPSHOT.jar"))
-        implementation(files("../../JavaSteam/javasteam-depotdownloader/build/libs/javasteam-depotdownloader-1.8.0.1-15-SNAPSHOT.jar"))
+        implementation(files("../../JavaSteam/build/libs/javasteam-1.8.0.1-18-SNAPSHOT.jar"))
+        implementation(files("../../JavaSteam/javasteam-depotdownloader/build/libs/javasteam-depotdownloader-1.8.0.1-18-SNAPSHOT.jar"))
         implementation(libs.bundles.javasteam.dev)
     } else {
         implementation(libs.javasteam) {
@@ -247,6 +270,9 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.bundles.compose)
     implementation(libs.landscapist.coil)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.ui)
     debugImplementation(libs.androidx.ui.tooling)
 
     // Support
