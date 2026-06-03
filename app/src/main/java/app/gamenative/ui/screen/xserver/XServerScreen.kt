@@ -92,6 +92,7 @@ import app.gamenative.externaldisplay.ExternalDisplaySwapController
 import app.gamenative.externaldisplay.SwapInputOverlayView
 import app.gamenative.service.AchievementWatcher
 import app.gamenative.service.SteamService
+import app.gamenative.service.epic.EpicAchievementsManager
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGService
 import app.gamenative.ui.component.QuickMenu
@@ -3426,8 +3427,55 @@ private fun setupXEnvironment(
                 watchDirs = watchDirs,
                 displayNameMap = displayNameMap,
                 iconUrlMap = iconUrlMap,
-                configDirectory = configDirectory,
+                onUpload = { unlockedNames, dirs ->
+                    if (configDirectory == null) {
+                        Timber.tag("achievements").w("No configDirectory set, skipping Steam upload for appId=$gameIdInt")
+                        return@AchievementWatcher
+                    }
+                    if (!SteamService.isConnected) {
+                        Timber.tag("achievements").w("Not connected to Steam, queuing pending sync for appId=$gameIdInt")
+                        SteamService.instance?.addPendingSyncApp(gameIdInt)
+                        return@AchievementWatcher
+                    }
+                    val (allUnlocked, gseStatsDir) = SteamService.collectGseUnlocksAndStats(dirs)
+                    SteamService.storeAchievementUnlocks(
+                        gameIdInt, configDirectory, allUnlocked,
+                        gseStatsDir ?: dirs.first().resolve("stats"),
+                    ).onFailure { e ->
+                        Timber.tag("achievements").e(e, "Steam upload failed for appId=$gameIdInt")
+                    }
+                },
             ).also { it.start() }
+        }
+    } else if (gameSource == GameSource.EPIC) {
+        val gameIdInt = ContainerUtils.extractGameIdFromContainerId(appId)
+        if (gameIdInt != null) {
+            val cachedAchievements = EpicService.cachedAchievements
+            val namespace = EpicService.cachedAchievementsNamespace
+            if (cachedAchievements != null && namespace != null) {
+                val watchDirs = EpicService.getEosAchievementSaveDirs(context, gameIdInt)
+                val displayNameMap = cachedAchievements.associate { it.name to it.displayName }
+                val iconUrlMap = cachedAchievements.associate { it.name to it.iconUrl }
+                PluviaApp.achievementWatcher = AchievementWatcher(
+                    appId = gameIdInt,
+                    watchDirs = watchDirs,
+                    displayNameMap = displayNameMap,
+                    iconUrlMap = iconUrlMap,
+                    onUpload = { unlockedNames, _ ->
+                        val accountId = EpicService.getAccountId()
+                        if (accountId == null) {
+                            Timber.tag("achievements").w("No Epic account ID, skipping upload for appId=$gameIdInt")
+                            return@AchievementWatcher
+                        }
+                        EpicService.uploadAchievementUnlocks(context, namespace, accountId, unlockedNames)
+                            .onFailure { e ->
+                                Timber.tag("achievements").e(e, "Epic upload failed for appId=$gameIdInt")
+                            }
+                    },
+                ).also { it.start() }
+            } else {
+                Timber.tag("achievements").d("No cached Epic achievements for appId=$gameIdInt, watcher not started")
+            }
         }
     }
 
@@ -3519,6 +3567,14 @@ private fun getWineStartCommand(
         if (game == null || !game.isInstalled || game.installPath.isEmpty()) {
             Timber.tag("XServerScreen").e("Cannot launch: Epic game not installed")
             return "\"explorer.exe\""
+        }
+
+        // Generate achievements.json and populate cache so AchievementWatcher can start
+        if (game.namespace.isNotEmpty() && gameId != null) {
+            val saveDir = EpicAchievementsManager.eosAchievementSaveDir(context, gameId)
+            runBlocking {
+                EpicService.generateAchievementsFile(context, game.namespace, saveDir.absolutePath)
+            }
         }
 
         // Use container's configured executable path if available, otherwise auto-detect and persist
