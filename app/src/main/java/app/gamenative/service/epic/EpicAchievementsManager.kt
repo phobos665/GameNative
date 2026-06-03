@@ -174,10 +174,9 @@ class EpicAchievementsManager @Inject constructor() {
         unlockedNames: Set<String>,
     ): Result<Unit> {
         // Epic achievements are server-authoritative — the EOS SDK reports them to Epic's
-        // backend directly via the game's own EOS credentials. Legendary does not expose
-        // a writable ingest endpoint for third-party clients.  Log for visibility.
+        // backend directly via the game's own EOS credentials.
         Timber.tag(TAG).i(
-            "Epic achievement sync skipped (server-authoritative): " +
+            "Epic achievement sync skipped: " +
                 "${unlockedNames.size} unlocked for namespace=$namespace",
         )
         return Result.success(Unit)
