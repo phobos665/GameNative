@@ -217,7 +217,7 @@ class PhysicalControllerHandler(
             val posKeyCode = ExternalControllerBinding.getKeyCodeForAxis(axes[i], 1.toByte())
             val negKeyCode = ExternalControllerBinding.getKeyCodeForAxis(axes[i], (-1).toByte())
 
-            if (Math.abs(values[i]) > ControlElement.STICK_DEAD_ZONE) {
+            if (Math.abs(values[i]) > (profile?.stickDeadzone ?: ControlElement.STICK_DEAD_ZONE)) {
                 val activeKey = ExternalControllerBinding.getKeyCodeForAxis(axes[i], Mathf.sign(values[i]))
                 val oppositeKey = if (activeKey == posKeyCode) negKeyCode else posKeyCode
 

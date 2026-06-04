@@ -249,7 +249,7 @@ public class InputControlsManager {
             int profileId = 0;
             String profileName = null;
             float cursorSpeed = Float.NaN;
-            int fieldsRead = 0;
+            float stickDeadzone = Float.NaN;
 
             reader.beginObject();
             while (reader.hasNext()) {
@@ -257,25 +257,25 @@ public class InputControlsManager {
 
                 if (name.equals("id")) {
                     profileId = reader.nextInt();
-                    fieldsRead++;
                 }
                 else if (name.equals("name")) {
                     profileName = reader.nextString();
-                    fieldsRead++;
                 }
                 else if (name.equals("cursorSpeed")) {
                     cursorSpeed = (float) reader.nextDouble();
-                    fieldsRead++;
+                }
+                else if (name.equals("stickDeadzone")) {
+                    stickDeadzone = (float) reader.nextDouble();
                 }
                 else {
-                    if (fieldsRead == 3) break;
                     reader.skipValue();
                 }
             }
 
             ControlsProfile profile = new ControlsProfile(context, profileId);
             profile.setName(profileName);
-            profile.setCursorSpeed(cursorSpeed);
+            if (!Float.isNaN(cursorSpeed)) profile.setCursorSpeed(cursorSpeed);
+            if (!Float.isNaN(stickDeadzone)) profile.setStickDeadzone(stickDeadzone);
             return profile;
         }
         catch (IOException e) {

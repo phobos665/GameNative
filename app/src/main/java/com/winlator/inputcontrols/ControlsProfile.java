@@ -22,6 +22,7 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
     public final int id;
     private String name;
     private float cursorSpeed = 1.0f;
+    private float stickDeadzone = 0.15f;
     private final ArrayList<ControlElement> elements = new ArrayList<>();
     private final ArrayList<ExternalController> controllers = new ArrayList<>();
     private final List<ControlElement> immutableElements = Collections.unmodifiableList(elements);
@@ -50,6 +51,14 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
 
     public void setCursorSpeed(float cursorSpeed) {
         this.cursorSpeed = cursorSpeed;
+    }
+
+    public float getStickDeadzone() {
+        return stickDeadzone;
+    }
+
+    public void setStickDeadzone(float stickDeadzone) {
+        this.stickDeadzone = stickDeadzone;
     }
 
     public boolean isVirtualGamepad() {
@@ -133,6 +142,7 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
             data.put("id", id);
             data.put("name", name);
             data.put("cursorSpeed", Float.valueOf(cursorSpeed));
+            data.put("stickDeadzone", Float.valueOf(stickDeadzone));
 
             JSONArray elementsJSONArray = new JSONArray();
             if (!elementsLoaded && file.isFile()) {
