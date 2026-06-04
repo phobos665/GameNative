@@ -280,6 +280,9 @@
     <string name="left_stick">왼쪽 스틱</string>
     <string name="right_stick">오른쪽 스틱</string>
     <string name="dpad_category">십자 버튼</string>
+    <string name="controller_settings_category">설정</string>
+    <string name="stick_deadzone">스틱 데드존</string>
+    <string name="stick_deadzone_subtitle">입력이 인식되기 위한 스틱의 최소 이동량</string>
     <string name="dpad_up">십자 버튼 위</string>
     <string name="dpad_down">십자 버튼 아래</string>
     <string name="dpad_left">십자 버튼 왼쪽</string>

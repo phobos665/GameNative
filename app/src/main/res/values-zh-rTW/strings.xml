@@ -265,6 +265,9 @@
     <string name="left_stick">左搖桿</string>
     <string name="right_stick">右搖桿</string>
     <string name="dpad_category">方向鍵</string>
+    <string name="controller_settings_category">設定</string>
+    <string name="stick_deadzone">搖桿死區</string>
+    <string name="stick_deadzone_subtitle">輸入被識別前搖桿所需的最小移動量</string>
     <string name="dpad_up">方向鍵 上</string>
     <string name="dpad_down">方向鍵 下</string>
     <string name="dpad_left">方向鍵 左</string>

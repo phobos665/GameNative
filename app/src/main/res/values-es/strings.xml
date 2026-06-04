@@ -282,6 +282,9 @@
     <string name="left_stick">Stick izquierdo</string>
     <string name="right_stick">Stick derecho</string>
     <string name="dpad_category">Cruceta</string>
+    <string name="controller_settings_category">Ajustes</string>
+    <string name="stick_deadzone">Zona muerta del analógico</string>
+    <string name="stick_deadzone_subtitle">Movimiento mínimo del analógico para registrar entrada</string>
     <string name="dpad_up">Cruceta arriba</string>
     <string name="dpad_down">Cruceta abajo</string>
     <string name="dpad_left">Cruceta izquierda</string>

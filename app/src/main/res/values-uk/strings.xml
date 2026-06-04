@@ -266,6 +266,9 @@
     <string name="left_stick">Лівий стік</string>
     <string name="right_stick">Правий стік</string>
     <string name="dpad_category">D-Pad</string>
+    <string name="controller_settings_category">Налаштування</string>
+    <string name="stick_deadzone">Мертва зона стіка</string>
+    <string name="stick_deadzone_subtitle">Мінімальний рух стіка для реєстрації введення</string>
     <string name="dpad_up">D-Pad вгору</string>
     <string name="dpad_down">D-Pad вниз</string>
     <string name="dpad_left">D-Pad вліво</string>

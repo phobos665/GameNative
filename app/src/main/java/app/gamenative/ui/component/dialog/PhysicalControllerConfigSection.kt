@@ -23,6 +23,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.gamenative.R
 import com.winlator.inputcontrols.Binding
+import com.winlator.inputcontrols.ControlElement
 import com.winlator.inputcontrols.ControlsProfile
 import com.winlator.inputcontrols.ExternalControllerBinding
 
@@ -116,9 +117,12 @@ internal fun PhysicalControllerConfigSection(
         }
     }
 
-    var selectedCategory by remember { mutableStateOf(0) } // 0 = Face, 1 = Shoulder, 2 = Menu, 3 = Thumbstick, 4 = Left Stick, 5 = Right Stick, 6 = D-Pad
+    var selectedCategory by remember { mutableStateOf(0) } // 0 = Face, 1 = Shoulder, 2 = Menu, 3 = Thumbstick, 4 = Left Stick, 5 = Right Stick, 6 = D-Pad, 7 = Deadzone
     var showBindingDialog by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
+
+    val originalDeadzone = remember { profile.stickDeadzone }
+    var workingDeadzone by remember { mutableFloatStateOf(profile.stickDeadzone) }
 
     // Pre-compute all button configurations
     // Face buttons
@@ -190,7 +194,7 @@ internal fun PhysicalControllerConfigSection(
 
     Dialog(
         onDismissRequest = {
-            // Cancel: Restore original bindings
+            // Cancel: Restore original bindings and deadzone
             controller?.let { ctrl ->
                 val existingBindings = ctrl.getControllerBindings().toList()
                 for (binding in existingBindings) {
@@ -203,6 +207,7 @@ internal fun PhysicalControllerConfigSection(
                     ctrl.addControllerBinding(newBinding)
                 }
             }
+            profile.stickDeadzone = originalDeadzone
             onDismiss()
         },
         properties = DialogProperties(
@@ -224,7 +229,7 @@ internal fun PhysicalControllerConfigSection(
                     },
                     navigationIcon = {
                         IconButton(onClick = {
-                            // Cancel: Restore original bindings
+                            // Cancel: Restore original bindings and deadzone
                             controller?.let { ctrl ->
                                 val existingBindings = ctrl.getControllerBindings().toList()
                                 for (binding in existingBindings) {
@@ -237,6 +242,7 @@ internal fun PhysicalControllerConfigSection(
                                     ctrl.addControllerBinding(newBinding)
                                 }
                             }
+                            profile.stickDeadzone = originalDeadzone
                             onDismiss()
                         }) {
                             Icon(Icons.Default.Close, null)
@@ -264,6 +270,8 @@ internal fun PhysicalControllerConfigSection(
                             workingBindings[KeyEvent.KEYCODE_BUTTON_MODE] = com.winlator.inputcontrols.Binding.OPEN_NAVIGATION_MENU
                             Log.d("gncontrol", "Set Home button (KEYCODE_BUTTON_MODE) to OPEN_NAVIGATION_MENU")
 
+                            workingDeadzone = ControlElement.STICK_DEAD_ZONE
+
                             refreshKey++
                         }) {
                             Icon(Icons.Default.Refresh, null)
@@ -272,6 +280,7 @@ internal fun PhysicalControllerConfigSection(
                         // Save button
                         IconButton(onClick = {
                             Log.d("gncontrol", "=== Save: Applying ${workingBindings.size} bindings ===")
+                            profile.stickDeadzone = workingDeadzone
                             controller?.let { ctrl ->
                                 val existingBindings = ctrl.getControllerBindings().toList()
                                 for (binding in existingBindings) {
@@ -379,6 +388,13 @@ internal fun PhysicalControllerConfigSection(
                             label = stringResource(R.string.dpad_category),
                             isSelected = selectedCategory == 6,
                             onClick = { selectedCategory = 6 }
+                        )
+
+                        // Deadzone category
+                        CategoryButton(
+                            label = stringResource(R.string.controller_settings_category),
+                            isSelected = selectedCategory == 7,
+                            onClick = { selectedCategory = 7 }
                         )
                         }
                     }
@@ -521,6 +537,42 @@ internal fun PhysicalControllerConfigSection(
                                                 showBindingDialog = Pair(buttonConfig.keyCode, buttonConfig.label)
                                             }
                                         )
+                                    }
+                                }
+                                7 -> {
+                                    // Deadzones
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = stringResource(R.string.stick_deadzone),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Text(
+                                                text = stringResource(R.string.stick_deadzone_subtitle),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Slider(
+                                                value = workingDeadzone,
+                                                onValueChange = { workingDeadzone = it },
+                                                valueRange = 0.05f..0.50f,
+                                                steps = 44
+                                            )
+                                            Text(
+                                                text = String.format(java.util.Locale.US, "%.2f", workingDeadzone),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                             }

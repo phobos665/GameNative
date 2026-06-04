@@ -269,6 +269,9 @@
     <string name="left_stick">Stick stânga</string>
     <string name="right_stick">Stick dreapta</string>
     <string name="dpad_category">D‑Pad</string>
+    <string name="controller_settings_category">Setări</string>
+    <string name="stick_deadzone">Zonă moartă stick</string>
+    <string name="stick_deadzone_subtitle">Mișcare minimă a stick-ului înainte de a înregistra o intrare</string>
     <string name="dpad_up">D‑Pad Sus</string>
     <string name="dpad_down">D‑Pad Jos</string>
     <string name="dpad_left">D‑Pad Stânga</string>

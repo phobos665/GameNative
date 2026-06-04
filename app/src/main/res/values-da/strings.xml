@@ -197,6 +197,9 @@
     <string name="left_stick">Venstre stick</string>
     <string name="right_stick">Højre stick</string>
     <string name="dpad_category">D-Pad</string>
+    <string name="controller_settings_category">Indstillinger</string>
+    <string name="stick_deadzone">Stick dødzone</string>
+    <string name="stick_deadzone_subtitle">Mindste stickbevægelse der kræves for at registrere input</string>
     <string name="dpad_up">D-Pad op</string>
     <string name="dpad_down">D-Pad ned</string>
     <string name="dpad_left">D-Pad venstre</string>

@@ -229,6 +229,9 @@
     <string name="left_stick">Left Stick</string>
     <string name="right_stick">Right Stick</string>
     <string name="dpad_category">D-Pad</string>
+    <string name="controller_settings_category">Settings</string>
+    <string name="stick_deadzone">Stick Deadzone</string>
+    <string name="stick_deadzone_subtitle">Minimum stick movement before input is registered</string>
     <string name="dpad_up">D-Pad Up</string>
     <string name="dpad_down">D-Pad Down</string>
     <string name="dpad_left">D-Pad Left</string>

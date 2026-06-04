@@ -271,6 +271,9 @@
     <string name="left_stick">Levetta Sinistra</string>
     <string name="right_stick">Levetta Destra</string>
     <string name="dpad_category">D-Pad</string>
+    <string name="controller_settings_category">Impostazioni</string>
+    <string name="stick_deadzone">Zona morta dello stick</string>
+    <string name="stick_deadzone_subtitle">Movimento minimo dello stick prima che l'input venga registrato</string>
     <string name="dpad_up">D-Pad Su</string>
     <string name="dpad_down">D-Pad Giù</string>
     <string name="dpad_left">D-Pad Sinistra</string>

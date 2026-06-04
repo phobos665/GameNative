@@ -197,6 +197,9 @@
     <string name="left_stick">Analógico Esquerdo</string>
     <string name="right_stick">Analógico Direito</string>
     <string name="dpad_category">D-Pad</string>
+    <string name="controller_settings_category">Configurações</string>
+    <string name="stick_deadzone">Zona morta do analógico</string>
+    <string name="stick_deadzone_subtitle">Movimento mínimo do analógico antes do input ser registrado</string>
     <string name="dpad_up">D-Pad Cima</string>
     <string name="dpad_down">D-Pad Baixo</string>
     <string name="dpad_left">D-Pad Esquerda</string>

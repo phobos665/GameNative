@@ -228,6 +228,9 @@
     <string name="left_stick">左スティック</string>
     <string name="right_stick">右スティック</string>
     <string name="dpad_category">十字キー</string>
+    <string name="controller_settings_category">設定</string>
+    <string name="stick_deadzone">スティックのデッドゾーン</string>
+    <string name="stick_deadzone_subtitle">入力が認識されるスティックの最小移動量</string>
     <string name="dpad_up">十字キー上</string>
     <string name="dpad_down">十字キー下</string>
     <string name="dpad_left">十字キー左</string>

@@ -319,6 +319,9 @@
     <string name="download_prompt_title">Установить приложение</string>
     <string name="downloading">Загрузка...</string>
     <string name="dpad_category">D-Pad</string>
+    <string name="controller_settings_category">Настройки</string>
+    <string name="stick_deadzone">Мёртвая зона стика</string>
+    <string name="stick_deadzone_subtitle">Минимальное движение стика для регистрации ввода</string>
     <string name="dpad_down">D-Pad вниз</string>
     <string name="dpad_left">D-Pad влево</string>
     <string name="dpad_right">D-Pad вправо</string>

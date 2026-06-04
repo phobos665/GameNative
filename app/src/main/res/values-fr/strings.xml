@@ -267,6 +267,9 @@
     <string name="left_stick">Joystick gauche</string>
     <string name="right_stick">Joystick droit</string>
     <string name="dpad_category">Croix directionnelle</string>
+    <string name="controller_settings_category">Paramètres</string>
+    <string name="stick_deadzone">Zone morte du stick</string>
+    <string name="stick_deadzone_subtitle">Mouvement minimal du stick avant l'enregistrement de l'entrée</string>
     <string name="dpad_up">D-Pad Haut</string>
     <string name="dpad_down">D-Pad Bas</string>
     <string name="dpad_left">D-Pad Gauche</string>

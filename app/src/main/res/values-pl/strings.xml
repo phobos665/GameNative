@@ -279,6 +279,9 @@
     <string name="left_stick">Lewy drążek</string>
     <string name="right_stick">Prawy drążek</string>
     <string name="dpad_category">D-Pad</string>
+    <string name="controller_settings_category">Ustawienia</string>
+    <string name="stick_deadzone">Martwa strefa drążka</string>
+    <string name="stick_deadzone_subtitle">Minimalne wychylenie drążka wymagane do rejestracji wejścia</string>
     <string name="dpad_up">D-Pad Góra</string>
     <string name="dpad_down">D-Pad Dół</string>
     <string name="dpad_left">D-Pad Lewo</string>

@@ -260,6 +260,9 @@
     <string name="left_stick">Linker Stick</string>
     <string name="right_stick">Rechter Stick</string>
     <string name="dpad_category">D-Pad</string>
+    <string name="controller_settings_category">Einstellungen</string>
+    <string name="stick_deadzone">Stick-Totzone</string>
+    <string name="stick_deadzone_subtitle">Mindestbewegung des Sticks, bevor eine Eingabe erkannt wird</string>
     <string name="dpad_up">D-Pad hoch</string>
     <string name="dpad_down">D-Pad runter</string>
     <string name="dpad_left">D-Pad links</string>
