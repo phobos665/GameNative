@@ -3154,6 +3154,7 @@ private fun setupXEnvironment(
                 guestProgramLauncherComponent.setSteamAppId(numericAppId.toString())
             }
         }
+
         gameExecutable = "wine explorer /desktop=shell," + xServer.screenInfo + " " +
             getWineStartCommand(context, appId, container, bootToContainer, testGraphics, appLaunchInfo, envVars, guestProgramLauncherComponent, gameSource, offline) +
             (if (container.execArgs.isNotEmpty()) " " + container.execArgs else "")
@@ -3447,36 +3448,6 @@ private fun setupXEnvironment(
                 },
             ).also { it.start() }
         }
-    } else if (gameSource == GameSource.EPIC) {
-        val gameIdInt = ContainerUtils.extractGameIdFromContainerId(appId)
-        if (gameIdInt != null) {
-            val cachedAchievements = EpicService.cachedAchievements
-            val namespace = EpicService.cachedAchievementsNamespace
-            if (cachedAchievements != null && namespace != null) {
-                val watchDirs = EpicService.getEosAchievementSaveDirs(context, gameIdInt)
-                val displayNameMap = cachedAchievements.associate { it.name to it.displayName }
-                val iconUrlMap = cachedAchievements.associate { it.name to it.iconUrl }
-                PluviaApp.achievementWatcher = AchievementWatcher(
-                    appId = gameIdInt,
-                    watchDirs = watchDirs,
-                    displayNameMap = displayNameMap,
-                    iconUrlMap = iconUrlMap,
-                    onUpload = { unlockedNames, _ ->
-                        val accountId = EpicService.getAccountId()
-                        if (accountId == null) {
-                            Timber.tag("achievements").w("No Epic account ID, skipping upload for appId=$gameIdInt")
-                            return@AchievementWatcher
-                        }
-                        EpicService.uploadAchievementUnlocks(context, namespace, accountId, unlockedNames)
-                            .onFailure { e ->
-                                Timber.tag("achievements").e(e, "Epic upload failed for appId=$gameIdInt")
-                            }
-                    },
-                ).also { it.start() }
-            } else {
-                Timber.tag("achievements").d("No cached Epic achievements for appId=$gameIdInt, watcher not started")
-            }
-        }
     }
 
     // put in separate scope since winhandler start method does some network stuff
@@ -3569,12 +3540,42 @@ private fun getWineStartCommand(
             return "\"explorer.exe\""
         }
 
-        // Generate achievements.json and populate cache so AchievementWatcher can start
+        // Generate achievements.json (used for initial unlock state snapshot) and
+        // write the achievement server port so the hook DLL can connect at startup.
         if (game.namespace.isNotEmpty() && gameId != null) {
             val saveDir = EpicAchievementsManager.eosAchievementSaveDir(context, gameId)
             runBlocking {
                 EpicService.generateAchievementsFile(context, game.namespace, saveDir.absolutePath)
             }
+        }
+        // generateAchievementsFile populates EpicService.cachedAchievements — start the
+        // achievement server now so the port is available to write to the port file below.
+        if (PluviaApp.epicAchievementServer == null) {
+            val cachedAchievements = EpicService.cachedAchievements
+            if (cachedAchievements != null && gameId != null) {
+                val displayNameMap = cachedAchievements.associate { it.name to it.displayName }
+                val iconUrlMap = cachedAchievements.associate { it.name to it.iconUrl }
+                val server = app.gamenative.service.epic.EpicAchievementServer(
+                    displayNameMap = displayNameMap,
+                    iconUrlMap = iconUrlMap,
+                )
+                runBlocking { server.start() }
+                PluviaApp.epicAchievementServer = server
+                Timber.tag("achievements").d(
+                    "EpicAchievementServer started on port ${server.port} for appId=$gameId",
+                )
+            } else {
+                Timber.tag("achievements").d("No cached Epic achievements for appId=$gameId, server not started")
+            }
+        }
+        val achievementPort = PluviaApp.epicAchievementServer?.port ?: -1
+        if (achievementPort > 0) {
+            // Written to a path the hook DLL can read as a Windows path:
+            //   C:\windows\temp\eos_ach_port.txt
+            val portFile = File(container.getRootDir(), ".wine/drive_c/windows/temp/eos_ach_port.txt")
+            portFile.parentFile?.mkdirs()
+            portFile.writeText(achievementPort.toString(), Charsets.UTF_8)
+            Timber.tag("XServerScreen").d("Wrote EOS achievement port $achievementPort to ${portFile.absolutePath}")
         }
 
         // Use container's configured executable path if available, otherwise auto-detect and persist
