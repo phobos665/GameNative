@@ -2,6 +2,11 @@ package app.gamenative.service.gog
 
 import android.content.Context
 import app.gamenative.data.GOGGame
+import app.gamenative.ui.data.Achievement
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -9,7 +14,6 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
-import java.util.concurrent.TimeUnit
 
 /**
  * Parsed/Formartted details returned by GOGApiClient.
@@ -30,6 +34,11 @@ data class ParsedGogGame(
     val downloadSize: Long,
     val isSecret: Boolean,
     val isDlc: Boolean
+)
+
+data class GOGGameAuthData(
+    val clientId: String,
+    val clientSecret: String,
 )
 
 /**
@@ -244,23 +253,143 @@ object GOGApiClient {
         }
     }
 
-        /**
-     * Fetch client secret from GOG build metadata API
+    // Fetch game OAuth metadata from GOG build metadata API.
+    suspend fun getGameAuthData(context: Context, gameId: String, installPath: String?): GOGGameAuthData? = withContext(Dispatchers.IO) {
+        val manifestJson = fetchBuildManifest(context, gameId, installPath, "[Achievements]")
+            ?: return@withContext null
+
+        val clientId = manifestJson.optString("clientId", "")
+        if (clientId.isEmpty()) {
+            Timber.tag("GOGAchievements").w("No clientId in manifest for game $gameId")
+            return@withContext null
+        }
+
+        val clientSecret = manifestJson.optString("clientSecret", "")
+        if (clientSecret.isEmpty()) {
+            Timber.tag("GOGAchievements").w("No clientSecret in manifest for game $gameId")
+            return@withContext null
+        }
+
+        Timber.tag("GOGAchievements").d("Successfully retrieved game OAuth metadata for game $gameId")
+        return@withContext GOGGameAuthData(clientId, clientSecret)
+    }
+
+    /**
+     * Fetch client secret from GOG build metadata API.
      * @param gameId GOG game ID
      * @param installPath Game install path (for platform detection, defaults to "windows")
      * @return Client secret string, or null if not found
      */
     suspend fun getClientSecret(context: Context, gameId: String, installPath: String?): String? = withContext(Dispatchers.IO) {
+        val manifestJson = fetchBuildManifest(context, gameId, installPath, "[Cloud Saves]")
+            ?: return@withContext null
+
+        val clientSecret = manifestJson.optString("clientSecret", "")
+        if (clientSecret.isEmpty()) {
+            Timber.tag("GOG").w("[Cloud Saves] No clientSecret in manifest for game $gameId")
+            return@withContext null
+        }
+
+        Timber.tag("GOG").d("[Cloud Saves] Successfully retrieved clientSecret for game $gameId")
+        return@withContext clientSecret
+    }
+
+    suspend fun getAchievements(
+        context: Context,
+        clientId: String,
+        clientSecret: String,
+    ): Result<List<Achievement>> = withContext(Dispatchers.IO) {
+        try {
+            val credentialsResult = GOGAuthManager.getGameCredentials(context, clientId, clientSecret)
+            if (credentialsResult.isFailure) {
+                val error = credentialsResult.exceptionOrNull()
+                Timber.tag("GOGAchievements").e(error, "[Achievements] Cannot fetch achievements: game credentials unavailable")
+                return@withContext Result.failure(error ?: Exception("Game credentials unavailable"))
+            }
+
+            val credentials = credentialsResult.getOrNull()
+            if (credentials == null || credentials.accessToken.isEmpty() || credentials.userId.isEmpty()) {
+                Timber.tag("GOGAchievements").w("Missing game access token or user ID")
+                return@withContext Result.failure(Exception("Invalid game credentials"))
+            }
+
+            val url = "https://gameplay.gog.com/clients/$clientId/users/${credentials.userId}/achievements"
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer ${credentials.accessToken}")
+                .addHeader("Accept", "application/json")
+                .addHeader("User-Agent", "GameNative/1.0")
+                .addHeader("X-Gog-Lc", Locale.getDefault().toLanguageTag())
+                .get()
+                .build()
+
+            Timber.tag("GOGAchievements").d("Fetching achievements for clientId=$clientId userId=${credentials.userId}")
+
+            httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val errorBody = response.body?.string() ?: "Unknown error"
+                    Timber.tag("GOG").w("Fetch failed: HTTP ${response.code} - $errorBody")
+                    return@withContext Result.failure(Exception("Failed to fetch GOG achievements: HTTP ${response.code}"))
+                }
+
+                val responseBody = response.body?.string().orEmpty()
+                if (responseBody.isBlank()) {
+                    Timber.tag("GOG").w("Empty achievements response")
+                    return@withContext Result.success(emptyList())
+                }
+
+                val json = JSONObject(responseBody)
+                val items = json.optJSONArray("items") ?: JSONArray()
+                val achievementsMode = json.optString("achievements_mode", "")
+                val achievements = mutableListOf<Achievement>()
+
+                for (i in 0 until items.length()) {
+                    val item = items.optJSONObject(i) ?: continue
+                    val dateUnlocked = item.optString("date_unlocked", "")
+                        .takeIf { it.isNotBlank() && it != "null" }
+                    val unlockedIcon = item.optString("image_url_unlocked", "")
+                    val lockedIcon = item.optString("image_url_locked", "")
+                    val fallbackName = item.optString("achievement_key", item.optString("achievement_id", ""))
+
+                    achievements.add(
+                        Achievement(
+                            displayName = item.optString("name", fallbackName),
+                            name = fallbackName,
+                            isUnlocked = dateUnlocked != null,
+                            description = item.optString("description", ""),
+                            unlockTimestamp = parseGogAchievementTimestamp(dateUnlocked),
+                            hidden = !item.optBoolean("visible", true),
+                            icon = unlockedIcon.ifEmpty { lockedIcon },
+                            iconGray = lockedIcon.ifEmpty { null },
+                        ),
+                    )
+                }
+
+                Timber.tag("GOGAchievements").i(
+                    "Fetched ${achievements.size} achievements for clientId=$clientId mode=$achievementsMode",
+                )
+                return@withContext Result.success(achievements)
+            }
+        } catch (e: Exception) {
+            Timber.tag("GOGAchievements").e(e, "Failed to fetch achievements")
+            return@withContext Result.failure(e)
+        }
+    }
+
+    private suspend fun fetchBuildManifest(
+        context: Context,
+        gameId: String
+    ): JSONObject? = withContext(Dispatchers.IO) {
         try {
             val platform = "windows" // For now, assume Windows (proton)
             val buildsUrl = "https://content-system.gog.com/products/$gameId/os/$platform/builds?generation=2"
 
-            Timber.tag("GOG").d("[Cloud Saves] Fetching build metadata from: $buildsUrl")
+            Timber.tag("GOG").d("Fetching build metadata from: $buildsUrl")
 
             // Get credentials for API authentication
             val credentials = GOGAuthManager.getStoredCredentials(context).getOrNull()
             if (credentials == null) {
-                Timber.tag("GOG").w("[Cloud Saves] No credentials available for build metadata fetch")
+                Timber.tag("GOG").w(" No credentials available for build metadata fetch")
                 return@withContext null
             }
 
@@ -272,7 +401,7 @@ object GOGApiClient {
             // Fetch the builds list and extract manifest link
             val manifestLink = httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    Timber.tag("GOG").w("[Cloud Saves] Build metadata fetch failed: ${response.code}")
+                    Timber.tag("GOG").w("Build metadata fetch failed: ${response.code}")
                     return@withContext null
                 }
 
@@ -282,18 +411,18 @@ object GOGApiClient {
                 // Get first build
                 val items = buildsJson.optJSONArray("items")
                 if (items == null || items.length() == 0) {
-                    Timber.tag("GOG").w("[Cloud Saves] No builds found for game $gameId")
+                    Timber.tag("GOG").w("No builds found for game $gameId")
                     return@withContext null
                 }
 
                 val firstBuild = items.getJSONObject(0)
                 val link = firstBuild.optString("link", "")
                 if (link.isEmpty()) {
-                    Timber.tag("GOG").w("[Cloud Saves] No manifest link in first build")
+                    Timber.tag("GOG").w("No manifest link in first build")
                     return@withContext null
                 }
 
-                Timber.tag("GOG").d("[Cloud Saves] Fetching build manifest from: $link")
+                Timber.tag("GOG").d("Fetching build manifest from: $link")
                 link
             }
 
@@ -305,14 +434,14 @@ object GOGApiClient {
 
             httpClient.newCall(manifestRequest).execute().use { manifestResponse ->
                 if (!manifestResponse.isSuccessful) {
-                    Timber.tag("GOG").w("[Cloud Saves] Manifest fetch failed: ${manifestResponse.code}")
+                    Timber.tag("GOG").w("Manifest fetch failed: ${manifestResponse.code}")
                     return@withContext null
                 }
 
                 // Log response headers to debug compression
                 val contentEncoding = manifestResponse.header("Content-Encoding")
                 val contentType = manifestResponse.header("Content-Type")
-                Timber.tag("GOG").d("[Cloud Saves] Response headers - Content-Encoding: $contentEncoding, Content-Type: $contentType")
+                Timber.tag("GOG").d("Response headers - Content-Encoding: $contentEncoding, Content-Type: $contentType")
 
                 // Read the response bytes (can only read body once)
                 val manifestBytes = manifestResponse.body?.bytes() ?: return@withContext null
@@ -328,60 +457,65 @@ object GOGApiClient {
                               manifestBytes[1] == 0xda.toByte() ||
                               manifestBytes[1] == 0x01.toByte())
 
-                Timber.tag("GOG").d("[Cloud Saves] Manifest bytes: ${manifestBytes.size}, isGzipped: $isGzipped, isZlib: $isZlib")
+                Timber.tag("GOG").d("Manifest bytes: ${manifestBytes.size}, isGzipped: $isGzipped, isZlib: $isZlib")
 
                 // Decompress based on detected format
                 val manifestStr = when {
                     isGzipped -> {
                         try {
-                            Timber.tag("GOG").d("[Cloud Saves] Decompressing gzip manifest")
+                            Timber.tag("GOG").d("Decompressing gzip manifest")
                             val gzipStream = java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(manifestBytes))
                             gzipStream.bufferedReader().use { it.readText() }
                         } catch (e: Exception) {
-                            Timber.tag("GOG").e(e, "[Cloud Saves] Gzip decompression failed")
+                            Timber.tag("GOG").e(e, "Gzip decompression failed")
                             return@withContext null
                         }
                     }
                     isZlib -> {
                         try {
-                            Timber.tag("GOG").d("[Cloud Saves] Decompressing zlib manifest")
+                            Timber.tag("GOG").d("Decompressing zlib manifest")
                             val inflaterStream = java.util.zip.InflaterInputStream(java.io.ByteArrayInputStream(manifestBytes))
                             inflaterStream.bufferedReader().use { it.readText() }
                         } catch (e: Exception) {
-                            Timber.tag("GOG").e(e, "[Cloud Saves] Zlib decompression failed")
+                            Timber.tag("GOG").e(e, "Zlib decompression failed")
                             return@withContext null
                         }
                     }
                     else -> {
                         // Not compressed, read as plain text
-                        Timber.tag("GOG").d("[Cloud Saves] Not compressed, reading as UTF-8")
+                        Timber.tag("GOG").d("Not compressed, reading as UTF-8")
                         String(manifestBytes, Charsets.UTF_8)
                     }
                 }
 
                 if (manifestStr.isEmpty()) {
-                    Timber.tag("GOG").w("[Cloud Saves] Empty manifest response")
+                    Timber.tag("GOG").w("Empty manifest response")
                     return@withContext null
                 }
 
-                Timber.tag("GOG").d("[Cloud Saves] Parsing manifest JSON (${manifestStr.take(100)}...)")
-                val manifestJson = JSONObject(manifestStr)
-
-                // Extract clientSecret from manifest
-                val clientSecret = manifestJson.optString("clientSecret", "")
-                if (clientSecret.isEmpty()) {
-                    Timber.tag("GOG").w("[Cloud Saves] No clientSecret in manifest for game $gameId")
-                    return@withContext null
-                }
-
-                Timber.tag("GOG").d("[Cloud Saves] Successfully retrieved clientSecret for game $gameId")
-                return@withContext clientSecret
+                Timber.tag("GOG").d("Parsing manifest JSON (${manifestStr.take(100)}...)")
+                return@withContext JSONObject(manifestStr)
             }
 
         } catch (e: Exception) {
-            Timber.tag("GOG").e(e, "[Cloud Saves] Failed to get clientSecret for game $gameId")
+            Timber.tag("GOG").e(e, "Failed to get build manifest for game $gameId")
             return@withContext null
         }
+    }
+
+    private fun parseGogAchievementTimestamp(dateUnlocked: String?): Int {
+        if (dateUnlocked.isNullOrBlank()) return 0
+
+        val normalized = dateUnlocked.replace(
+            Regex("([+-]\\d{2})(\\d{2})$"),
+            "${'$'}1:${'$'}2",
+        )
+
+        return runCatching {
+            OffsetDateTime.parse(normalized).toInstant().epochSecond.toInt()
+        }.recoverCatching {
+            Instant.parse(normalized).epochSecond.toInt()
+        }.getOrDefault(0)
     }
 
     /**

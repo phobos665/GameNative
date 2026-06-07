@@ -5,15 +5,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import app.gamenative.PluviaApp
 import app.gamenative.data.DownloadInfo
 import app.gamenative.data.GOGCredentials
 import app.gamenative.data.GOGGame
 import app.gamenative.data.LaunchInfo
 import app.gamenative.data.LibraryItem
 import app.gamenative.events.AndroidEvent
-import app.gamenative.PluviaApp
-import app.gamenative.ui.util.SnackbarManager
 import app.gamenative.service.NotificationHelper
+import app.gamenative.ui.data.Achievement
+import app.gamenative.ui.util.SnackbarManager
 import app.gamenative.utils.ContainerUtils
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
@@ -335,6 +336,19 @@ class GOGService : Service() {
             return getInstance()?.gogManager?.refreshLibrary(context)
                 ?: Result.failure(Exception("Service not available"))
         }
+
+        suspend fun fetchAchievementsForDisplay(
+            context: Context,
+            gameId: Int,
+            isInstalled: Boolean,
+        ): List<Achievement>? {
+            return getInstance()?.gogManager?.fetchAchievementsForDisplay(
+                context = context,
+                gameId = gameId.toString(),
+                isInstalled = isInstalled,
+            )
+        }
+
 
         fun downloadGame(context: Context, gameId: String, installPath: String, containerLanguage: String): Result<DownloadInfo?> {
             val instance = getInstance() ?: return Result.failure(Exception("Service not available"))

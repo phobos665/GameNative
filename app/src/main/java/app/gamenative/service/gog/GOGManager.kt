@@ -11,13 +11,14 @@ import app.gamenative.data.LibraryItem
 import app.gamenative.db.dao.GOGGameDao
 import app.gamenative.enums.Marker
 import app.gamenative.enums.PathType
+import app.gamenative.ui.data.Achievement
 import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.FileUtils
 import app.gamenative.utils.MarkerUtils
 import app.gamenative.utils.Net
 import com.winlator.container.Container
-import com.winlator.core.envvars.EnvVars
 import com.winlator.core.FileUtils as WinlatorFileUtils
+import com.winlator.core.envvars.EnvVars
 import com.winlator.xenvironment.components.GuestProgramLauncherComponent
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -907,6 +908,66 @@ class GOGManager @Inject constructor(
             Timber.e(e, "Failed to read info file for appId $appId")
             return@withContext null
         }
+    }
+
+    suspend fun fetchAchievementsForDisplay(
+        context: Context,
+        gameId: String,
+        isInstalled: Boolean,
+    ): List<Achievement>? = withContext(Dispatchers.IO) {
+        try {
+            Timber.tag("GOG").d("[Achievements] Resolving achievements auth data for game $gameId (isInstalled=$isInstalled)")
+
+            val game = getGameFromDbById(gameId)
+            val installPath = game?.installPath?.takeIf { it.isNotBlank() }
+            val authData = resolveAchievementsAuthData(context, gameId, installPath, isInstalled)
+
+            if (authData == null) {
+                Timber.tag("GOG").w("[Achievements] Could not resolve client credentials for game $gameId")
+                return@withContext null
+            }
+
+            val result = GOGApiClient.getAchievements(
+                context = context,
+                clientId = authData.clientId,
+                clientSecret = authData.clientSecret,
+            )
+
+            if (result.isFailure) {
+                Timber.tag("GOG").w(result.exceptionOrNull(), "[Achievements] Failed to fetch achievements for game $gameId")
+                return@withContext null
+            }
+
+            return@withContext result.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("GOG").e(e, "[Achievements] Failed to load achievements for game $gameId")
+            return@withContext null
+        }
+    }
+
+    private suspend fun resolveAchievementsAuthData(
+        context: Context,
+        gameId: String,
+        installPath: String?,
+        isInstalled: Boolean,
+    ): GOGGameAuthData? {
+        if (isInstalled) {
+            val appId = "${GameSource.GOG.name}_$gameId"
+            val infoClientId = readInfoFile(appId, installPath)
+                ?.optString("clientId", "")
+                ?.takeIf { it.isNotBlank() }
+
+            if (infoClientId != null) {
+                val clientSecret = GOGApiClient.getClientSecret(context, gameId, installPath)
+                if (!clientSecret.isNullOrBlank()) {
+                    return GOGGameAuthData(infoClientId, clientSecret)
+                }
+            } else {
+                Timber.tag("GOG").d("[Achievements] No installed info clientId for game $gameId; falling back to build metadata")
+            }
+        }
+
+        return GOGApiClient.getGameAuthData(context, gameId, installPath)
     }
 
     /**

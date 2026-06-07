@@ -43,6 +43,8 @@ import app.gamenative.utils.GameCompatibilityCache
 import app.gamenative.utils.GameCompatibilityService
 import app.gamenative.utils.ManifestInstaller
 import app.gamenative.utils.createPinnedShortcut
+import app.gamenative.service.gog.GOGService
+import app.gamenative.service.epic.EpicService
 import kotlinx.coroutines.CancellationException
 import com.winlator.container.ContainerData
 import com.winlator.core.GPUInformation
@@ -927,8 +929,8 @@ abstract class BaseAppScreen {
         }
 
         // Achievements Fetching
-        LaunchedEffect(libraryItem.gameId) {
-            when(libraryItem.gameSource){
+        LaunchedEffect(libraryItem.gameId, libraryItem.gameSource, isInstalledState) {
+            when (libraryItem.gameSource) {
                 GameSource.STEAM -> {
                     try {
                         achievementsState = withContext(Dispatchers.IO) {
@@ -950,8 +952,7 @@ abstract class BaseAppScreen {
                         val namespace = game?.namespace?.takeIf { it.isNotEmpty() }
                         if (namespace != null) {
                             achievementsState = withContext(Dispatchers.IO) {
-                                app.gamenative.service.epic.EpicService
-                                    .fetchAchievementsForDisplay(context, namespace)
+                                EpicService.fetchAchievementsForDisplay(context, namespace)
                             }
                         } else {
                             Timber.tag("BaseAppScreen")
@@ -964,9 +965,20 @@ abstract class BaseAppScreen {
                         achievementsState = null
                     }
                 }
-                GameSource.GOG -> { } // Add later with GOG achievements
-                GameSource.AMAZON -> { }
-                GameSource.CUSTOM_GAME -> { }
+                GameSource.GOG -> {
+                    try {
+                        achievementsState = withContext(Dispatchers.IO) {
+                            GOGService.fetchAchievementsForDisplay(context,libraryItem.gameId, isInstalledState)
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to fetch GOG achievements for gameId=${libraryItem.gameId}: ${e.message}")
+                        achievementsState = null
+                    }
+                }
+                GameSource.AMAZON -> { } // No achievements
+                GameSource.CUSTOM_GAME -> { } // No achievements
             }
         }
 
