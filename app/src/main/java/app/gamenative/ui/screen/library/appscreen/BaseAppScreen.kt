@@ -941,7 +941,29 @@ abstract class BaseAppScreen {
                         achievementsState = null
                     }
                 }
-                GameSource.EPIC -> { } // Add later with Epic achievements
+                GameSource.EPIC -> {
+                    try {
+                        val game = withContext(Dispatchers.IO) {
+                            app.gamenative.service.epic.EpicService.getInstance()
+                                ?.epicManager?.getGameById(libraryItem.gameId)
+                        }
+                        val namespace = game?.namespace?.takeIf { it.isNotEmpty() }
+                        if (namespace != null) {
+                            achievementsState = withContext(Dispatchers.IO) {
+                                app.gamenative.service.epic.EpicService
+                                    .fetchAchievementsForDisplay(context, namespace)
+                            }
+                        } else {
+                            Timber.tag("BaseAppScreen")
+                                .d("No namespace for Epic gameId=${libraryItem.gameId}, skipping achievements fetch")
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to fetch Epic achievements for gameId=${libraryItem.gameId}: ${e.message}")
+                        achievementsState = null
+                    }
+                }
                 GameSource.GOG -> { } // Add later with GOG achievements
                 GameSource.AMAZON -> { }
                 GameSource.CUSTOM_GAME -> { }

@@ -92,6 +92,7 @@ import app.gamenative.externaldisplay.ExternalDisplaySwapController
 import app.gamenative.externaldisplay.SwapInputOverlayView
 import app.gamenative.service.AchievementWatcher
 import app.gamenative.service.SteamService
+import app.gamenative.service.epic.EpicAchievementsManager
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGService
 import app.gamenative.ui.component.QuickMenu
@@ -3153,6 +3154,7 @@ private fun setupXEnvironment(
                 guestProgramLauncherComponent.setSteamAppId(numericAppId.toString())
             }
         }
+
         gameExecutable = "wine explorer /desktop=shell," + xServer.screenInfo + " " +
             getWineStartCommand(context, appId, container, bootToContainer, testGraphics, appLaunchInfo, envVars, guestProgramLauncherComponent, gameSource, offline) +
             (if (container.execArgs.isNotEmpty()) " " + container.execArgs else "")
@@ -3426,7 +3428,24 @@ private fun setupXEnvironment(
                 watchDirs = watchDirs,
                 displayNameMap = displayNameMap,
                 iconUrlMap = iconUrlMap,
-                configDirectory = configDirectory,
+                onUpload = { unlockedNames, dirs ->
+                    if (configDirectory == null) {
+                        Timber.tag("achievements").w("No configDirectory set, skipping Steam upload for appId=$gameIdInt")
+                        return@AchievementWatcher
+                    }
+                    if (!SteamService.isConnected) {
+                        Timber.tag("achievements").w("Not connected to Steam, queuing pending sync for appId=$gameIdInt")
+                        SteamService.instance?.addPendingSyncApp(gameIdInt)
+                        return@AchievementWatcher
+                    }
+                    val (allUnlocked, gseStatsDir) = SteamService.collectGseUnlocksAndStats(dirs)
+                    SteamService.storeAchievementUnlocks(
+                        gameIdInt, configDirectory, allUnlocked,
+                        gseStatsDir ?: dirs.first().resolve("stats"),
+                    ).onFailure { e ->
+                        Timber.tag("achievements").e(e, "Steam upload failed for appId=$gameIdInt")
+                    }
+                },
             ).also { it.start() }
         }
     }
@@ -3521,6 +3540,43 @@ private fun getWineStartCommand(
             return "\"explorer.exe\""
         }
 
+        // Generate achievements.json (used for initial unlock state snapshot) and
+        // write the achievement server port so the hook DLL can connect at startup.
+        if (game.namespace.isNotEmpty() && gameId != null) {
+            val saveDir = EpicAchievementsManager.eosAchievementSaveDir(context, gameId)
+            runBlocking {
+                EpicService.generateAchievementsFile(context, game.namespace, saveDir.absolutePath)
+            }
+        }
+        // Start Epic Achievement Server and populate from the cachedAchievements
+        if (PluviaApp.epicAchievementServer == null) {
+            val cachedAchievements = EpicService.cachedAchievements
+            if (cachedAchievements != null && gameId != null) {
+                val displayNameMap = cachedAchievements.associate { it.name to it.displayName }
+                val iconUrlMap = cachedAchievements.associate { it.name to it.iconUrl }
+                val server = app.gamenative.service.epic.EpicAchievementServer(
+                    displayNameMap = displayNameMap,
+                    iconUrlMap = iconUrlMap,
+                )
+                runBlocking { server.start() }
+                PluviaApp.epicAchievementServer = server
+                Timber.tag("achievements").d(
+                    "EpicAchievementServer started on port ${server.port} for appId=$gameId",
+                )
+            } else {
+                Timber.tag("achievements").d("No cached Epic achievements for appId=$gameId, server not started")
+            }
+        }
+        val achievementPort = PluviaApp.epicAchievementServer?.port ?: -1
+        if (achievementPort > 0) {
+            // Written to a path the hook DLL can read as a Windows path:
+            //   C:\windows\temp\eos_ach_port.txt
+            val portFile = File(container.getRootDir(), ".wine/drive_c/windows/temp/eos_ach_port.txt")
+            portFile.parentFile?.mkdirs()
+            portFile.writeText(achievementPort.toString(), Charsets.UTF_8)
+            Timber.tag("XServerScreen").d("Wrote EOS achievement port $achievementPort to ${portFile.absolutePath}")
+        }
+
         // Use container's configured executable path if available, otherwise auto-detect and persist
         val exePath = if (container.executablePath.isNotEmpty()) {
             container.executablePath
@@ -3550,8 +3606,7 @@ private fun getWineStartCommand(
         // Get Epic launch parameters
         Timber.tag("XServerScreen").d("Building Epic launch parameters for ${game.appName}...")
         val runArguments: List<String> = runBlocking {
-            val offlineLaunch = offline || container.isEpicOfflineMode;
-            val result = EpicService.buildLaunchParameters(context, container, game, offlineLaunch)
+            val result = EpicService.buildLaunchParameters(context, container, game, container.isEpicOfflineMode)
             if (result.isFailure) {
                 Timber.tag("XServerScreen").e(result.exceptionOrNull(), "Failed to build Epic launch parameters")
             }

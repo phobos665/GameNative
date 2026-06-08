@@ -200,6 +200,7 @@ class PluviaApp : SplitCompatApplication() {
         var inputControlsManager: InputControlsManager? = null
         var touchpadView: TouchpadView? = null
         var achievementWatcher: app.gamenative.service.AchievementWatcher? = null
+        var epicAchievementServer: app.gamenative.service.epic.EpicAchievementServer? = null
 
         var isOverlayPaused by mutableStateOf(false)
         @Volatile
@@ -226,6 +227,8 @@ class PluviaApp : SplitCompatApplication() {
             // per-step catch so one failing teardown doesn't prevent the rest from running
             runCatching { achievementWatcher?.stop() }
                 .onFailure { Timber.e(it, "shutdownEnvironment: achievementWatcher.stop") }
+            runCatching { epicAchievementServer?.stop() }
+                .onFailure { Timber.e(it, "shutdownEnvironment: epicAchievementServer.stop") }
             runCatching { SteamService.clearCachedAchievements() }
                 .onFailure { Timber.e(it, "shutdownEnvironment: clearCachedAchievements") }
             runCatching { touchpadView?.releasePointerCapture() }
@@ -238,6 +241,7 @@ class PluviaApp : SplitCompatApplication() {
             inputControlsManager = null
             touchpadView = null
             achievementWatcher = null
+            epicAchievementServer = null
             ActiveGameRegistry.clear()
             SteamService.keepAlive = false
             SteamService.clearPlayingConflict()

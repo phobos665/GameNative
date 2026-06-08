@@ -8,8 +8,7 @@ import android.os.IBinder
 import app.gamenative.data.DownloadInfo
 import app.gamenative.data.EpicCredentials
 import app.gamenative.data.EpicGame
-import app.gamenative.data.LaunchInfo
-import app.gamenative.data.LibraryItem
+import app.gamenative.data.EpicAchievement
 import app.gamenative.data.EpicGameToken
 import app.gamenative.utils.MarkerUtils
 import app.gamenative.enums.Marker
@@ -585,22 +584,27 @@ class EpicService : Service() {
         }
 
         // ==========================================================================
-        // CLOUD SAVES HELPERS
+        // ACHIEVEMENTS
         // ==========================================================================
 
-        /**
-         * Get the Epic account ID from stored credentials
-         */
-        fun getAccountId(): String? {
-            return try {
-                val context = getInstance()?.applicationContext ?: return null
-                val credentialsResult = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
-                    EpicAuthManager.getStoredCredentials(context)
-                }
-                credentialsResult.getOrNull()?.accountId
-            } catch (e: Exception) {
-                Timber.tag("Epic").e(e, "Failed to get account ID")
-                null
+        @Volatile var cachedAchievements: List<EpicAchievement>? = null
+        @Volatile var cachedAchievementsNamespace: String? = null
+
+        suspend fun fetchAchievementsForDisplay(
+            context: Context,
+            namespace: String,
+        ) = getInstance()?.epicAchievementsManager?.fetchAchievementsForDisplay(context, namespace)
+
+        suspend fun generateAchievementsFile(
+            context: Context,
+            namespace: String,
+            configDirectory: String,
+        ) {
+            val manager = getInstance()?.epicAchievementsManager ?: return
+            val info = manager.generateAchievementsFile(context, namespace, configDirectory)
+            if (info != null) {
+                cachedAchievements = info
+                cachedAchievementsNamespace = namespace
             }
         }
     }
@@ -615,6 +619,9 @@ class EpicService : Service() {
 
     @Inject
     lateinit var epicOverlayManager: EpicOverlayManager
+
+    @Inject
+    lateinit var epicAchievementsManager: EpicAchievementsManager
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
