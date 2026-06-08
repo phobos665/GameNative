@@ -48,8 +48,8 @@ class EpicAchievementServer(
         val portReady = CompletableDeferred<Int>()
         scope.launch {
             try {
-                // Bind to loopback only — port 0 lets the OS pick a free port.
-                val ss = ServerSocket(0, /* backlog */ 4, java.net.InetAddress.getByName("127.0.0.1"))
+                // Bind to loopback only Auto-assign port
+                val ss = ServerSocket(0,4, java.net.InetAddress.getByName("127.0.0.1"))
                 serverSocket = ss
                 port = ss.localPort
                 portReady.complete(port)
@@ -83,8 +83,6 @@ class EpicAchievementServer(
         scope.cancel()
         Timber.tag(TAG).d("EpicAchievementServer stopped")
     }
-
-    // ── Request handling ──────────────────────────────────────────────────────
 
     private fun handleClient(client: Socket) {
         client.use {
@@ -139,10 +137,10 @@ class EpicAchievementServer(
         }
     }
 
-    private fun onUnlock(apiName: String) {
-        val displayName = displayNameMap[apiName] ?: apiName
-        val iconUrl = iconUrlMap[apiName]
-        Timber.tag(TAG).i("Achievement unlocked: $apiName ($displayName)")
+    private fun onUnlock(name: String) {
+        val displayName = displayNameMap[name] ?: name
+        val iconUrl = iconUrlMap[name]
+        Timber.tag(TAG).i("Achievement unlocked: $name ($displayName)")
         if (PrefManager.achievementShowNotification) {
             AchievementNotificationManager.show(displayName, iconUrl)
         }

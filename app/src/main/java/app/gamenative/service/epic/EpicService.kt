@@ -8,8 +8,7 @@ import android.os.IBinder
 import app.gamenative.data.DownloadInfo
 import app.gamenative.data.EpicCredentials
 import app.gamenative.data.EpicGame
-import app.gamenative.data.LaunchInfo
-import app.gamenative.data.LibraryItem
+import app.gamenative.data.EpicAchievement
 import app.gamenative.data.EpicGameToken
 import app.gamenative.utils.MarkerUtils
 import app.gamenative.enums.Marker
@@ -585,32 +584,11 @@ class EpicService : Service() {
         }
 
         // ==========================================================================
-        // CLOUD SAVES HELPERS
-        // ==========================================================================
-
-        /**
-         * Get the Epic account ID from stored credentials
-         */
-        fun getAccountId(): String? {
-            return try {
-                val context = getInstance()?.applicationContext ?: return null
-                val credentialsResult = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
-                    EpicAuthManager.getStoredCredentials(context)
-                }
-                credentialsResult.getOrNull()?.accountId
-            } catch (e: Exception) {
-                Timber.tag("Epic").e(e, "Failed to get account ID")
-                null
-            }
-        }
-
-        // ==========================================================================
         // ACHIEVEMENTS
         // ==========================================================================
 
-        @Volatile var cachedAchievements: List<EpicAchievementsManager.EpicAchievementInfo>? = null
+        @Volatile var cachedAchievements: List<EpicAchievement>? = null
         @Volatile var cachedAchievementsNamespace: String? = null
-
 
         suspend fun fetchAchievementsForDisplay(
             context: Context,
@@ -629,20 +607,6 @@ class EpicService : Service() {
                 cachedAchievementsNamespace = namespace
             }
         }
-
-        suspend fun uploadAchievementUnlocks(
-            context: Context,
-            namespace: String,
-            accountId: String,
-            unlockedNames: Set<String>,
-        ): Result<Unit> {
-            val manager = getInstance()?.epicAchievementsManager
-                ?: return Result.failure(Exception("EpicService not running"))
-            return manager.uploadUnlocks(context, namespace, accountId, unlockedNames)
-        }
-
-        fun getEosAchievementSaveDirs(context: Context, gameId: Int): List<java.io.File> =
-            EpicAchievementsManager.eosAchievementSaveDirs(context, gameId)
     }
 
     private lateinit var notificationHelper: NotificationHelper

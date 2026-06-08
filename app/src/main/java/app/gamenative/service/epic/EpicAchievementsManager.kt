@@ -3,6 +3,7 @@ package app.gamenative.service.epic
 import android.content.Context
 import app.gamenative.ui.data.Achievement
 import app.gamenative.utils.Net
+import app.gamenative.data.EpicAchievement
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -16,6 +17,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
+
 
 private val GQL_GAME_ACHIEVEMENTS = """
 query Achievement(${'$'}sandboxId: String!, ${'$'}locale: String!) {
@@ -83,16 +85,6 @@ class EpicAchievementsManager @Inject constructor() {
             listOf(eosAchievementSaveDir(context, gameId))
     }
 
-    data class EpicAchievementInfo(
-        val name: String,
-        val displayName: String,
-        val description: String,
-        val iconUrl: String?,
-        val iconGrayUrl: String?,
-        val hidden: Boolean,
-        val xp: Int,
-    )
-
     suspend fun fetchAchievementsForDisplay(
         context: Context,
         namespace: String,
@@ -137,7 +129,7 @@ class EpicAchievementsManager @Inject constructor() {
         context: Context,
         namespace: String,
         configDirectory: String,
-    ): List<EpicAchievementInfo>? = withContext(Dispatchers.IO) {
+    ): List<EpicAchievement>? = withContext(Dispatchers.IO) {
         try {
             val credentials = EpicAuthManager.getStoredCredentials(context).getOrNull()
                 ?: return@withContext null
@@ -167,26 +159,10 @@ class EpicAchievementsManager @Inject constructor() {
         }
     }
 
-    suspend fun uploadUnlocks(
-        @Suppress("UNUSED_PARAMETER") context: Context,
-        namespace: String,
-        @Suppress("UNUSED_PARAMETER") accountId: String,
-        unlockedNames: Set<String>,
-    ): Result<Unit> {
-        // Epic achievements are server-authoritative — the EOS SDK reports them to Epic's
-        // backend directly via the game's own EOS credentials.
-        Timber.tag(TAG).i(
-            "Epic achievement sync skipped: " +
-                "${unlockedNames.size} unlocked for namespace=$namespace",
-        )
-        return Result.success(Unit)
-    }
-
-
     private fun fetchDefinitions(
         accessToken: String,
         namespace: String,
-    ): List<EpicAchievementInfo>? {
+    ): List<EpicAchievement>? {
         val body = JSONObject().apply {
             put("query", GQL_GAME_ACHIEVEMENTS)
             put("variables", JSONObject().apply {
@@ -245,8 +221,8 @@ class EpicAchievementsManager @Inject constructor() {
         }
     }
 
-    private fun parseDefinitions(json: JSONObject): List<EpicAchievementInfo> {
-        val list = mutableListOf<EpicAchievementInfo>()
+    private fun parseDefinitions(json: JSONObject): List<EpicAchievement> {
+        val list = mutableListOf<EpicAchievement>()
         val record = json
             .optJSONObject("data")
             ?.optJSONObject("Achievement")
@@ -258,7 +234,7 @@ class EpicAchievementsManager @Inject constructor() {
             val ach = achievements.optJSONObject(i)?.optJSONObject("achievement") ?: continue
             val name = ach.optString("name").takeIf { it.isNotEmpty() } ?: continue
             list.add(
-                EpicAchievementInfo(
+                EpicAchievement(
                     name = name,
                     displayName = ach.optString("unlockedDisplayName")
                         .ifEmpty { ach.optString("lockedDisplayName") }
@@ -311,7 +287,7 @@ class EpicAchievementsManager @Inject constructor() {
     }
 
     private fun buildAchievementsJson(
-        definitions: List<EpicAchievementInfo>,
+        definitions: List<EpicAchievement>,
         playerState: Map<String, JSONObject>,
     ): JSONObject {
         val root = JSONObject()

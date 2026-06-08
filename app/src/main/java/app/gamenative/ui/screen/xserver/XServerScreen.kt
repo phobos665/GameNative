@@ -3548,8 +3548,7 @@ private fun getWineStartCommand(
                 EpicService.generateAchievementsFile(context, game.namespace, saveDir.absolutePath)
             }
         }
-        // generateAchievementsFile populates EpicService.cachedAchievements — start the
-        // achievement server now so the port is available to write to the port file below.
+        // Start Epic Achievement Server and populate from the cachedAchievements
         if (PluviaApp.epicAchievementServer == null) {
             val cachedAchievements = EpicService.cachedAchievements
             if (cachedAchievements != null && gameId != null) {

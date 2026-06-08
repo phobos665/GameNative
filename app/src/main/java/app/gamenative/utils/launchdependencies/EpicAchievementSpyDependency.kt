@@ -12,9 +12,6 @@ import java.io.File
  * the achievement server port to C:\windows\temp\eos_ach_port.txt so the DLL can
  * connect back to [EpicAchievementServer] at startup.
  *
- * This is intentionally a lightweight, always-reinstall dependency — the DLL is a
- * small asset bundled with the app and the port changes every session.
- *
  * The DLL is a proxy version.dll that:
  *   1. Forwards all real version.dll exports to the system DLL.
  *   2. IAT-patches EOS_Achievements_UnlockAchievements and POSTs {"name":"..."} to
@@ -34,7 +31,7 @@ object EpicAchievementSpyDependency : LaunchDependency {
         false
 
     override fun getLoadingMessage(context: Context, container: Container, gameSource: GameSource, gameId: Int): String =
-        "Installing achievement spy"
+        "Installing epic achievement service"
 
     override suspend fun install(
         context: Context,
@@ -43,9 +40,7 @@ object EpicAchievementSpyDependency : LaunchDependency {
         gameSource: GameSource,
         gameId: Int,
     ) {
-        // 1. Copy version.dll next to the game's .exe.
-        // getInstalledExe returns a path relative to the game's install directory,
-        // so we need to combine it with the install path to get an absolute path.
+        // Copy the version.dll next to game.exe, uses absolute path.
         val relativeExePath = EpicService.getInstalledExe(gameId)
         if (relativeExePath.isEmpty()) {
             Timber.tag(TAG).w("No exe path for gameId=$gameId — skipping DLL install")
