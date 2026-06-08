@@ -58,10 +58,11 @@ class EpicAchievementServer(
                 while (!ss.isClosed) {
                     val client: Socket = try {
                         ss.accept()
-                    } catch (e: SocketException) {
+                    } catch (_: SocketException) {
                         // ServerSocket was closed via stop() — expected, not an error.
                         break
                     }
+                    Timber.tag(TAG).i("Accepted achievement API socket from ${client.inetAddress.hostAddress}:${client.port}")
                     handleClient(client)
                 }
             } catch (e: Exception) {
@@ -101,6 +102,9 @@ class EpicAchievementServer(
                     }
                 }
 
+                // Log every request we receive, regardless of route, to validate hook traffic.
+                Timber.tag(TAG).i("Incoming achievement API request: requestLine='$requestLine', contentLength=$contentLength")
+
                 if (contentLength <= 0 || contentLength > MAX_BODY_BYTES) {
                     sendResponse(client, 400, "Bad Request")
                     return
@@ -115,6 +119,9 @@ class EpicAchievementServer(
                     totalRead += read
                 }
                 val body = String(bodyChars, 0, totalRead)
+
+                // Keep logs safe/compact while still showing payload visibility for debugging.
+                Timber.tag(TAG).d("Incoming achievement API body: ${body.take(MAX_LOG_BODY_CHARS)}")
 
                 // Route: only POST /unlock is supported
                 if (!requestLine.startsWith("POST /unlock")) {
@@ -156,5 +163,6 @@ class EpicAchievementServer(
 
         /** Hard cap on accepted body size to prevent runaway reads. */
         private const val MAX_BODY_BYTES = 4096
+        private const val MAX_LOG_BODY_CHARS = 512
     }
 }
