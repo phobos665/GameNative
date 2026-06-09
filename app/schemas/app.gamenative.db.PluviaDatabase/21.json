@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 21,
-    "identityHash": "6a4c899dae37cdecb5f1c92ca5a916e4",
+    "identityHash": "f7e8fed221c32cac81c2e961d946eb27",
     "entities": [
       {
         "tableName": "app_info",
@@ -871,7 +871,7 @@
       },
       {
         "tableName": "epic_games",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `catalog_id` TEXT NOT NULL, `app_name` TEXT NOT NULL, `title` TEXT NOT NULL, `namespace` TEXT NOT NULL, `developer` TEXT NOT NULL, `publisher` TEXT NOT NULL, `is_installed` INTEGER NOT NULL, `install_path` TEXT NOT NULL, `platform` TEXT NOT NULL, `version` TEXT NOT NULL, `executable` TEXT NOT NULL, `install_size` INTEGER NOT NULL, `download_size` INTEGER NOT NULL, `art_cover` TEXT NOT NULL, `art_square` TEXT NOT NULL, `art_logo` TEXT NOT NULL, `art_portrait` TEXT NOT NULL, `can_run_offline` INTEGER NOT NULL, `requires_ot` INTEGER NOT NULL, `cloud_save_enabled` INTEGER NOT NULL, `save_folder` TEXT NOT NULL, `third_party_managed_app` TEXT NOT NULL, `is_ea_managed` INTEGER NOT NULL, `is_dlc` INTEGER NOT NULL, `base_game_app_name` TEXT NOT NULL, `description` TEXT NOT NULL, `release_date` TEXT NOT NULL, `genres` TEXT NOT NULL, `tags` TEXT NOT NULL, `last_played` INTEGER NOT NULL, `play_time` INTEGER NOT NULL, `type` INTEGER NOT NULL, `eos_catalog_item_id` TEXT NOT NULL, `eos_app_id` TEXT NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `catalog_id` TEXT NOT NULL, `app_name` TEXT NOT NULL, `title` TEXT NOT NULL, `namespace` TEXT NOT NULL, `developer` TEXT NOT NULL, `publisher` TEXT NOT NULL, `is_installed` INTEGER NOT NULL, `install_path` TEXT NOT NULL, `platform` TEXT NOT NULL, `version` TEXT NOT NULL, `executable` TEXT NOT NULL, `install_size` INTEGER NOT NULL, `download_size` INTEGER NOT NULL, `art_cover` TEXT NOT NULL, `art_square` TEXT NOT NULL, `art_logo` TEXT NOT NULL, `art_portrait` TEXT NOT NULL, `can_run_offline` INTEGER NOT NULL, `requires_ot` INTEGER NOT NULL, `cloud_save_enabled` INTEGER NOT NULL, `save_folder` TEXT NOT NULL, `third_party_managed_app` TEXT NOT NULL, `is_ea_managed` INTEGER NOT NULL, `is_dlc` INTEGER NOT NULL, `base_game_app_name` TEXT NOT NULL, `description` TEXT NOT NULL, `release_date` TEXT NOT NULL, `genres` TEXT NOT NULL, `tags` TEXT NOT NULL, `last_played` INTEGER NOT NULL, `play_time` INTEGER NOT NULL, `type` INTEGER NOT NULL, `eos_catalog_item_id` TEXT NOT NULL, `eos_app_id` TEXT NOT NULL, `has_update` INTEGER NOT NULL DEFAULT false)",
         "fields": [
           {
             "fieldPath": "id",
@@ -1082,6 +1082,13 @@
             "columnName": "eos_app_id",
             "affinity": "TEXT",
             "notNull": true
+          },
+          {
+            "fieldPath": "hasUpdate",
+            "columnName": "has_update",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "false"
           }
         ],
         "primaryKey": {
@@ -1304,7 +1311,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6a4c899dae37cdecb5f1c92ca5a916e4')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f7e8fed221c32cac81c2e961d946eb27')"
     ]
   }
 }

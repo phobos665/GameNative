@@ -126,6 +126,9 @@ data class EpicGame(
 
     @ColumnInfo("eos_app_id")
     val eosAppId: String = "",
+
+    @ColumnInfo("has_update")
+    val hasUpdate: Boolean = false,
 ) {
     /**
      * Primary image URL for the game
