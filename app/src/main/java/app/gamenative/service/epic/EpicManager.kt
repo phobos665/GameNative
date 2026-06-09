@@ -659,7 +659,6 @@ class EpicManager @Inject constructor(
         }
     }
 
-
     /**
      * Get a single game by ID
      */
@@ -938,6 +937,110 @@ class EpicManager @Inject constructor(
             Result.success(ManifestResult(manifestBytes, cdnUrls))
         } catch (e: Exception) {
             Timber.tag("Epic").e(e, "Exception fetching manifest")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Fetch the asset list from Epic's launcher API.
+     * Specifically helpful for getting the latest version of the game
+     */
+    suspend fun fetchAssetList(context: Context): Result<Map<String, String>> = withContext(Dispatchers.IO) {
+        try {
+            val credentials = EpicAuthManager.getStoredCredentials(context)
+            if (credentials.isFailure) {
+                return@withContext Result.failure(credentials.exceptionOrNull() ?: Exception("No credentials"))
+            }
+            val accessToken = credentials.getOrNull()?.accessToken
+            if (accessToken.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("No access token"))
+            }
+
+            val url = "${EpicConstants.EPIC_LAUNCHER_API_URL}/launcher/api/public/assets/Windows?label=Live"
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $accessToken")
+                .header("User-Agent", EpicConstants.EPIC_USER_AGENT)
+                .get()
+                .build()
+
+            val assetMap: Map<String, String> = httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(Exception("Asset list request failed: ${response.code}"))
+                }
+                val body = response.body?.string()
+                if (body.isNullOrEmpty()) {
+                    return@withContext Result.failure(Exception("Empty asset list response"))
+                }
+                val assetListJson = JSONArray(body)
+                buildMap {
+                    for (i in 0 until assetListJson.length()) {
+                        val item = assetListJson.getJSONObject(i)
+                        val appName = item.optString("appName", "")
+                        val buildVersion = item.optString("buildVersion", "")
+                        if (appName.isNotEmpty() && buildVersion.isNotEmpty()) {
+                            put(appName, buildVersion)
+                        }
+                    }
+                }
+            }
+            Timber.tag("Epic").d("Fetched asset list: ${assetMap.size} entries")
+            Result.success(assetMap)
+        } catch (e: Exception) {
+            Timber.tag("Epic").e(e, "Failed to fetch asset list")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Check for available updates for all installed Epic games - Can override to get for specific game
+     */
+    suspend fun checkForUpdates(context: Context, gameId: Int?): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            val installedGames = if(gameId != null) {
+                val epicGame = epicGameDao.getById(gameId)
+                if(epicGame == null) listOf() else listOf(epicGame)
+            } else {
+                epicGameDao.getInstalledGames()
+            }
+
+            if (installedGames.isEmpty()) {
+                Timber.tag("Epic").d("No installed Epic games to check for updates")
+                return@withContext Result.success(0)
+            }
+
+            val assetListResult = fetchAssetList(context)
+            if (assetListResult.isFailure) {
+                return@withContext Result.failure(
+                    assetListResult.exceptionOrNull() ?: Exception("Failed to fetch asset list"),
+                )
+            }
+
+            val remoteVersions = assetListResult.getOrNull()!!
+            val gamesToUpdate = mutableListOf<Int>()
+
+            for (game in installedGames) {
+                val remoteVersion = remoteVersions[game.appName]
+                val hasUpdate = when {
+                    remoteVersion == null -> false // not in asset list, skip
+                    game.version.isEmpty() -> true // no local version recorded
+                    else -> remoteVersion != game.version
+                }
+
+                if (hasUpdate) {
+                    Timber.d("Epic - Update available for ${game.id}")
+                    gamesToUpdate.add(game.id)
+                }
+            }
+
+            if (!gamesToUpdate.isEmpty()) {
+                epicGameDao.setUpdateStatusForInstalledGames(gamesToUpdate, true)
+            }
+
+            Timber.tag("Epic").i("Update check complete: $gamesToUpdate.size update(s) available")
+            Result.success(gamesToUpdate.size)
+        } catch (e: Exception) {
+            Timber.tag("Epic").e(e, "Failed to check for updates")
             Result.failure(e)
         }
     }

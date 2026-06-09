@@ -85,6 +85,9 @@ interface EpicGameDao {
     @Query("SELECT catalog_id FROM epic_games")
     suspend fun getAllCatalogIds(): List<String>
 
+    @Query("Update epic_games SET has_update = :hasUpdate WHERE id IN (:gameIds)")
+    suspend fun setUpdateStatusForInstalledGames(gameIds: List<Int>, hasUpdate: Boolean)
+
     /**
      * Upsert Epic games while preserving install status and paths
      * This is useful when refreshing the library from Epic/Legendary
