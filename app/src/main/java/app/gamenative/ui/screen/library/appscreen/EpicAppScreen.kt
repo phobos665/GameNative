@@ -72,27 +72,23 @@ class EpicAppScreen : BaseAppScreen() {
             return result
         }
 
+        // Shared state for update confirmation dialog
+        private val updateDialogGameIds = mutableStateListOf<Int>()
+
+        fun showUpdateDialog(gameId: Int) {
+            Timber.tag(TAG).d("showUpdateDialog: gameId=$gameId")
+            if (!updateDialogGameIds.contains(gameId)) updateDialogGameIds.add(gameId)
+        }
+
+        fun hideUpdateDialog(gameId: Int) {
+            Timber.tag(TAG).d("hideUpdateDialog: gameId=$gameId")
+            updateDialogGameIds.remove(gameId)
+        }
+
+        fun shouldShowUpdateDialog(gameId: Int): Boolean = updateDialogGameIds.contains(gameId)
+
         // Shared state for install dialog - list of appIds that should show the dialog
         private val installDialogAppIds = mutableStateListOf<String>()
-
-        fun showInstallDialog(appId: String) {
-            Timber.tag(TAG).d("showInstallDialog: appId=$appId")
-            if (!installDialogAppIds.contains(appId)) {
-                installDialogAppIds.add(appId)
-                Timber.tag(TAG).d("Added to install dialog list: $appId")
-            }
-        }
-
-        fun hideInstallDialog(appId: String) {
-            Timber.tag(TAG).d("hideInstallDialog: appId=$appId")
-            installDialogAppIds.remove(appId)
-        }
-
-        fun shouldShowInstallDialog(appId: String): Boolean {
-            val result = installDialogAppIds.contains(appId)
-            Timber.tag(TAG).d("shouldShowInstallDialog: appId=$appId, result=$result")
-            return result
-        }
 
         // Shared state for game manager dialog - map of gameId to GameManagerDialogState
         private val gameManagerDialogStates = mutableStateMapOf<Int, app.gamenative.ui.component.dialog.state.GameManagerDialogState>()
@@ -557,6 +553,7 @@ class EpicAppScreen : BaseAppScreen() {
 
         // Add cloud sync option if game supports cloud saves
         val epicGame = EpicService.getEpicGameOf(libraryItem.gameId)
+
         if (epicGame?.cloudSaveEnabled == true) {
             options.add(
                 AppMenuOption(
@@ -597,6 +594,26 @@ class EpicAppScreen : BaseAppScreen() {
             )
         }
 
+        options.add(AppMenuOption(
+            optionType = AppOptionMenuType.VerifyFiles,
+            onClick = {
+                val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+                scope.launch {
+                    try {
+                        val hasUpdate = EpicService.checkForUpdates(context, libraryItem.gameId)
+                        if (hasUpdate.isSuccess) {
+                            showUpdateDialog(libraryItem.gameId)
+                        } else {
+//                            SnackbarManager.show(context.getString(R.string.epic_no_update_available))
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).e(e, "Failed to check for updates for ${libraryItem.appId}")
+//                        SnackbarManager.show(context.getString(R.string.epic_update_check_failed, e.message ?: ""))
+                    }
+
+                }
+            })
+        )
         return options
     }
 

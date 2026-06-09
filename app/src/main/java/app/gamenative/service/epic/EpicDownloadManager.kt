@@ -353,10 +353,11 @@ class EpicDownloadManager @Inject constructor(
             )
         }
     }
+    suspend fun updateGame(context: Context, game: EpicGame, downloadInfo: DownloadInfo, language: String = "en-us"): Result<Unit> = withContext(Dispatchers.IO) {
+        Timber.i("Stubbed for now")
+        Result.failure(Exception("Not implemented"))
+    }
 
-    /**
-     * Download game using an already-fetched manifest (used for DLCs)
-     */
     private suspend fun downloadGameWithManifest(
         context: Context,
         game: EpicGame,
