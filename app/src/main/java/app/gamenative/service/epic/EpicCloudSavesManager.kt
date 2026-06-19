@@ -1263,15 +1263,8 @@ object EpicCloudSavesManager {
         }
 
         // Resolve against on-disk casing to avoid creating duplicate dirs (e.g. locallow vs LocalLow).
-        val joinedPath = "/${canonicalizeAppDataSegments(normalizedParts).joinToString("/")}"
-        val trustedRoots = buildList {
-            add(usersPath)
-            add(File(winePrefix))
-            if (installDir.isNotEmpty()) {
-                add(File(installDir))
-            }
-        }
-        val resolved = resolveAbsolutePathCaseInsensitive(joinedPath, trustedRoots)
+        val joinedPath = normalizedParts.joinToString("/")
+        val resolved = FileUtils.resolveCaseInsensitive(File("/"), joinedPath)
         // guard against path traversal escaping the wine prefix
         val absPath = resolved.absolutePath
         val withinPrefix = absPath.startsWith("$winePrefix/") || absPath == winePrefix ||
@@ -1327,51 +1320,6 @@ object EpicCloudSavesManager {
         Timber.tag("Epic").d("[Cloud Saves]   Resolved: ${actualPath.absolutePath}")
 
         return actualPath
-    }
-
-    internal fun resolveAbsolutePathCaseInsensitive(
-        path: String,
-        trustedRoots: List<File> = emptyList(),
-    ): File {
-        val normalizedPath = path.replace('\\', '/')
-        trustedRoots.firstNotNullOfOrNull { root ->
-            val rootPath = root.absolutePath.replace('\\', '/').trimEnd('/')
-            if (normalizedPath == rootPath || normalizedPath.startsWith("$rootPath/")) {
-                val relativePath = normalizedPath.removePrefix(rootPath).trimStart('/')
-                FileUtils.resolveCaseInsensitive(root, relativePath)
-            } else {
-                null
-            }
-        }?.let { return it }
-
-        val pathFile = File(normalizedPath)
-        val rootPath = pathFile.toPath().root?.toString()?.replace('\\', '/')
-        val base = when {
-            pathFile.isAbsolute && rootPath != null -> File(rootPath)
-            normalizedPath.startsWith("/") -> File("/")
-            else -> File("")
-        }
-        val relativePath = when {
-            pathFile.isAbsolute && rootPath != null -> normalizedPath.removePrefix(rootPath).trimStart('/')
-            else -> normalizedPath.trimStart('/')
-        }
-        return FileUtils.resolveCaseInsensitive(base, relativePath)
-    }
-
-    // Fixes issue where saves were being lost due to inconsistencies in lower-case sub-folders in AppData
-    internal fun canonicalizeAppDataSegments(segments: List<String>): List<String> {
-        return segments.mapIndexed { index, segment ->
-            if (index > 0 && segments[index - 1].equals("AppData", ignoreCase = true)) {
-                when (segment.lowercase()) {
-                    "local" -> "Local"
-                    "locallow" -> "LocalLow"
-                    "roaming" -> "Roaming"
-                    else -> segment
-                }
-            } else {
-                segment
-            }
-        }
     }
 
     private fun getSyncTimestamp(context: Context, appId: Int): String? {
