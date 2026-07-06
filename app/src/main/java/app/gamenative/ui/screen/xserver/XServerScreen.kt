@@ -81,6 +81,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.gamenative.PluviaApp
 import app.gamenative.PrefManager
+import app.gamenative.CometBootstrap
 import app.gamenative.SteamBootstrap
 import app.gamenative.data.GameSource
 import app.gamenative.gamefixes.GameFixesRegistry
@@ -97,6 +98,7 @@ import app.gamenative.externaldisplay.SwapInputOverlayView
 import app.gamenative.service.AchievementWatcher
 import app.gamenative.service.SteamService
 import app.gamenative.service.epic.EpicService
+import app.gamenative.service.gog.GOGAuthManager
 import app.gamenative.service.gog.GOGService
 import app.gamenative.ui.component.QuickMenu
 import app.gamenative.ui.component.QuickMenuAction
@@ -3117,6 +3119,19 @@ private fun setupXEnvironment(
     ProcessHelper.hardKillStaleWineProcesses()
 
     val gameSource = ContainerUtils.extractGameSourceFromContainerId(appId)
+
+    if (gameSource == GameSource.GOG) {
+        runBlocking {
+            GOGAuthManager.getStoredCredentials(context)
+                .onSuccess { creds ->
+                    CometBootstrap.start(context, creds.accessToken, creds.refreshToken, creds.userId, creds.username)
+                }
+                .onFailure { e ->
+                    Timber.w(e, "No GOG credentials available, skipping comet startup (achievements won't sync)")
+                }
+        }
+    }
+
     val lc_all = container!!.lC_ALL
     val imageFs = ImageFs.find(context)
     Timber.i("ImageFs paths:")
@@ -4005,6 +4020,16 @@ private fun exit(
         Timber.e(e, "winHandler.stop() failed during exit")
     }
     PluviaApp.shutdownEnvironment()
+
+    if (ContainerUtils.extractGameSourceFromContainerId(appId) == GameSource.GOG) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                CometBootstrap.stop()
+            } catch (e: Exception) {
+                Timber.e(e, "CometBootstrap.stop() failed during exit")
+            }
+        }
+    }
 
     // Bionic-Steam mode brought up libsteamclient.so inside this Android process
     // (see BionicProgramLauncherComponent.bootstrapNativeSteamClient). Tear it
