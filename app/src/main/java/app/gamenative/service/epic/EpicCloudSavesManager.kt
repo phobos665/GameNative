@@ -43,7 +43,7 @@ object EpicCloudSavesManager {
 
     private val baseCloudSyncUrl = "https://datastorage-public-service-liveegs.live.use1a.on.epicgames.com"
 
-    // Number of chunk downloads to run concurrently (matches Legendary's max_workers=16).
+    // Number of chunk downloads to run concurrently.
     private const val MAX_PARALLEL_CHUNK_DOWNLOADS = 16
 
     private val httpClient = Net.http
@@ -842,7 +842,7 @@ object EpicCloudSavesManager {
     // Uses the same POST endpoint as requestWriteLinks, but reads the "readLink" field. This lets
     // us fetch download links for an explicit list of chunk paths, bypassing the 1000-entry cap on
     // the GET listing. File names must be the relative chunk paths (ChunkInfo.getPath()), matching
-    // the keys used on the upload side. Mirrors Legendary's get_user_cloud_saves(filenames=...).
+    // the keys used on the upload side.
     private suspend fun requestReadLinks(
         context: Context,
         appName: String,
@@ -921,7 +921,7 @@ object EpicCloudSavesManager {
      *
      * Read links are requested explicitly for the manifest's chunk paths (bypassing the
      * 1000-entry listing cap), then downloaded in parallel with per-chunk retry on transient
-     * failures. Mirrors the parallel/retry download added in Legendary#21.
+     * failures.
      */
     private suspend fun downloadChunksParallel(
         context: Context,
@@ -968,7 +968,7 @@ object EpicCloudSavesManager {
         chunks
     }
 
-    // Download a single chunk with retry on transient failures (mirrors Legendary's Retry(total=3)).
+    // Download a single chunk with retry on transient failures.
     private suspend fun downloadChunkWithRetry(
         client: okhttp3.OkHttpClient,
         readLink: String,
@@ -994,7 +994,7 @@ object EpicCloudSavesManager {
                 Timber.tag("Epic").w(e, "[Cloud Saves] Chunk download error (attempt $attempt/$maxAttempts)")
             }
             if (attempt < maxAttempts) {
-                // Small linear backoff, similar to Legendary's backoff_factor=0.1
+                // Small linear backoff before retrying.
                 kotlinx.coroutines.delay(100L * attempt)
             }
         }
@@ -1173,8 +1173,7 @@ object EpicCloudSavesManager {
         val shaHash = java.security.MessageDigest.getInstance("SHA-1").digest(paddedData)
         val rollingHash = calculateRollingHash(paddedData)
 
-        // Compute groupNum exactly as Legendary does:
-        // group_num = crc32(struct.pack('<IIII', *guid)) & 0xffffffff) % 100
+        // groupNum = crc32(little-endian guid bytes) % 100
         val guidBytes = ByteArray(16)
         val guidBuf = java.nio.ByteBuffer.wrap(guidBytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
         guid.forEach { guidBuf.putInt(it) }
@@ -1252,11 +1251,8 @@ object EpicCloudSavesManager {
     }
 
     /**
-     * CRC-64-ECMA variant lookup table
-     * Polynomial: 0xC96C5795D7870F42
-     * Table built identically to Legendary's _init():
-     *   for i in 0..255:
-     *     for _ in 0..7: if i&1 -> i = (i>>1) ^ poly  else i >>= 1
+     * CRC-64-ECMA variant lookup table, polynomial 0xC96C5795D7870F42.
+     * For each seed byte, 8 rounds of: if bit 0 set -> (v >> 1) ^ poly, else v >> 1.
      */
     private val ROLLING_HASH_TABLE: LongArray = run {
         val poly = 0xC96C5795D7870F42uL
@@ -1270,9 +1266,7 @@ object EpicCloudSavesManager {
     }
 
     /**
-     * Epic Games rolling hash — exact port of Legendary's get_hash() in rolling_hash.py:
-     *   h = 0
-     *   for each byte i: h = ((h << 1 | h >> 63) ^ table[data[i]]) & 0xffffffffffffffff
+     * Epic Games' rolling hash: h = ((h << 1) | (h >> 63)) ^ table[byte], folded over the data.
      */
     internal fun calculateRollingHash(data: ByteArray): ULong {
         var h = 0uL
@@ -1484,7 +1478,7 @@ object EpicCloudSavesManager {
     }
 
     /**
-     * Decompress a binary chunk file — matches Legendary's Chunk.read() + Chunk.data property.
+     * Decompress a binary chunk file.
      *
      * Header layout (little-endian):
      *   magic(4) + headerVersion(4) + headerSize(4) + compressedSize(4)
