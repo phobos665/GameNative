@@ -241,13 +241,10 @@ object EpicCloudSavesManager {
     }
 
     // List available cloud saves
-    //
     // The EGS metadata listing is capped at 1000 entries, so for save-heavy games the chunk
     // files needed to reconstruct saves can be pushed out of the response entirely. When only
     // the manifest is needed, pass manifestsOnly = true to hit the "/manifests/" sub-path, which
-    // returns just the (few) manifest files and never hits the cap. Chunk read links must then
-    // be requested explicitly via requestReadLinks(). Mirrors Legendary's
-    // get_user_cloud_saves(manifests=True). See Heroic-Games-Launcher/legendary#21.
+    // returns just the manifest files and never hits the cap.
     private suspend fun listCloudSaves(
         appName: String,
         context: Context,
