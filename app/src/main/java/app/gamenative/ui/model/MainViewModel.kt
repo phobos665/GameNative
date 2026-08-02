@@ -20,6 +20,7 @@ import app.gamenative.events.SteamEvent
 import app.gamenative.ui.enums.Orientation
 import java.util.EnumSet
 import app.gamenative.service.ActiveGameRegistry
+import app.gamenative.service.SteamAchievementsManager
 import app.gamenative.service.SteamService
 import app.gamenative.service.amazon.AmazonService
 import app.gamenative.service.epic.EpicCloudSavesManager
@@ -37,6 +38,7 @@ import com.materialkolor.PaletteStyle
 import com.winlator.xserver.Window
 import dagger.hilt.android.lifecycle.HiltViewModel
 import `in`.dragonbra.javasteam.steam.handlers.steamapps.AppProcessInfo
+import java.io.File
 import java.nio.file.Paths
 import javax.inject.Inject
 import kotlin.io.path.name
@@ -521,11 +523,19 @@ class MainViewModel @Inject constructor(
                         SteamUtils.restoreSteamApi(context, appId)
                     } else {
                         val offline = _offline.value
+                        val steamAppId = ContainerUtils.extractGameIdFromContainerId(appId)
+                        val configDirectory: String
                         if (container.isUseLegacyDRM) {
                             SteamUtils.replaceSteamApi(context, appId, offline)
+                            configDirectory = File(SteamService.getAppDirPath(steamAppId), "steam_settings").absolutePath
                         } else {
                             SteamUtils.replaceSteamclientDll(context, appId, offline)
+                            configDirectory = File(
+                                container.getRootDir(),
+                                ".wine/drive_c/Program Files (x86)/Steam/steam_settings",
+                            ).absolutePath
                         }
+                        SteamAchievementsManager.ensureAchievementsReady(context, steamAppId, configDirectory)
                     }
                 }
             }

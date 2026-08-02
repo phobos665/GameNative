@@ -23,11 +23,6 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import io.mockk.every
-import io.mockk.just
-import io.mockk.Runs
-import io.mockk.mockkObject
-import io.mockk.unmockkObject
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
@@ -135,14 +130,10 @@ class SteamUtilsFileSearchTest {
         } catch (e: Exception) {
             fail("Failed to set SteamService.instance: ${e.message}")
         }
-
-        mockkObject(SteamUtils)
-        every { SteamUtils.generateAchievementsFile(any(), any()) } just Runs
     }
 
     @After
     fun tearDown() {
-        unmockkObject(SteamUtils)
         // Clean up temp directory
         tempDir.deleteRecursively()
         appDir.deleteRecursively()

@@ -26,7 +26,6 @@ import com.winlator.xenvironment.ImageFs
 import `in`.dragonbra.javasteam.types.KeyValue
 import `in`.dragonbra.javasteam.util.HardwareUtils
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.FileOutputStream
@@ -329,9 +328,6 @@ object SteamUtils {
         val container = ContainerUtils.getOrCreateContainer(context, appId)
         ensureSaveLocationsForGames(context, steamAppId, container)
 
-        // Generate achievements.json
-        generateAchievementsFile(rootPath.resolve("steam_settings"), appId)
-
         MarkerUtils.addMarker(appDirPath, Marker.STEAM_DLL_REPLACED)
     }
 
@@ -374,7 +370,6 @@ object SteamUtils {
         val ticketBase64 = SteamService.instance?.getEncryptedAppTicketBase64(steamAppId)
         val path = File(steamRootDir, "steamclient.dll").toPath()
         ensureSteamSettings(context, path, appId, ticketBase64, isOffline)
-        generateAchievementsFile(path, appId)
 
         // Game-specific Handling
         ensureSaveLocationsForGames(context, steamAppId, container)
@@ -1623,25 +1618,5 @@ object SteamUtils {
         }
     }
 
-    fun generateAchievementsFile(dllPath: Path, appId: String) {
-        if (!SteamService.isLoggedIn) {
-            Timber.w("Skipping achievements generation for $appId — Steam not logged in")
-            return
-        }
-
-        val steamAppId = ContainerUtils.extractGameIdFromContainerId(appId)
-        val settingsDir = dllPath.parent.resolve("steam_settings")
-        if (Files.notExists(settingsDir)) {
-            Files.createDirectories(settingsDir)
-        }
-
-        try {
-            runBlocking {
-                SteamService.generateAchievements(steamAppId, settingsDir.absolutePathString())
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to generate achievements for $appId")
-        }
-    }
 }
 

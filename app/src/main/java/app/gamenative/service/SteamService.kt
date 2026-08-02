@@ -3270,28 +3270,15 @@ class SteamService : Service(), IChallengeUrlChanged {
             val allStats = mutableMapOf<Int, Int>()
 
             // Build achievement name-to-block mapping from on-disk file
-            val mappingFile = File(configDirectory, "achievement_name_to_block.json")
-            if (mappingFile.exists() && unlockedNames.isNotEmpty()) {
-                val mappingJson = JSONObject(mappingFile.readText(Charsets.UTF_8))
-                val nameToBlockBit = mutableMapOf<String, Pair<Int, Int>>()
-                for (key in mappingJson.keys()) {
-                    val arr = mappingJson.optJSONArray(key) ?: continue
-                    if (arr.length() >= 2) {
-                        nameToBlockBit[key] = Pair(arr.getInt(0), arr.getInt(1))
-                    }
-                }
-
+            val nameToBlockBit = readAchievementNameToBlockBit(configDirectory)
+            if (nameToBlockBit.isNotEmpty() && unlockedNames.isNotEmpty()) {
                 // Seed with current achievement bitmasks from server
-                for (block in userStats.achievementBlocks ?: emptyList()) {
-                    val blockId = (block.achievementId as? Number)?.toInt() ?: continue
-                    var bitmask = 0
-                    val unlockTimes = block.unlockTime ?: emptyList()
-                    for (i in unlockTimes.indices) {
-                        val t = unlockTimes[i]
-                        if ((t as? Number)?.toLong() != 0L) bitmask = bitmask or (1 shl i)
-                    }
-                    allStats[blockId] = bitmask
+                val serverBlocks = (userStats.achievementBlocks ?: emptyList()).mapNotNull { block ->
+                    val blockId = (block.achievementId as? Number)?.toInt() ?: return@mapNotNull null
+                    val unlockTimes = (block.unlockTime ?: emptyList()).map { (it as? Number)?.toLong() ?: 0L }
+                    SteamAchievementsManager.ServerAchievementBlock(blockId, unlockTimes)
                 }
+                allStats.putAll(SteamAchievementsManager.decodeAchievementBitmasks(serverBlocks))
 
                 // Merge in newly unlocked achievements
                 for (name in unlockedNames) {
@@ -3359,6 +3346,49 @@ class SteamService : Service(), IChallengeUrlChanged {
                 callback.statsFailedValidation.forEach { f ->
                     Timber.w("  statId=${f.statId} reverted to ${f.revertedStatValue}")
                 }
+            }
+        }
+
+        private fun readAchievementNameToBlockBit(configDirectory: String): Map<String, Pair<Int, Int>> {
+            val mappingFile = File(configDirectory, "achievement_name_to_block.json")
+            if (!mappingFile.exists()) return emptyMap()
+
+            val mappingJson = JSONObject(mappingFile.readText(Charsets.UTF_8))
+            val nameToBlockBit = mutableMapOf<String, Pair<Int, Int>>()
+            for (key in mappingJson.keys()) {
+                val arr = mappingJson.optJSONArray(key) ?: continue
+                if (arr.length() >= 2) {
+                    nameToBlockBit[key] = Pair(arr.getInt(0), arr.getInt(1))
+                }
+            }
+            return nameToBlockBit
+        }
+
+        /**
+         * Fetches the achievement names Steam's servers currently consider unlocked for [appId].
+         * Returns null (rather than throwing) when not connected/logged in or the request fails,
+         * so callers can skip a sync attempt quietly instead of crashing the launch flow.
+         */
+        suspend fun fetchServerUnlockedAchievementNames(appId: Int, configDirectory: String): Set<String>? {
+            return try {
+                val steamUser = instance?._steamUser ?: return null
+                val steamId = steamUser.steamID ?: return null
+                val userStats = instance?._steamUserStats?.getUserStats(appId, steamId)?.await() ?: return null
+                if (userStats.result != EResult.OK) return null
+
+                val nameToBlockBit = readAchievementNameToBlockBit(configDirectory)
+                if (nameToBlockBit.isEmpty()) return emptySet()
+
+                val serverBlocks = (userStats.achievementBlocks ?: emptyList()).mapNotNull { block ->
+                    val blockId = (block.achievementId as? Number)?.toInt() ?: return@mapNotNull null
+                    val unlockTimes = (block.unlockTime ?: emptyList()).map { (it as? Number)?.toLong() ?: 0L }
+                    SteamAchievementsManager.ServerAchievementBlock(blockId, unlockTimes)
+                }
+                val bitmasks = SteamAchievementsManager.decodeAchievementBitmasks(serverBlocks)
+                SteamAchievementsManager.unlockedNamesFromBitmasks(bitmasks, nameToBlockBit)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to fetch server-side unlocked achievements for appId=$appId")
+                null
             }
         }
 
