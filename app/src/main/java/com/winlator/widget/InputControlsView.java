@@ -50,6 +50,8 @@ import java.util.TimerTask;
 public class InputControlsView extends View {
     private static final long SHOOTER_SPRINT_TAP_DURATION_MS = 120;
     public static final float DEFAULT_OVERLAY_OPACITY = 0.4f;
+    // LX, LY, RX, RY - the leading entries of the axis array processed in processJoystickInput
+    private static final int PHYSICAL_STICK_AXIS_COUNT = 4;
     private boolean editMode = false;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path path = new Path();
@@ -327,6 +329,7 @@ public class InputControlsView extends View {
             deselectAllElements();
         }
         else this.profile = null;
+        ExternalController.setStickTuning(profile);
     }
 
     public boolean isShowTouchscreenControls() {
@@ -418,7 +421,13 @@ public class InputControlsView extends View {
         final float[] values = {controller.state.thumbLX, controller.state.thumbLY, controller.state.thumbRX, controller.state.thumbRY, controller.state.getDPadX(), controller.state.getDPadY()};
 
         for (byte i = 0; i < axes.length; i++) {
-            if (Math.abs(values[i]) > ControlElement.STICK_DEAD_ZONE) {
+            // Indices 0..3 are the analog sticks, whose values already had the profile's deadzone
+            // and sensitivity applied by ExternalController, so anything non-zero is live input.
+            // 4..5 are the digital hat axes, which keep the fixed threshold.
+            boolean isStick = i < PHYSICAL_STICK_AXIS_COUNT;
+            boolean isActive = isStick ? values[i] != 0 : Math.abs(values[i]) > ControlElement.STICK_DEAD_ZONE;
+
+            if (isActive) {
                 controllerBinding = controller.getControllerBinding(ExternalControllerBinding.getKeyCodeForAxis(axes[i], Mathf.sign(values[i])));
                 if (controllerBinding != null) handleInputEvent(controllerBinding.getBinding(), true, values[i]);
             }
