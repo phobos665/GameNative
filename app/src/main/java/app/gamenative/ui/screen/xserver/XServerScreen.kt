@@ -4106,6 +4106,40 @@ private fun getWineStartCommand(
             return "\"explorer.exe\""
         }
 
+        // Generate achievements.json (initial unlock-state snapshot for the viewer/notification
+        // pipeline) and start the loopback server the eos-ach-hook DLL reports unlocks to.
+        if (game.namespace.isNotEmpty()) {
+            val achievementsManager = app.gamenative.service.epic.EpicAchievementsManager()
+            val saveDir = app.gamenative.service.epic.EpicAchievementsManager.eosAchievementSaveDir(context, gameId)
+            val achievements = runBlocking {
+                achievementsManager.generateAchievementsFile(context, game.namespace, saveDir.absolutePath)
+            }
+
+            if (PluviaApp.epicAchievementServer == null && achievements != null) {
+                val displayNameMap = achievements.associate { it.name to it.displayName }
+                val iconUrlMap = achievements.associate { it.name to it.iconUrl }
+                val server = app.gamenative.service.epic.EpicAchievementServer(
+                    displayNameMap = displayNameMap,
+                    iconUrlMap = iconUrlMap,
+                )
+                runBlocking { server.start() }
+                PluviaApp.epicAchievementServer = server
+                Timber.tag("achievements").d(
+                    "EpicAchievementServer started on port ${server.port} for appId=$gameId",
+                )
+            }
+
+            val achievementPort = PluviaApp.epicAchievementServer?.port ?: -1
+            if (achievementPort > 0) {
+                // Written to a path the hook DLL can read as a Windows path:
+                //   C:\windows\temp\eos_ach_port.txt
+                val portFile = File(container.getRootDir(), ".wine/drive_c/windows/temp/eos_ach_port.txt")
+                portFile.parentFile?.mkdirs()
+                portFile.writeText(achievementPort.toString(), Charsets.UTF_8)
+                Timber.tag("XServerScreen").d("Wrote EOS achievement port $achievementPort to ${portFile.absolutePath}")
+            }
+        }
+
         // Use container's configured executable path if available, otherwise auto-detect and persist
         val exePath = if (container.executablePath.isNotEmpty()) {
             container.executablePath
